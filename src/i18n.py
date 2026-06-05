@@ -191,6 +191,7 @@ LANG = _detect_lang()
 _CURRENT = _STRINGS.get(LANG, _STRINGS["en"])
 
 
-def t(key: str, **kwargs) -> str:
-    s = _CURRENT.get(key, key)
+def t(msg_key: str, **kwargs) -> str:
+    # 形参不能叫 key：unknown_sort_field 等字符串带 {key} 占位符，会与 t(..., key=...) 撞名
+    s = _CURRENT.get(msg_key, msg_key)
     return s.format(**kwargs) if kwargs else s

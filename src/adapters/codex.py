@@ -1,10 +1,10 @@
-import json
 import os
 import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from .types import AgentInfo, RateLimits, UsageEntry
+from .types import AgentInfo, RateLimits, UsageEntry, normalize_pct
+from .util import iter_jsonl_dicts, project_from_cwd
 
 CODEX_DIR = os.path.expanduser("~/.codex")
 SESSIONS_DIR = os.path.join(CODEX_DIR, "sessions")
@@ -81,30 +81,17 @@ def _safe_mtime(path: Path) -> float:
 def _extract_rate_limits(path: Path, models: dict[str, str]) -> RateLimits | None:
     session_id = ""
     last_payload = None
-    try:
-        with open(path, encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    data = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if not isinstance(data, dict):
-                    continue
-                if data.get("type") == "session_meta":
-                    session_id = data.get("payload", {}).get("id", "")
-                if data.get("type") != "event_msg":
-                    continue
-                payload = data.get("payload", {})
-                if payload.get("type") != "token_count":
-                    continue
-                rl = payload.get("rate_limits")
-                if rl:
-                    last_payload = (rl, payload.get("info") or {}, data.get("timestamp", ""), session_id)
-    except OSError:
-        return None
+    for data in iter_jsonl_dicts(path):
+        if data.get("type") == "session_meta":
+            session_id = data.get("payload", {}).get("id", "")
+        if data.get("type") != "event_msg":
+            continue
+        payload = data.get("payload", {})
+        if payload.get("type") != "token_count":
+            continue
+        rl = payload.get("rate_limits")
+        if rl:
+            last_payload = (rl, payload.get("info") or {}, data.get("timestamp", ""), session_id)
 
     if not last_payload:
         return None
@@ -120,11 +107,9 @@ def _extract_rate_limits(path: Path, models: dict[str, str]) -> RateLimits | Non
     for bucket in (rl.get("primary"), rl.get("secondary")):
         if not bucket:
             continue
-        pct = bucket.get("used_percent")
         resets = bucket.get("resets_at")
         window = bucket.get("window_minutes") or 0
-        if resets and resets < now_ts:
-            pct = 0.0
+        pct = normalize_pct(bucket.get("used_percent"), resets, now_ts)
         if window < 1440:
             five_pct, five_reset = pct, resets
         else:
@@ -145,16 +130,6 @@ def _extract_rate_limits(path: Path, models: dict[str, str]) -> RateLimits | Non
     )
 
 
-def _project_from_cwd(cwd: str) -> str:
-    home = os.path.expanduser("~")
-    if cwd.startswith(home):
-        rel = cwd[len(home):].strip(os.sep)
-    else:
-        rel = cwd.strip(os.sep)
-    parts = rel.split(os.sep)
-    return parts[-1] if parts and parts[-1] else rel or "unknown"
-
-
 def _parse_jsonl(
     path: Path,
     models: dict[str, str],
@@ -169,42 +144,28 @@ def _parse_jsonl(
     last_usage = None
     msg_count = 0
 
-    try:
-        with open(path, encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    data = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if not isinstance(data, dict):
-                    continue
+    for data in iter_jsonl_dicts(path):
+        row_type = data.get("type")
 
-                row_type = data.get("type")
+        if row_type == "session_meta":
+            payload = data.get("payload", {})
+            session_id = payload.get("id", "")
+            session_ts = payload.get("timestamp", "")
+            cwd = payload.get("cwd", "")
+            if cwd:
+                project = project_from_cwd(cwd)
+            model = models.get(session_id, "unknown")
+            continue
 
-                if row_type == "session_meta":
-                    payload = data.get("payload", {})
-                    session_id = payload.get("id", "")
-                    session_ts = payload.get("timestamp", "")
-                    cwd = payload.get("cwd", "")
-                    if cwd:
-                        project = _project_from_cwd(cwd)
-                    model = models.get(session_id, "unknown")
-                    continue
+        if row_type != "event_msg":
+            continue
 
-                if row_type != "event_msg":
-                    continue
-
-                payload = data.get("payload", {})
-                if payload.get("type") == "token_count":
-                    info = payload.get("info")
-                    if info and info.get("total_token_usage"):
-                        last_usage = info["total_token_usage"]
-                        msg_count += 1
-    except OSError:
-        return
+        payload = data.get("payload", {})
+        if payload.get("type") == "token_count":
+            info = payload.get("info")
+            if info and info.get("total_token_usage"):
+                last_usage = info["total_token_usage"]
+                msg_count += 1
 
     if not last_usage or not session_id:
         return

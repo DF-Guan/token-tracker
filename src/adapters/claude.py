@@ -1,9 +1,9 @@
-import json
 import os
 from datetime import UTC, datetime
 from pathlib import Path
 
 from .types import AgentInfo, UsageEntry
+from .util import iter_jsonl_dicts, project_from_cwd
 
 CLAUDE_DIRS = [
     os.path.expanduser("~/.claude/projects"),
@@ -54,16 +54,6 @@ def _get_claude_dirs() -> list[str]:
     return dirs
 
 
-def _project_from_cwd(cwd: str) -> str:
-    home = os.path.expanduser("~")
-    if cwd.startswith(home):
-        rel = cwd[len(home):].strip(os.sep)
-    else:
-        rel = cwd.strip(os.sep)
-    parts = rel.split(os.sep)
-    return parts[-1] if parts and parts[-1] else rel or "unknown"
-
-
 def _extract_project_from_dir(jsonl_path: Path, base: Path) -> str:
     rel = jsonl_path.relative_to(base)
     project_dir = str(rel.parts[0]) if rel.parts else "unknown"
@@ -82,34 +72,22 @@ def _parse_jsonl(
     seen: set[str],
     cutoff: datetime | None,
 ) -> None:
-    try:
-        with open(path, encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    data = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
+    for data in iter_jsonl_dicts(path):
+        if data.get("type") != "assistant":
+            continue
 
-                if data.get("type") != "assistant":
-                    continue
+        entry = _parse_assistant_entry(data, project)
+        if entry is None:
+            continue
 
-                entry = _parse_assistant_entry(data, project)
-                if entry is None:
-                    continue
+        if cutoff and entry.timestamp < cutoff:
+            continue
 
-                if cutoff and entry.timestamp < cutoff:
-                    continue
+        if entry.dedup_key in seen:
+            continue
+        seen.add(entry.dedup_key)
 
-                if entry.dedup_key in seen:
-                    continue
-                seen.add(entry.dedup_key)
-
-                entries.append(entry)
-    except OSError:
-        pass
+        entries.append(entry)
 
 
 def _parse_assistant_entry(data: dict, project: str) -> UsageEntry | None:
@@ -143,7 +121,7 @@ def _parse_assistant_entry(data: dict, project: str) -> UsageEntry | None:
 
     cwd = data.get("cwd", "")
     if cwd:
-        project = _project_from_cwd(cwd)
+        project = project_from_cwd(cwd)
 
     return UsageEntry(
         timestamp=ts,

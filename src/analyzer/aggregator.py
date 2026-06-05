@@ -1,93 +1,80 @@
 from collections import defaultdict
+from collections.abc import Callable
+from datetime import timedelta
+from typing import Any
 
 from ..adapters.types import DailyStats, MonthlyStats, SessionStats, UsageEntry, WeeklyStats
 from .cost import calculate_cost
 
 
-def aggregate_daily(entries: list[UsageEntry]) -> list[DailyStats]:
-    by_date: dict[str, DailyStats] = {}
-    sessions_by_date: dict[str, set[str]] = defaultdict(set)
+def add_token_fields(target: Any, e: UsageEntry, cost: float) -> None:
+    """把一条 UsageEntry 的 6 个通用 token/成本字段累加到任意 *Stats / SessionBlock 上。"""
+    target.input_tokens += e.input_tokens
+    target.output_tokens += e.output_tokens
+    target.cache_creation_tokens += e.cache_creation_tokens
+    target.cache_read_tokens += e.cache_read_tokens
+    target.total_tokens += e.total_tokens
+    target.cost_usd += cost
+
+
+def _aggregate_by_key(
+    entries: list[UsageEntry],
+    key_fn: Callable[[UsageEntry], str],
+    factory: Callable[[str, UsageEntry], Any],
+    sort_key: str,
+) -> list[Any]:
+    """按 key_fn 分桶累加（daily/weekly/monthly 共用骨架）。
+
+    factory(key, entry) 负责构造对应的 *Stats（weekly 需借 entry 算周起止）。
+    """
+    by_key: dict[str, Any] = {}
+    sessions_by_key: dict[str, set[str]] = defaultdict(set)
 
     for e in entries:
-        date_str = e.timestamp.strftime("%Y-%m-%d")
-        if date_str not in by_date:
-            by_date[date_str] = DailyStats(date=date_str)
-        s = by_date[date_str]
-        cost = calculate_cost(e)
-        s.input_tokens += e.input_tokens
-        s.output_tokens += e.output_tokens
-        s.cache_creation_tokens += e.cache_creation_tokens
-        s.cache_read_tokens += e.cache_read_tokens
-        s.total_tokens += e.total_tokens
-        s.cost_usd += cost
+        k = key_fn(e)
+        s = by_key.get(k)
+        if s is None:
+            s = by_key[k] = factory(k, e)
+        add_token_fields(s, e, calculate_cost(e))
         s.message_count += e.message_count
         s.models[e.model] = s.models.get(e.model, 0) + e.total_tokens
-        sessions_by_date[date_str].add(e.session_id)
+        sessions_by_key[k].add(e.session_id)
 
-    for date_str, sessions in sessions_by_date.items():
-        by_date[date_str].session_count = len(sessions)
+    for k, sessions in sessions_by_key.items():
+        by_key[k].session_count = len(sessions)
 
-    return sorted(by_date.values(), key=lambda s: s.date)
+    return sorted(by_key.values(), key=lambda s: getattr(s, sort_key))
+
+
+def aggregate_daily(entries: list[UsageEntry]) -> list[DailyStats]:
+    return _aggregate_by_key(
+        entries,
+        lambda e: e.timestamp.strftime("%Y-%m-%d"),
+        lambda k, e: DailyStats(date=k),
+        "date",
+    )
 
 
 def aggregate_monthly(entries: list[UsageEntry]) -> list[MonthlyStats]:
-    by_month: dict[str, MonthlyStats] = {}
-    sessions_by_month: dict[str, set[str]] = defaultdict(set)
-
-    for e in entries:
-        month_str = e.timestamp.strftime("%Y-%m")
-        if month_str not in by_month:
-            by_month[month_str] = MonthlyStats(month=month_str)
-        s = by_month[month_str]
-        cost = calculate_cost(e)
-        s.input_tokens += e.input_tokens
-        s.output_tokens += e.output_tokens
-        s.cache_creation_tokens += e.cache_creation_tokens
-        s.cache_read_tokens += e.cache_read_tokens
-        s.total_tokens += e.total_tokens
-        s.cost_usd += cost
-        s.message_count += e.message_count
-        s.models[e.model] = s.models.get(e.model, 0) + e.total_tokens
-        sessions_by_month[month_str].add(e.session_id)
-
-    for month_str, sessions in sessions_by_month.items():
-        by_month[month_str].session_count = len(sessions)
-
-    return sorted(by_month.values(), key=lambda s: s.month)
+    return _aggregate_by_key(
+        entries,
+        lambda e: e.timestamp.strftime("%Y-%m"),
+        lambda k, e: MonthlyStats(month=k),
+        "month",
+    )
 
 
 def aggregate_weekly(entries: list[UsageEntry]) -> list[WeeklyStats]:
-    from datetime import timedelta
+    def _week_key(e: UsageEntry) -> str:
+        monday = e.timestamp.date() - timedelta(days=e.timestamp.weekday())
+        return monday.isoformat()
 
-    by_week: dict[str, WeeklyStats] = {}
-    sessions_by_week: dict[str, set[str]] = defaultdict(set)
-
-    for e in entries:
+    def _factory(k: str, e: UsageEntry) -> WeeklyStats:
         monday = e.timestamp.date() - timedelta(days=e.timestamp.weekday())
         sunday = monday + timedelta(days=6)
-        week_key = monday.isoformat()
-        if week_key not in by_week:
-            by_week[week_key] = WeeklyStats(
-                week=week_key,
-                week_start=monday.strftime("%m-%d"),
-                week_end=sunday.strftime("%m-%d"),
-            )
-        s = by_week[week_key]
-        cost = calculate_cost(e)
-        s.input_tokens += e.input_tokens
-        s.output_tokens += e.output_tokens
-        s.cache_creation_tokens += e.cache_creation_tokens
-        s.cache_read_tokens += e.cache_read_tokens
-        s.total_tokens += e.total_tokens
-        s.cost_usd += cost
-        s.message_count += e.message_count
-        s.models[e.model] = s.models.get(e.model, 0) + e.total_tokens
-        sessions_by_week[week_key].add(e.session_id)
+        return WeeklyStats(week=k, week_start=monday.strftime("%m-%d"), week_end=sunday.strftime("%m-%d"))
 
-    for week_key, sessions in sessions_by_week.items():
-        by_week[week_key].session_count = len(sessions)
-
-    return sorted(by_week.values(), key=lambda s: s.week)
+    return _aggregate_by_key(entries, _week_key, _factory, "week")
 
 
 def aggregate_sessions(entries: list[UsageEntry]) -> list[SessionStats]:
@@ -117,13 +104,7 @@ def aggregate_sessions(entries: list[UsageEntry]) -> list[SessionStats]:
             duration_minutes=round(duration, 1),
         )
         for e in session_entries:
-            cost = calculate_cost(e)
-            s.input_tokens += e.input_tokens
-            s.output_tokens += e.output_tokens
-            s.cache_creation_tokens += e.cache_creation_tokens
-            s.cache_read_tokens += e.cache_read_tokens
-            s.total_tokens += e.total_tokens
-            s.cost_usd += cost
+            add_token_fields(s, e, calculate_cost(e))
             s.message_count += e.message_count
 
         sessions.append(s)

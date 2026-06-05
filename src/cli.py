@@ -23,15 +23,17 @@ AGENT_ALIASES = {"claude": "claude-code", "codex": "codex"}
 AGENT_LOADERS = {"claude-code": claude, "codex": codex}
 RATE_LIMIT_LOADERS = {"claude-code": load_claude_rate_limits, "codex": codex.load_rate_limits}
 
-SORT_KEYS = {
-    "tokens": ("total_tokens", True),
-    "cost": ("cost_usd", True),
-    "messages": ("message_count", True),
-    "sessions": ("session_count", True),
-    "time": None,  # handled per-command
-    "input": ("input_tokens", True),
-    "output": ("output_tokens", True),
+# 排序字段 → stats 属性名（单一权威表，dashboard sort cycle 也复用）。
+# "time" 的属性因命令而异（daily=date / weekly=week / sessions=start_time），不在此表，走 default_attr。
+SORT_ATTRS = {
+    "tokens": "total_tokens",
+    "cost": "cost_usd",
+    "messages": "message_count",
+    "sessions": "session_count",
+    "input": "input_tokens",
+    "output": "output_tokens",
 }
+VALID_SORT_KEYS = (*SORT_ATTRS.keys(), "time")
 
 
 def _parse_sort_args(args: list[str]) -> tuple[list[str], str | None, bool]:
@@ -60,17 +62,14 @@ def _apply_sort(stats, sort_key: str | None, descending: bool, default_attr: str
     if sort_key is None:
         stats.sort(key=lambda s: getattr(s, default_attr), reverse=default_reverse)
         return
-    if sort_key not in SORT_KEYS:
-        valid = ", ".join(SORT_KEYS.keys())
+    if sort_key not in VALID_SORT_KEYS:
+        valid = ", ".join(VALID_SORT_KEYS)
         console.print(f"[yellow]{t('unknown_sort_field', key=sort_key, valid=valid)}[/yellow]")
         stats.sort(key=lambda s: getattr(s, default_attr), reverse=default_reverse)
         return
-    mapping = SORT_KEYS[sort_key]
-    if mapping is None:
-        stats.sort(key=lambda s: getattr(s, default_attr), reverse=descending)
-    else:
-        attr, _ = mapping
-        stats.sort(key=lambda s: getattr(s, attr), reverse=descending)
+    # "time" 不在 SORT_ATTRS → 退回 default_attr（各命令的时间字段）
+    attr = SORT_ATTRS.get(sort_key, default_attr)
+    stats.sort(key=lambda s: getattr(s, attr), reverse=descending)
 
 
 def _load_entries(agent_id: str, hours_back: int = 0):
@@ -150,10 +149,10 @@ def _fit_screen(text: str, height: int, scroll_offset: int) -> tuple[str, int]:
 
 def _dashboard_sort_cycle():
     return [
-        ("time", "start_time", t("sort_time")),
-        ("tokens", "total_tokens", t("sort_token")),
-        ("cost", "cost_usd", t("sort_cost")),
-        ("messages", "message_count", t("sort_messages")),
+        ("time", "start_time", t("sort_time")),  # dashboard 始终排 sessions，time→start_time
+        ("tokens", SORT_ATTRS["tokens"], t("sort_token")),
+        ("cost", SORT_ATTRS["cost"], t("sort_cost")),
+        ("messages", SORT_ATTRS["messages"], t("sort_messages")),
     ]
 
 
@@ -251,6 +250,20 @@ def _show_interactive_dashboard(agents):
         _tables.console = orig
 
 
+# 普通字母按键 → 动作，两个平台的 reader 共用（此前 Windows 漏了 sort/reverse/more/less）
+KEY_MAP = {
+    b"h": "left", b"l": "right", b"k": "up", b"j": "down",
+    b"b": "page_up", b"f": "page_down",
+    b"s": "sort", b"r": "reverse",
+    b"+": "more", b"=": "more", b"-": "less", b"_": "less",
+    b"q": "quit", b"Q": "quit", b"\x03": "quit",
+}
+
+# 终端方向键的 ESC 序列尾字节 → 动作
+_UNIX_ARROW = {b"D": "left", b"C": "right", b"A": "up", b"B": "down"}
+_WIN_ARROW = {b"K": "left", b"M": "right", b"H": "up", b"P": "down", b"I": "page_up", b"Q": "page_down"}
+
+
 def _read_key_unix():
     import os as _os
     import select
@@ -267,42 +280,14 @@ def _read_key_unix():
             ch2 = _os.read(fd, 1)
             if ch2 == b"[":
                 ch3 = _os.read(fd, 1)
-                if ch3 == b"D":
-                    return "left"
-                if ch3 == b"C":
-                    return "right"
-                if ch3 == b"A":
-                    return "up"
-                if ch3 == b"B":
-                    return "down"
+                if ch3 in _UNIX_ARROW:
+                    return _UNIX_ARROW[ch3]
                 if ch3 in (b"5", b"6"):
                     if select.select([fd], [], [], 0.05)[0]:
                         _os.read(fd, 1)
                     return "page_up" if ch3 == b"5" else "page_down"
             return "other"
-        if ch == b"h":
-            return "left"
-        if ch == b"l":
-            return "right"
-        if ch == b"k":
-            return "up"
-        if ch == b"j":
-            return "down"
-        if ch == b"b":
-            return "page_up"
-        if ch == b"f":
-            return "page_down"
-        if ch == b"s":
-            return "sort"
-        if ch == b"r":
-            return "reverse"
-        if ch in (b"+", b"="):
-            return "more"
-        if ch in (b"-", b"_"):
-            return "less"
-        if ch in (b"q", b"Q", b"\x03"):
-            return "quit"
-        return "other"
+        return KEY_MAP.get(ch, "other")
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old)
 
@@ -311,35 +296,10 @@ def _read_key_win():
     import msvcrt
     ch = msvcrt.getch()
     if ch in (b"\xe0", b"\x00"):
-        ch2 = msvcrt.getch()
-        if ch2 == b"K":
-            return "left"
-        if ch2 == b"M":
-            return "right"
-        if ch2 == b"H":
-            return "up"
-        if ch2 == b"P":
-            return "down"
-        if ch2 == b"I":
-            return "page_up"
-        if ch2 == b"Q":
-            return "page_down"
-        return "other"
-    if ch == b"h":
-        return "left"
-    if ch == b"l":
-        return "right"
-    if ch == b"k":
-        return "up"
-    if ch == b"j":
-        return "down"
-    if ch == b"b":
-        return "page_up"
-    if ch == b"f":
-        return "page_down"
-    if ch in (b"q", b"Q", b"\x03", b"\x1b"):
+        return _WIN_ARROW.get(msvcrt.getch(), "other")
+    if ch == b"\x1b":
         return "quit"
-    return "other"
+    return KEY_MAP.get(ch, "other")
 
 
 _read_key = _read_key_win if sys.platform == "win32" else _read_key_unix

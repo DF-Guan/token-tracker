@@ -1,0 +1,36 @@
+from src import cli
+from src.adapters.types import DailyStats
+
+
+def test_key_map_covers_dashboard_actions():
+    # 回归：Windows reader 此前漏了 sort/reverse/more/less，现在两平台统一走 KEY_MAP
+    actions = set(cli.KEY_MAP.values())
+    assert {"left", "right", "up", "down", "sort", "reverse", "more", "less", "quit"} <= actions
+
+
+def test_apply_sort_by_tokens_uses_authoritative_attr():
+    stats = [
+        DailyStats(date="2026-01-01", total_tokens=10),
+        DailyStats(date="2026-01-02", total_tokens=30),
+    ]
+    cli._apply_sort(stats, "tokens", descending=True, default_attr="date", default_reverse=True)
+    assert [s.total_tokens for s in stats] == [30, 10]
+
+
+def test_apply_sort_time_falls_back_to_default_attr():
+    stats = [
+        DailyStats(date="2026-01-01", total_tokens=99),
+        DailyStats(date="2026-01-03", total_tokens=1),
+    ]
+    # "time" 不在 SORT_ATTRS，应按 default_attr=date 排
+    cli._apply_sort(stats, "time", descending=True, default_attr="date", default_reverse=True)
+    assert [s.date for s in stats] == ["2026-01-03", "2026-01-01"]
+
+
+def test_apply_sort_unknown_key_falls_back():
+    stats = [
+        DailyStats(date="2026-01-02", total_tokens=5),
+        DailyStats(date="2026-01-01", total_tokens=99),
+    ]
+    cli._apply_sort(stats, "bogus", descending=True, default_attr="date", default_reverse=True)
+    assert [s.date for s in stats] == ["2026-01-02", "2026-01-01"]

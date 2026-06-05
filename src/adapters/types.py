@@ -1,5 +1,17 @@
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
+
+
+def normalize_pct(pct: float | None, resets_at: int | float | None, now_ts: float | None = None) -> float | None:
+    """配额百分比：若已过重置时间则归零（窗口已滚动，旧用量不再有效）。"""
+    if pct is None:
+        return None
+    if resets_at:
+        if now_ts is None:
+            now_ts = datetime.now(UTC).timestamp()
+        if resets_at < now_ts:
+            return 0.0
+    return pct
 
 
 @dataclass

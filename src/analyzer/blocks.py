@@ -1,6 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
 from ..adapters.types import DailyStats, P90Limits, SessionBlock, UsageEntry
+from .aggregator import add_token_fields
 from .cost import calculate_cost
 
 BLOCK_DURATION = timedelta(hours=5)
@@ -32,14 +33,8 @@ def analyze_blocks(entries: list[UsageEntry]) -> list[SessionBlock]:
             )
             blocks.append(current_block)
 
-        cost = calculate_cost(entry)
         current_block.entries.append(entry)
-        current_block.input_tokens += entry.input_tokens
-        current_block.output_tokens += entry.output_tokens
-        current_block.cache_creation_tokens += entry.cache_creation_tokens
-        current_block.cache_read_tokens += entry.cache_read_tokens
-        current_block.total_tokens += entry.total_tokens
-        current_block.cost_usd += cost
+        add_token_fields(current_block, entry, calculate_cost(entry))
 
     now = datetime.now(UTC)
     for block in blocks:

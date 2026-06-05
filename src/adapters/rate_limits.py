@@ -2,7 +2,7 @@ import json
 import os
 from datetime import UTC, datetime
 
-from .types import RateLimits
+from .types import RateLimits, normalize_pct
 
 STATUS_FILE = os.path.expanduser("~/.claude/tt-status.json")
 
@@ -22,15 +22,11 @@ def load_rate_limits() -> RateLimits | None:
     seven = rl.get("seven_day") or {}
 
     now_ts = datetime.now(UTC).timestamp()
-    five_pct = five.get("used_percentage")
     five_reset = five.get("resets_at")
-    if five_reset and five_reset < now_ts:
-        five_pct = 0.0
+    five_pct = normalize_pct(five.get("used_percentage"), five_reset, now_ts)
 
-    seven_pct = seven.get("used_percentage")
     seven_reset = seven.get("resets_at")
-    if seven_reset and seven_reset < now_ts:
-        seven_pct = 0.0
+    seven_pct = normalize_pct(seven.get("used_percentage"), seven_reset, now_ts)
 
     model_info = data.get("model") or {}
     model_name = model_info.get("display_name") or model_info.get("id") or ""
