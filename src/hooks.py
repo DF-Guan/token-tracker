@@ -6,7 +6,7 @@ import sys
 import tomllib
 
 from .i18n import t
-from .ui.tables import console
+from .ui.console import get_console
 
 CLAUDE_SETTINGS = os.path.expanduser("~/.claude/settings.json")
 HOOK_SCRIPT_PATH = os.path.expanduser("~/.claude/tt-statusline.py")
@@ -371,23 +371,23 @@ def setup(auto: bool = False) -> None:
     has_codex = os.path.exists(CODEX_CONFIG)
 
     if not has_cc and not has_codex:
-        console.print(f"[red]{t('no_agent_install')}[/red]")
+        get_console().print(f"[red]{t('no_agent_install')}[/red]")
         return
 
     if auto:
-        console.print(f"[dim]{t('first_setup')}[/dim]")
+        get_console().print(f"[dim]{t('first_setup')}[/dim]")
 
     if has_cc:
         _setup_claude()
     else:
         if not auto:
-            console.print(f"[dim]{t('cc_not_found')}[/dim]")
+            get_console().print(f"[dim]{t('cc_not_found')}[/dim]")
 
     if has_codex:
         _setup_codex()
     else:
         if not auto:
-            console.print(f"[dim]{t('codex_not_found')}[/dim]")
+            get_console().print(f"[dim]{t('codex_not_found')}[/dim]")
 
 
 def _setup_claude() -> None:
@@ -400,7 +400,7 @@ def _setup_claude() -> None:
 
     existing = settings.get("statusLine")
     if existing and "tt-statusline" not in (existing.get("command") or ""):
-        console.print(f"[yellow]{t('sl_backup_replace')}[/yellow]")
+        get_console().print(f"[yellow]{t('sl_backup_replace')}[/yellow]")
         settings.setdefault(_BACKUP_KEY, {})[_PREV_SL_KEY] = existing
 
     python = sys.executable or "python3"
@@ -409,8 +409,8 @@ def _setup_claude() -> None:
     with open(CLAUDE_SETTINGS, "w", encoding="utf-8") as f:
         json.dump(settings, f, indent=2, ensure_ascii=False)
 
-    console.print(f"[green]✓[/green] {t('cc_configured')}")
-    console.print(f"[dim]{t('restart_cc')}[/dim]")
+    get_console().print(f"[green]✓[/green] {t('cc_configured')}")
+    get_console().print(f"[dim]{t('restart_cc')}[/dim]")
 
 
 def _setup_codex() -> None:
@@ -421,7 +421,7 @@ def _setup_codex() -> None:
 
     old = parsed.get("tui", {}).get("status_line")
     if old == CODEX_STATUS_LINE:
-        console.print(f"[dim]{t('codex_already')}[/dim]")
+        get_console().print(f"[dim]{t('codex_already')}[/dim]")
         return
 
     if old is not None:
@@ -436,10 +436,10 @@ def _setup_codex() -> None:
     with open(CODEX_CONFIG, "w", encoding="utf-8") as f:
         f.write(content)
 
-    console.print(f"[green]✓[/green] {t('codex_configured')}")
+    get_console().print(f"[green]✓[/green] {t('codex_configured')}")
     if old is not None:
-        console.print(f"[dim]{t('codex_backup', path=CODEX_BACKUP)}[/dim]")
-    console.print(f"[dim]{t('restart_codex')}[/dim]")
+        get_console().print(f"[dim]{t('codex_backup', path=CODEX_BACKUP)}[/dim]")
+    get_console().print(f"[dim]{t('restart_codex')}[/dim]")
 
 
 # --- unsetup ---
@@ -453,13 +453,13 @@ def unsetup() -> None:
     if has_codex:
         _unsetup_codex()
     if not has_cc and not has_codex:
-        console.print(f"[dim]{t('no_agent_detected')}[/dim]")
+        get_console().print(f"[dim]{t('no_agent_detected')}[/dim]")
 
 
 def _unsetup_claude() -> None:
     if os.path.exists(HOOK_SCRIPT_PATH):
         os.remove(HOOK_SCRIPT_PATH)
-        console.print(f"[green]✓[/green] {t('deleted_file', path=HOOK_SCRIPT_PATH)}")
+        get_console().print(f"[green]✓[/green] {t('deleted_file', path=HOOK_SCRIPT_PATH)}")
 
     if not os.path.exists(CLAUDE_SETTINGS):
         return
@@ -469,16 +469,16 @@ def _unsetup_claude() -> None:
 
     sl = settings.get("statusLine")
     if not isinstance(sl, dict) or "tt-statusline" not in (sl.get("command") or ""):
-        console.print(f"[dim]{t('sl_not_tt')}[/dim]")
+        get_console().print(f"[dim]{t('sl_not_tt')}[/dim]")
         return
 
     previous = settings.get(_BACKUP_KEY, {}).get(_PREV_SL_KEY)
     if isinstance(previous, dict):
         settings["statusLine"] = previous
-        console.print(f"[green]✓[/green] {t('cc_restored')}")
+        get_console().print(f"[green]✓[/green] {t('cc_restored')}")
     else:
         settings.pop("statusLine", None)
-        console.print(f"[green]✓[/green] {t('cc_removed')}")
+        get_console().print(f"[green]✓[/green] {t('cc_removed')}")
 
     backup = settings.get(_BACKUP_KEY)
     if isinstance(backup, dict):
@@ -492,7 +492,7 @@ def _unsetup_claude() -> None:
     status_file = os.path.expanduser("~/.claude/tt-status.json")
     if os.path.exists(status_file):
         os.remove(status_file)
-        console.print(f"[green]✓[/green] {t('deleted_cache', path=status_file)}")
+        get_console().print(f"[green]✓[/green] {t('deleted_cache', path=status_file)}")
 
 
 def _unsetup_codex() -> None:
@@ -509,10 +509,10 @@ def _unsetup_codex() -> None:
             old_items = json.load(f).get("status_line", [])
         content = _SL_REGEX.sub(_status_line_toml(old_items), content)
         os.remove(CODEX_BACKUP)
-        console.print(f"[green]✓[/green] {t('codex_restored')}")
+        get_console().print(f"[green]✓[/green] {t('codex_restored')}")
     else:
         content = re.sub(r'status_line\s*=\s*\[.*?\]\n?', '', content, flags=re.DOTALL)
-        console.print(f"[green]✓[/green] {t('codex_removed')}")
+        get_console().print(f"[green]✓[/green] {t('codex_removed')}")
 
     with open(CODEX_CONFIG, "w", encoding="utf-8") as f:
         f.write(content)

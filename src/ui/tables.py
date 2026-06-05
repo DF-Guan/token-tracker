@@ -3,15 +3,13 @@ from collections import defaultdict
 from datetime import UTC, datetime
 
 from rich import box
-from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
 from ..adapters.types import DailyStats, MonthlyStats, P90Limits, RateLimits, SessionBlock, SessionStats, WeeklyStats
 from ..i18n import t
-
-console = Console()
+from .console import get_console
 
 
 def _is_light_theme() -> bool:
@@ -48,7 +46,7 @@ class _S:
 
 
 def _width_mode() -> str:
-    w = console.width
+    w = get_console().width
     if w < 100:
         return "compact"
     if w < 120:
@@ -185,7 +183,7 @@ def _render_week_section(lines: Text, week: WeeklyStats,
 def render_tab_bar(agent_names: list[str], current: int) -> None:
     line = Text()
     line.append("  ")
-    compact = console.width < 72
+    compact = get_console().width < 72
     for i, name in enumerate(agent_names):
         if i > 0:
             line.append(" │ ", style=_S.dim)
@@ -200,7 +198,7 @@ def render_tab_bar(agent_names: list[str], current: int) -> None:
             line.append(f" {label} ", style=_S.dim)
     help_text = t("tab_help_compact") if compact else t("tab_help")
     line.append(help_text, style=_S.dim)
-    console.print(line)
+    get_console().print(line)
 
 
 def _project_short(project: str) -> str:
@@ -212,8 +210,8 @@ def _render_header(agents: list[str], total_tokens: int, total_cost: float,
                    top_margin: bool = True) -> None:
     agent_text = " ".join(f"[{_S.good}]●[/{_S.good}] {a}" for a in agents)
     if top_margin:
-        console.print()
-    console.print(Panel(
+        get_console().print()
+    get_console().print(Panel(
         f"[bold]Token Tracker[/bold]  {agent_text}",
         border_style="blue",
         padding=(0, 1),
@@ -231,7 +229,7 @@ def _render_header(agents: list[str], total_tokens: int, total_cost: float,
     lines.append(f"{total_messages}", style="bold")
     lines.append(f"  {t('days_colon')}", style=_S.dim)
     lines.append(f"{days}", style=_S.accent)
-    console.print(lines)
+    get_console().print(lines)
 
 
 def _render_agent_summaries(stats_list, multi_agent: bool) -> None:
@@ -260,7 +258,7 @@ def _render_agent_summaries(stats_list, multi_agent: bool) -> None:
         lines.append(f"{d['sessions']}", style="bold")
         lines.append(f"  {t('messages_colon')}", style=_S.dim)
         lines.append(f"{d['messages']}", style="bold")
-        console.print(lines)
+        get_console().print(lines)
 
 
 def render_dashboard(
@@ -277,7 +275,7 @@ def render_dashboard(
     session_title: str | None = None,
 ) -> None:
     if not daily_stats:
-        console.print(f"[{_S.warn}]{t('no_data')}[/{_S.warn}]")
+        get_console().print(f"[{_S.warn}]{t('no_data')}[/{_S.warn}]")
         return
 
     total_tokens = sum(s.total_tokens for s in daily_stats)
@@ -324,7 +322,7 @@ def render_dashboard(
     if sessions and session_limit > 0:
         _render_recent_sessions(sessions[:session_limit], title=session_title)
 
-    console.print()
+    get_console().print()
 
 
 def _render_month_overview(month: MonthlyStats, last_month: MonthlyStats | None = None) -> None:
@@ -350,7 +348,7 @@ def _render_month_overview(month: MonthlyStats, last_month: MonthlyStats | None 
     lines.append(f"  {t('daily_avg_colon')}", style=_S.dim)
     lines.append(f"{_fmt_cost(daily_avg_cost)}", style=_S.cost)
 
-    console.print(lines)
+    get_console().print(lines)
 
 
 def _render_recent_sessions(stats: list[SessionStats], title: str | None = None) -> None:
@@ -391,12 +389,12 @@ def _render_recent_sessions(stats: list[SessionStats], title: str | None = None)
         ]
         table.add_row(*row)
 
-    console.print(table)
+    get_console().print(table)
 
 
 def render_daily(stats: list[DailyStats], agents: list[str] | None = None) -> None:
     if not stats:
-        console.print(f"[{_S.warn}]{t('no_data')}[/{_S.warn}]")
+        get_console().print(f"[{_S.warn}]{t('no_data')}[/{_S.warn}]")
         return
 
     multi_agent = _is_multi_agent(stats)
@@ -443,8 +441,8 @@ def render_daily(stats: list[DailyStats], agents: list[str] | None = None) -> No
         ]
         table.add_row(*row)
 
-    console.print(table)
-    console.print()
+    get_console().print(table)
+    get_console().print()
 
 
 def _render_weekly_table(stats: list[WeeklyStats], title: str | None = None) -> None:
@@ -499,12 +497,12 @@ def _render_weekly_table(stats: list[WeeklyStats], title: str | None = None) -> 
     ]
     table.add_row(*total_row)
 
-    console.print(table)
+    get_console().print(table)
 
 
 def render_weekly(stats: list[WeeklyStats], agents: list[str] | None = None) -> None:
     if not stats:
-        console.print(f"[{_S.warn}]{t('no_data')}[/{_S.warn}]")
+        get_console().print(f"[{_S.warn}]{t('no_data')}[/{_S.warn}]")
         return
 
     multi_agent = _is_multi_agent(stats)
@@ -522,7 +520,7 @@ def render_weekly(stats: list[WeeklyStats], agents: list[str] | None = None) -> 
     else:
         _render_weekly_table(stats)
 
-    console.print()
+    get_console().print()
 
 
 def _render_monthly_table(stats: list[MonthlyStats], title: str | None = None) -> None:
@@ -577,12 +575,12 @@ def _render_monthly_table(stats: list[MonthlyStats], title: str | None = None) -
     ]
     table.add_row(*total_row)
 
-    console.print(table)
+    get_console().print(table)
 
 
 def render_monthly(stats: list[MonthlyStats], agents: list[str] | None = None) -> None:
     if not stats:
-        console.print(f"[{_S.warn}]{t('no_data')}[/{_S.warn}]")
+        get_console().print(f"[{_S.warn}]{t('no_data')}[/{_S.warn}]")
         return
 
     multi_agent = _is_multi_agent(stats)
@@ -602,10 +600,10 @@ def render_monthly(stats: list[MonthlyStats], agents: list[str] | None = None) -
         _render_monthly_table(stats)
 
     if len(stats) > 1:
-        console.print()
+        get_console().print()
         _render_model_breakdown(stats)
 
-    console.print()
+    get_console().print()
 
 
 def _render_model_breakdown(stats: list[MonthlyStats]) -> None:
@@ -651,12 +649,12 @@ def _render_model_breakdown(stats: list[MonthlyStats]) -> None:
             Text(bar_text, style=bar_style),
         )
 
-    console.print(table)
+    get_console().print(table)
 
 
 def render_sessions(stats: list[SessionStats], limit: int = 20) -> None:
     if not stats:
-        console.print(f"[{_S.warn}]{t('no_data')}[/{_S.warn}]")
+        get_console().print(f"[{_S.warn}]{t('no_data')}[/{_S.warn}]")
         return
 
     multi_agent = _is_multi_agent(stats)
@@ -664,8 +662,8 @@ def render_sessions(stats: list[SessionStats], limit: int = 20) -> None:
     total_tokens = sum(s.total_tokens for s in shown)
     total_cost = sum(s.cost_usd for s in shown)
 
-    console.print()
-    console.print(Panel(
+    get_console().print()
+    get_console().print(Panel(
         f"[bold]Token Tracker[/bold]  {t('session_summary', shown=len(shown), total=len(stats))}  "
         f"Token: [{_S.token_bold}]{_fmt_tokens(total_tokens)}[/{_S.token_bold}]  "
         f"{t('cost_colon')}[{_S.cost_bold}]{_fmt_cost(total_cost)}[/{_S.cost_bold}]",
@@ -707,8 +705,8 @@ def render_sessions(stats: list[SessionStats], limit: int = 20) -> None:
         ]
         table.add_row(*row)
 
-    console.print(table)
-    console.print()
+    get_console().print(table)
+    get_console().print()
 
 
 def _render_daily_panel(
@@ -767,7 +765,7 @@ def _render_daily_panel(
 
     lines.append("\n")
 
-    console.print(Panel(lines, border_style=_pct_style(max_pct), padding=(0, 1)))
+    get_console().print(Panel(lines, border_style=_pct_style(max_pct), padding=(0, 1)))
 
 
 def _render_active_block(
@@ -819,7 +817,7 @@ def _render_active_block(
     lines.append("\n")
 
     pct = rate_limits.five_hour_pct if rate_limits and rate_limits.five_hour_pct is not None else 0
-    console.print(Panel(lines, border_style=_pct_style(pct), padding=(0, 1)))
+    get_console().print(Panel(lines, border_style=_pct_style(pct), padding=(0, 1)))
 
 
 def _render_idle_panel(
@@ -849,4 +847,4 @@ def _render_idle_panel(
     lines.append("\n")
 
     max_pct = max(rate_limits.five_hour_pct or 0, rate_limits.seven_day_pct or 0)
-    console.print(Panel(lines, border_style=_pct_style(max_pct), padding=(0, 1)))
+    get_console().print(Panel(lines, border_style=_pct_style(max_pct), padding=(0, 1)))

@@ -8,9 +8,9 @@ from .analyzer.aggregator import aggregate_daily, aggregate_monthly, aggregate_s
 from .analyzer.blocks import analyze_blocks, calculate_p90
 from .hooks import is_setup, needs_update, setup, unsetup, update_hook
 from .i18n import t
+from .ui.console import capture_console, get_console
 from .ui.tables import (
     AGENT_LABEL,
-    console,
     render_daily,
     render_dashboard,
     render_monthly,
@@ -64,7 +64,7 @@ def _apply_sort(stats, sort_key: str | None, descending: bool, default_attr: str
         return
     if sort_key not in VALID_SORT_KEYS:
         valid = ", ".join(VALID_SORT_KEYS)
-        console.print(f"[yellow]{t('unknown_sort_field', key=sort_key, valid=valid)}[/yellow]")
+        get_console().print(f"[yellow]{t('unknown_sort_field', key=sort_key, valid=valid)}[/yellow]")
         stats.sort(key=lambda s: getattr(s, default_attr), reverse=default_reverse)
         return
     # "time" 不在 SORT_ATTRS → 退回 default_attr（各命令的时间字段）
@@ -91,7 +91,7 @@ def _show_agent_dashboard(agent_id: str):
     agent_name = AGENT_LABEL.get(agent_id, agent_id)
     data = _build_agent_data(agent_id, agent_name)
     if not data:
-        console.print(f"[yellow]{t('no_token_data')}[/yellow]")
+        get_console().print(f"[yellow]{t('no_token_data')}[/yellow]")
         return
     render_dashboard(**data)
 
@@ -158,11 +158,6 @@ def _dashboard_sort_cycle():
 
 def _show_interactive_dashboard(agents):
     import shutil
-    from io import StringIO
-
-    from rich.console import Console as RichConsole
-
-    import src.ui.tables as _tables
 
     agent_names = [a.name for a in agents]
     current = _initial_agent_index(agents)
@@ -170,7 +165,6 @@ def _show_interactive_dashboard(agents):
     sort_idx = 0
     sort_desc = True
     session_limit = 30
-    orig = _tables.console
 
     sys.stdout.write("\033[?1049h\033[?7l\033[2J\033[3J\033[H\033[?25l")
     cache = {}
@@ -202,17 +196,13 @@ def _show_interactive_dashboard(agents):
                 sorted_sessions = []
                 session_title = None
 
-            buf = StringIO()
-            _tables.console = RichConsole(
-                file=buf, width=width, force_terminal=True,
-            )
-            render_tab_bar(agent_names, current)
-            if data:
-                render_data = {**data, "sessions": sorted_sessions}
-                render_dashboard(**render_data, session_limit=session_limit, top_margin=False, session_title=session_title)
-            else:
-                _tables.console.print(f"[yellow]{t('no_data')}[/yellow]")
-            _tables.console = orig
+            with capture_console(width) as buf:
+                render_tab_bar(agent_names, current)
+                if data:
+                    render_data = {**data, "sessions": sorted_sessions}
+                    render_dashboard(**render_data, session_limit=session_limit, top_margin=False, session_title=session_title)
+                else:
+                    get_console().print(f"[yellow]{t('no_data')}[/yellow]")
 
             screen, max_scroll = _fit_screen(buf.getvalue(), height, scroll_offset)
             sys.stdout.write("\033[2J\033[3J\033[H" + screen)
@@ -247,7 +237,6 @@ def _show_interactive_dashboard(agents):
     finally:
         sys.stdout.write("\033[?7h\033[?25h\033[?1049l")
         sys.stdout.flush()
-        _tables.console = orig
 
 
 # 普通字母按键 → 动作，两个平台的 reader 共用（此前 Windows 漏了 sort/reverse/more/less）
@@ -331,13 +320,13 @@ def main():
 
     agents = detect_agents()
     if not agents:
-        console.print(f"[red]{t('no_agent')}[/red]")
+        get_console().print(f"[red]{t('no_agent')}[/red]")
         sys.exit(1)
 
     agent_ids = {a.id for a in agents}
 
     if command != "dashboard":
-        console.print(f"[dim]{t('detected', agents=', '.join(a.name + ' ✓' for a in agents))}[/dim]")
+        get_console().print(f"[dim]{t('detected', agents=', '.join(a.name + ' ✓' for a in agents))}[/dim]")
 
     if not is_setup():
         setup(auto=True)
@@ -346,7 +335,7 @@ def main():
     if command in AGENT_ALIASES:
         agent_id = AGENT_ALIASES[command]
         if agent_id not in agent_ids:
-            console.print(f"[red]{t('agent_not_found', name=command)}[/red]")
+            get_console().print(f"[red]{t('agent_not_found', name=command)}[/red]")
             sys.exit(1)
         _show_agent_dashboard(agent_id)
         return
@@ -356,7 +345,7 @@ def main():
         if agent_filter:
             agent_id = AGENT_ALIASES[agent_filter]
             if agent_id not in agent_ids:
-                console.print(f"[red]{t('agent_not_found', name=agent_filter)}[/red]")
+                get_console().print(f"[red]{t('agent_not_found', name=agent_filter)}[/red]")
                 sys.exit(1)
             _show_agent_dashboard(agent_id)
         elif len(agents) > 1 and sys.stdin.isatty():
@@ -397,8 +386,8 @@ def main():
         _apply_sort(stats, sort_key, sort_desc, default_attr, default_reverse=True)
         render_sessions(stats, limit)
     else:
-        console.print(f"[red]{t('unknown_cmd', cmd=command)}[/red]")
-        console.print(f"[dim]{t('available_cmds')}[/dim]")
+        get_console().print(f"[red]{t('unknown_cmd', cmd=command)}[/red]")
+        get_console().print(f"[dim]{t('available_cmds')}[/dim]")
         sys.exit(1)
 
 
