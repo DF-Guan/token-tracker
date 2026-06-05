@@ -33,9 +33,17 @@
 
 > 终端宽度不足时会自动降级：先隐藏重置倒计时，再将进度条简化为百分比数字。
 
-**Codex**：官方暂不支持自定义 StatusLine，使用官方默认样式，展示项目名、5h/7d 配额、上下文剩余、模型名
+**Codex**：官方暂不支持自定义 StatusLine 渲染，沿用官方默认样式，`tt setup` 仅写入字段配置
 
 ![Codex StatusLine](assets/screenshot-statusline-codex.png)
+
+| 字段 | 说明 |
+|------|------|
+| `project` | 当前项目目录名 |
+| `five-hour-limit` | 5 小时滑动窗口配额用量 |
+| `weekly-limit` | 7 天滑动窗口配额用量 |
+| `context-remaining` | 上下文窗口剩余占比 |
+| `model-with-reasoning` | 模型名 + 推理强度（如 `gpt-5-codex/high`） |
 
 ## Dashboard 数据面板和 日/周/月 数据报表分析
 

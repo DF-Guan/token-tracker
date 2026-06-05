@@ -33,9 +33,17 @@ The status line has three rows, left to right:
 
 > When terminal width is limited, the display auto-degrades: first hides reset countdowns, then simplifies progress bars to plain percentages.
 
-**Codex**: Custom StatusLine not yet supported by Codex, uses the official default style showing project, 5h/7d quota, context remaining, and model
+**Codex**: Custom StatusLine rendering is not yet supported by Codex, so the official default style is reused. `tt setup` only writes the field configuration.
 
 ![Codex StatusLine](assets/screenshot-statusline-codex.png)
+
+| Field | Meaning |
+|------|------|
+| `project` | Current project directory name |
+| `five-hour-limit` | 5-hour rolling-window quota usage |
+| `weekly-limit` | 7-day rolling-window quota usage |
+| `context-remaining` | Remaining percentage of the context window |
+| `model-with-reasoning` | Model name + reasoning level (e.g. `gpt-5-codex/high`) |
 
 ## Dashboard & Daily / Weekly / Monthly Reports
 
