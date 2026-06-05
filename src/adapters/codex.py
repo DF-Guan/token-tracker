@@ -14,12 +14,7 @@ _RATE_LIMIT_SCAN_FILES = 5  # 只扫最近改动的 N 个 session 文件找限�
 
 def detect() -> AgentInfo | None:
     if Path(SESSIONS_DIR).is_dir():
-        return AgentInfo(
-            id="codex",
-            name="Codex",
-            data_dir=SESSIONS_DIR,
-            installed=True,
-        )
+        return AgentInfo(id="codex", name="Codex")
     return None
 
 
@@ -91,12 +86,12 @@ def _extract_rate_limits(path: Path, models: dict[str, str]) -> RateLimits | Non
             continue
         rl = payload.get("rate_limits")
         if rl:
-            last_payload = (rl, payload.get("info") or {}, data.get("timestamp", ""), session_id)
+            last_payload = (rl, payload.get("info") or {}, session_id)
 
     if not last_payload:
         return None
 
-    rl, info, ts, sid = last_payload
+    rl, info, sid = last_payload
 
     now_ts = datetime.now(UTC).timestamp()
     five_pct = five_reset = None
@@ -124,7 +119,6 @@ def _extract_rate_limits(path: Path, models: dict[str, str]) -> RateLimits | Non
         seven_day_pct=seven_pct,
         seven_day_resets_at=seven_reset,
         model=models.get(sid, ""),
-        updated_at=ts,
         plan_type=rl.get("plan_type") or "",
         context_window=info.get("model_context_window"),
     )

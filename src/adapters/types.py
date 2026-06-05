@@ -43,8 +43,6 @@ class UsageEntry:
 class AgentInfo:
     id: str
     name: str
-    data_dir: str
-    installed: bool
 
 
 @dataclass
@@ -119,7 +117,6 @@ class RateLimits:
     seven_day_pct: float | None = None
     seven_day_resets_at: int | None = None
     model: str = ""
-    updated_at: str = ""
     plan_type: str = ""
     context_window: int | None = None
 

@@ -40,5 +40,4 @@ def load_rate_limits() -> RateLimits | None:
         seven_day_pct=seven_pct,
         seven_day_resets_at=seven_reset,
         model=model_name,
-        updated_at=data.get("_received_at", ""),
     )

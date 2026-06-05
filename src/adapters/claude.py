@@ -14,12 +14,7 @@ CLAUDE_DIRS = [
 def detect() -> AgentInfo | None:
     for d in _get_claude_dirs():
         if Path(d).is_dir():
-            return AgentInfo(
-                id="claude-code",
-                name="Claude Code",
-                data_dir=d,
-                installed=True,
-            )
+            return AgentInfo(id="claude-code", name="Claude Code")
     return None
 
 
