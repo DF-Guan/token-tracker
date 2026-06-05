@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from src.adapters.types import DailyStats, UsageEntry
 from src.analyzer.blocks import analyze_blocks, calculate_p90
@@ -27,7 +27,7 @@ def test_empty_entries_returns_no_blocks():
 
 def test_entries_within_5h_form_single_block():
     # Use a date in the past so the block is never "active" — keeps burn_rate deterministic.
-    base = datetime(2020, 1, 1, 10, 0, tzinfo=timezone.utc)
+    base = datetime(2020, 1, 1, 10, 0, tzinfo=UTC)
     blocks = analyze_blocks([
         entry(base),
         entry(base + timedelta(hours=1)),
@@ -43,7 +43,7 @@ def test_entries_within_5h_form_single_block():
 
 
 def test_gap_block_inserted_after_long_inactivity():
-    base = datetime(2020, 1, 1, 10, 0, tzinfo=timezone.utc)
+    base = datetime(2020, 1, 1, 10, 0, tzinfo=UTC)
     later = base + timedelta(hours=8)  # past the 5h block, gap far longer than 5 min
     blocks = analyze_blocks([entry(base), entry(later)])
     assert len([b for b in blocks if not b.is_gap]) == 2
@@ -51,7 +51,7 @@ def test_gap_block_inserted_after_long_inactivity():
 
 
 def test_no_gap_block_for_short_inactivity():
-    base = datetime(2020, 1, 1, 10, 0, tzinfo=timezone.utc)
+    base = datetime(2020, 1, 1, 10, 0, tzinfo=UTC)
     nxt = base + timedelta(hours=5, minutes=2)  # new block, but only a 2 min gap
     blocks = analyze_blocks([entry(base), entry(nxt)])
     assert [b for b in blocks if b.is_gap] == []

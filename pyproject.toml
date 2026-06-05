@@ -32,6 +32,11 @@ dependencies = [
 test = [
     "pytest>=8.0",
 ]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+    "mypy>=1.8",
+]
 
 [project.urls]
 Homepage = "https://github.com/stormzhang/token-tracker"
@@ -43,3 +48,21 @@ tt = "src.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["src*"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+# E501(行长)故意不开：状态栏 ANSI 色码串本就长，启用只产生噪音
+select = ["E4", "E7", "E9", "F", "W", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+# 宽松起步，后续逐步收紧
+check_untyped_defs = true

@@ -1,7 +1,7 @@
 import json
 import os
 import sqlite3
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from .types import AgentInfo, RateLimits, UsageEntry
@@ -27,7 +27,7 @@ def load_entries(hours_back: int = 0) -> list[UsageEntry]:
     seen: set[str] = set()
     cutoff = None
     if hours_back > 0:
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=hours_back)
+        cutoff = datetime.now(UTC) - timedelta(hours=hours_back)
 
     models = _load_thread_models()
 
@@ -73,7 +73,7 @@ def _extract_rate_limits(path: Path, models: dict[str, str]) -> RateLimits | Non
     session_id = ""
     last_payload = None
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if not line:
@@ -102,7 +102,7 @@ def _extract_rate_limits(path: Path, models: dict[str, str]) -> RateLimits | Non
 
     rl, info, ts, sid = last_payload
 
-    now_ts = datetime.now(timezone.utc).timestamp()
+    now_ts = datetime.now(UTC).timestamp()
     five_pct = five_reset = None
     seven_pct = seven_reset = None
 
@@ -161,7 +161,7 @@ def _parse_jsonl(
     msg_count = 0
 
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if not line:

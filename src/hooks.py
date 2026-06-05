@@ -300,7 +300,7 @@ def _status_line_toml(items: list[str]) -> str:
 
 def _read_codex_config() -> tuple[str, dict] | None:
     try:
-        with open(CODEX_CONFIG, "r", encoding="utf-8") as f:
+        with open(CODEX_CONFIG, encoding="utf-8") as f:
             content = f.read()
         return content, tomllib.loads(content)
     except (OSError, tomllib.TOMLDecodeError):
@@ -314,7 +314,7 @@ def is_setup() -> bool:
         return False
     if has_cc:
         try:
-            with open(CLAUDE_SETTINGS, "r", encoding="utf-8") as f:
+            with open(CLAUDE_SETTINGS, encoding="utf-8") as f:
                 settings = json.load(f)
             sl = settings.get("statusLine")
             if not isinstance(sl, dict) or "tt-statusline" not in (sl.get("command") or ""):
@@ -333,7 +333,7 @@ def is_setup() -> bool:
 
 def _installed_hook_version() -> str | None:
     try:
-        with open(HOOK_SCRIPT_PATH, "r", encoding="utf-8") as f:
+        with open(HOOK_SCRIPT_PATH, encoding="utf-8") as f:
             for line in f:
                 if line.startswith("__version__"):
                     return line.split("=", 1)[1].strip().strip('"\'')
@@ -388,7 +388,7 @@ def _setup_claude() -> None:
 
     settings: dict = {}
     if os.path.exists(CLAUDE_SETTINGS):
-        with open(CLAUDE_SETTINGS, "r", encoding="utf-8") as f:
+        with open(CLAUDE_SETTINGS, encoding="utf-8") as f:
             settings = json.load(f)
 
     existing = settings.get("statusLine")
@@ -457,7 +457,7 @@ def _unsetup_claude() -> None:
     if not os.path.exists(CLAUDE_SETTINGS):
         return
 
-    with open(CLAUDE_SETTINGS, "r", encoding="utf-8") as f:
+    with open(CLAUDE_SETTINGS, encoding="utf-8") as f:
         settings = json.load(f)
 
     sl = settings.get("statusLine")
@@ -498,7 +498,7 @@ def _unsetup_codex() -> None:
         return
 
     if os.path.exists(CODEX_BACKUP):
-        with open(CODEX_BACKUP, "r", encoding="utf-8") as f:
+        with open(CODEX_BACKUP, encoding="utf-8") as f:
             old_items = json.load(f).get("status_line", [])
         content = _SL_REGEX.sub(_status_line_toml(old_items), content)
         os.remove(CODEX_BACKUP)

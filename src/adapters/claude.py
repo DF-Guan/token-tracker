@@ -1,6 +1,6 @@
 import json
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from .types import AgentInfo, UsageEntry
@@ -29,7 +29,7 @@ def load_entries(hours_back: int = 0) -> list[UsageEntry]:
     cutoff = None
     if hours_back > 0:
         from datetime import timedelta
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=hours_back)
+        cutoff = datetime.now(UTC) - timedelta(hours=hours_back)
 
     for base_dir in _get_claude_dirs():
         base = Path(base_dir)
@@ -83,7 +83,7 @@ def _parse_jsonl(
     cutoff: datetime | None,
 ) -> None:
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if not line:

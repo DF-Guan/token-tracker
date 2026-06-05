@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from ..adapters.types import DailyStats, P90Limits, SessionBlock, UsageEntry
 from .cost import calculate_cost
@@ -41,7 +41,7 @@ def analyze_blocks(entries: list[UsageEntry]) -> list[SessionBlock]:
         current_block.total_tokens += entry.total_tokens
         current_block.cost_usd += cost
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     for block in blocks:
         if block.is_gap:
             continue

@@ -1,6 +1,6 @@
 import json
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from .types import RateLimits
 
@@ -12,7 +12,7 @@ def load_rate_limits() -> RateLimits | None:
         return None
 
     try:
-        with open(STATUS_FILE, "r", encoding="utf-8") as f:
+        with open(STATUS_FILE, encoding="utf-8") as f:
             data = json.load(f)
     except (json.JSONDecodeError, OSError):
         return None
@@ -21,7 +21,7 @@ def load_rate_limits() -> RateLimits | None:
     five = rl.get("five_hour") or {}
     seven = rl.get("seven_day") or {}
 
-    now_ts = datetime.now(timezone.utc).timestamp()
+    now_ts = datetime.now(UTC).timestamp()
     five_pct = five.get("used_percentage")
     five_reset = five.get("resets_at")
     if five_reset and five_reset < now_ts:

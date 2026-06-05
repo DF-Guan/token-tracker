@@ -1,5 +1,5 @@
-from .types import AgentInfo
 from . import claude, codex
+from .types import AgentInfo
 
 
 def detect_agents() -> list[AgentInfo]:

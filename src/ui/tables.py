@@ -1,12 +1,12 @@
 import os
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
+from rich import box
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
-from rich import box
 
 from ..adapters.types import DailyStats, MonthlyStats, P90Limits, RateLimits, SessionBlock, SessionStats, WeeklyStats
 from ..i18n import t
@@ -161,14 +161,14 @@ def _render_rate_bar(lines: Text, label: str, pct: float,
                      date_fmt: str = "%H:%M") -> None:
     reset_suffix = ""
     if resets_at:
-        reset_dt = datetime.fromtimestamp(resets_at, tz=timezone.utc)
+        reset_dt = datetime.fromtimestamp(resets_at, tz=UTC)
         reset_suffix = f"  {t('reset_at', time=reset_dt.strftime(date_fmt))}"
     _append_bar(lines, f"  {label}    ", pct, bar_width, reset_suffix)
 
 
 def _render_week_section(lines: Text, week: WeeklyStats,
                          last_week: WeeklyStats | None = None) -> None:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     elapsed_days = now.weekday() + 1
     daily_avg_cost = week.cost_usd / elapsed_days if elapsed_days > 0 else 0
     lines.append(f"  Token     {_fmt_tokens(week.total_tokens)}", style=_S.token)
@@ -221,7 +221,7 @@ def _render_header(agents: list[str], total_tokens: int, total_cost: float,
 
     lines = Text()
     lines.append(t("history_overview"), style="bold")
-    lines.append(f"  Token: ", style=_S.dim)
+    lines.append("  Token: ", style=_S.dim)
     lines.append(f"{_fmt_tokens(total_tokens)}", style=_S.token_bold)
     lines.append(f"  {t('cost_colon')}", style=_S.dim)
     lines.append(f"{_fmt_cost(total_cost)}", style=_S.cost_bold)
@@ -252,7 +252,7 @@ def _render_agent_summaries(stats_list, multi_agent: bool) -> None:
         lines = Text()
         label = AGENT_LABEL.get(agent_id, agent_id)
         lines.append(f"{label}", style="bold")
-        lines.append(f"  Token: ", style=_S.dim)
+        lines.append("  Token: ", style=_S.dim)
         lines.append(f"{_fmt_tokens(d['tokens'])}", style=_S.token_bold)
         lines.append(f"  {t('cost_colon')}", style=_S.dim)
         lines.append(f"{_fmt_cost(d['cost'])}", style=_S.cost_bold)
@@ -328,14 +328,14 @@ def render_dashboard(
 
 
 def _render_month_overview(month: MonthlyStats, last_month: MonthlyStats | None = None) -> None:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     elapsed_days = now.day
     daily_avg_cost = month.cost_usd / elapsed_days if elapsed_days > 0 else 0
 
     lines = Text()
     lines.append(t("month_overview"), style="bold")
 
-    lines.append(f"  Token: ", style=_S.dim)
+    lines.append("  Token: ", style=_S.dim)
     lines.append(f"{_fmt_tokens(month.total_tokens)}", style=_S.token_bold)
     if last_month:
         _append_trend(lines, month.total_tokens, last_month.total_tokens)
@@ -750,7 +750,7 @@ def _render_daily_panel(
         lines.append(f"  {t('rate_per_msg', rate=_fmt_tokens(tokens_per_msg))}", style=_S.dim)
 
     if week:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         elapsed_days = now.weekday() + 1
         daily_avg_cost = week.cost_usd / elapsed_days if elapsed_days > 0 else 0
 
@@ -777,7 +777,7 @@ def _render_active_block(
     last_block: SessionBlock | None = None,
     last_week: WeeklyStats | None = None,
 ) -> None:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     elapsed = (now - b.start_time).total_seconds()
     remaining = (b.end_time - now).total_seconds()
 

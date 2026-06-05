@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -8,7 +8,7 @@ from src.analyzer import cost
 
 def make_entry(**kw):
     defaults = dict(
-        timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        timestamp=datetime(2026, 1, 1, tzinfo=UTC),
         session_id="s1",
         message_id="m1",
         request_id="r1",

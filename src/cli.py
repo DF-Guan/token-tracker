@@ -1,4 +1,5 @@
 import sys
+from datetime import UTC
 
 from .adapters import claude, codex
 from .adapters.rate_limits import load_rate_limits as load_claude_rate_limits
@@ -8,8 +9,14 @@ from .analyzer.blocks import analyze_blocks, calculate_p90
 from .hooks import is_setup, needs_update, setup, unsetup, update_hook
 from .i18n import t
 from .ui.tables import (
-    AGENT_LABEL, console, render_daily, render_dashboard,
-    render_monthly, render_sessions, render_tab_bar, render_weekly,
+    AGENT_LABEL,
+    console,
+    render_daily,
+    render_dashboard,
+    render_monthly,
+    render_sessions,
+    render_tab_bar,
+    render_weekly,
 )
 
 AGENT_ALIASES = {"claude": "claude-code", "codex": "codex"}
@@ -98,8 +105,8 @@ def _build_agent_data(agent_id: str, agent_name: str) -> dict | None:
     weekly = aggregate_weekly(entries)
     monthly = aggregate_monthly(entries)
     sessions = aggregate_sessions(entries)
-    from datetime import datetime, timezone, timedelta
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=48)
+    from datetime import datetime, timedelta
+    cutoff = datetime.now(UTC) - timedelta(hours=48)
     recent = [e for e in entries if e.timestamp >= cutoff]
     blocks = analyze_blocks(recent)
     rate_limits = RATE_LIMIT_LOADERS.get(agent_id, lambda: None)()
@@ -153,7 +160,9 @@ def _dashboard_sort_cycle():
 def _show_interactive_dashboard(agents):
     import shutil
     from io import StringIO
+
     from rich.console import Console as RichConsole
+
     import src.ui.tables as _tables
 
     agent_names = [a.name for a in agents]
@@ -245,8 +254,8 @@ def _show_interactive_dashboard(agents):
 def _read_key_unix():
     import os as _os
     import select
-    import tty
     import termios
+    import tty
     fd = sys.stdin.fileno()
     old = termios.tcgetattr(fd)
     try:

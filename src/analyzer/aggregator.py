@@ -1,5 +1,4 @@
 from collections import defaultdict
-from datetime import datetime
 
 from ..adapters.types import DailyStats, MonthlyStats, SessionStats, UsageEntry, WeeklyStats
 from .cost import calculate_cost

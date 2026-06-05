@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from src.adapters.types import UsageEntry
 from src.analyzer.aggregator import (
@@ -30,9 +30,9 @@ def entry(ts, session_id, *, tokens=100, cost=0.5, msgs=1, model="claude-opus-4-
 
 
 def test_aggregate_daily_groups_by_date_and_counts_unique_sessions():
-    d1 = datetime(2026, 1, 1, 10, tzinfo=timezone.utc)
-    d1b = datetime(2026, 1, 1, 23, tzinfo=timezone.utc)
-    d2 = datetime(2026, 1, 2, 9, tzinfo=timezone.utc)
+    d1 = datetime(2026, 1, 1, 10, tzinfo=UTC)
+    d1b = datetime(2026, 1, 1, 23, tzinfo=UTC)
+    d2 = datetime(2026, 1, 2, 9, tzinfo=UTC)
     daily = aggregate_daily([
         entry(d1, "s1", tokens=100, cost=0.5),
         entry(d1b, "s2", tokens=200, cost=1.0),
@@ -49,8 +49,8 @@ def test_aggregate_daily_groups_by_date_and_counts_unique_sessions():
 
 
 def test_aggregate_monthly_groups_by_month():
-    jan = datetime(2026, 1, 15, tzinfo=timezone.utc)
-    feb = datetime(2026, 2, 3, tzinfo=timezone.utc)
+    jan = datetime(2026, 1, 15, tzinfo=UTC)
+    feb = datetime(2026, 2, 3, tzinfo=UTC)
     monthly = aggregate_monthly([entry(jan, "s1", cost=1.0), entry(feb, "s2", cost=2.0)])
     assert [m.month for m in monthly] == ["2026-01", "2026-02"]
     assert monthly[0].cost_usd == 1.0
@@ -58,9 +58,9 @@ def test_aggregate_monthly_groups_by_month():
 
 
 def test_aggregate_weekly_groups_by_iso_week():
-    thu = datetime(2026, 1, 1, tzinfo=timezone.utc)   # Thursday
-    fri = datetime(2026, 1, 2, tzinfo=timezone.utc)   # same ISO week
-    next_mon = datetime(2026, 1, 5, tzinfo=timezone.utc)  # next week
+    thu = datetime(2026, 1, 1, tzinfo=UTC)   # Thursday
+    fri = datetime(2026, 1, 2, tzinfo=UTC)   # same ISO week
+    next_mon = datetime(2026, 1, 5, tzinfo=UTC)  # next week
     weekly = aggregate_weekly([entry(thu, "s1"), entry(fri, "s1"), entry(next_mon, "s2")])
     assert len(weekly) == 2
     first = weekly[0]
@@ -69,8 +69,8 @@ def test_aggregate_weekly_groups_by_iso_week():
 
 
 def test_aggregate_sessions_computes_duration_and_primary_model():
-    t0 = datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)
-    t1 = datetime(2026, 1, 1, 10, 30, tzinfo=timezone.utc)
+    t0 = datetime(2026, 1, 1, 10, 0, tzinfo=UTC)
+    t1 = datetime(2026, 1, 1, 10, 30, tzinfo=UTC)
     sessions = aggregate_sessions([
         entry(t0, "s1", tokens=100, cost=0.5, model="claude-opus-4-6"),
         entry(t1, "s1", tokens=300, cost=1.5, model="claude-sonnet-4-6"),
