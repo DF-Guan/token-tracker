@@ -35,7 +35,7 @@ jobs:
         run: python -m compileall src
 
       - name: Check package imports
-        run: python -c "from src.cli import main; from src.hooks import setup"
+        run: python -c "from token_tracker.cli import main; from token_tracker.hooks import setup"
 
       - name: Run tests
         run: python -m pytest -q
