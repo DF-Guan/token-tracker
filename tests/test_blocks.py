@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
-from src.adapters.types import DailyStats, UsageEntry
-from src.analyzer.blocks import analyze_blocks, calculate_p90
+from token_tracker.adapters.types import DailyStats, UsageEntry
+from token_tracker.analyzer.blocks import analyze_blocks, calculate_p90
 
 
 def entry(ts, *, tokens=100, cost=0.5):

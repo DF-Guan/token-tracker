@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "token-tracker"
-version = "0.3.8"
+version = "0.4.0"
 description = "Track token usage across local AI agents (Claude Code, Codex)"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -44,10 +44,10 @@ Repository = "https://github.com/stormzhang/token-tracker"
 Issues = "https://github.com/stormzhang/token-tracker/issues"
 
 [project.scripts]
-tt = "src.cli:main"
+tt = "token_tracker.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["src*"]
+where = ["src"]
 
 [tool.ruff]
 line-length = 120

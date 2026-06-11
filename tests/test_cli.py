@@ -1,5 +1,5 @@
-from src import cli
-from src.adapters.types import DailyStats
+from token_tracker import cli
+from token_tracker.adapters.types import DailyStats
 
 
 def test_key_map_covers_dashboard_actions():
@@ -82,7 +82,7 @@ def test_apply_key_session_limit_bounds():
 
 def test_render_dashboard_frame_produces_screen():
     # 走交互式渲染路径：capture_console + render_tab_bar + render_dashboard + _fit_screen
-    from src.adapters.types import DailyStats as DS
+    from token_tracker.adapters.types import DailyStats as DS
     data = {
         "daily_stats": [DS(date="2026-06-01", total_tokens=1000, cost_usd=1.0, message_count=3, session_count=1)],
         "weekly_stats": [], "monthly_stats": [], "sessions": [], "blocks": [],

@@ -5,8 +5,8 @@ from urllib.error import URLError
 
 import pytest
 
-from src.adapters.types import UsageEntry
-from src.analyzer import cost
+from token_tracker.adapters.types import UsageEntry
+from token_tracker.analyzer import cost
 
 
 def make_entry(**kw):

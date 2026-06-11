@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 
-from src.adapters.types import UsageEntry
-from src.analyzer.aggregator import (
+from token_tracker.adapters.types import UsageEntry
+from token_tracker.analyzer.aggregator import (
     aggregate_daily,
     aggregate_monthly,
     aggregate_sessions,

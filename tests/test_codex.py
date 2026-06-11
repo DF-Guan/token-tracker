@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from src.adapters import codex
+from token_tracker.adapters import codex
 
 
 def _write_session(tmp_path: Path, events: list[dict]) -> Path:

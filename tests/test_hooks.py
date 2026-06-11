@@ -1,4 +1,4 @@
-from src import hooks
+from token_tracker import hooks
 
 
 def test_rendered_hook_script_has_single_version_source():
