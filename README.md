@@ -4,7 +4,7 @@
 
 自定义 StatusLine 状态栏 + CLI Dashboard，实时查看 token 用量、等效成本、限额状态。
 
-![Python](https://img.shields.io/badge/python-3.11+-blue) ![License](https://img.shields.io/badge/license-MIT-green)
+![Python](https://img.shields.io/badge/python-3.11+-blue) ![CI](https://github.com/stormzhang/token-tracker/actions/workflows/ci.yml/badge.svg) ![License](https://img.shields.io/badge/license-MIT-green)
 
 [English](README_EN.md)
 
@@ -61,6 +61,7 @@
 - **状态栏集成** — Claude Code statusLine + Codex status_line，首次运行自动配置，脚本更新自动升级
 - **限额监控** — 实时 5h / 7d 配额百分比 + 重置倒计时
 - **成本分析** — 按会话、日、周、月维度的等效成本统计，多 Agent 按来源分组展示
+- **定价识别** — litellm 在线定价 + 内置官方价双层兜底；同系列新模型自动套用本档定价（含 Claude Fable 5 / Opus 4.8），全新系列缺价时明确提示，不静默按 $0 统计
 - **会话洞察** — 项目、模型、时长、消息数一览
 - **零配置** — 自动检测已安装的 Agent，直接读取本地数据
 - **隐私安全** — 数据纯本地存储，不采集、不上传任何用户信息，极轻量无后顾之忧
@@ -113,10 +114,29 @@ tt sessions --sort tokens --asc # 按 token 升序
 | `+` / `-` | 调整会话显示条数（±10，最少 10 条） |
 | `q` | 退出 |
 
+## 数据来源
+
+| Agent | 路径 | 格式 |
+|-------|------|------|
+| Claude Code | `~/.claude/projects/*/` | JSONL（逐消息用量） |
+| Codex | `~/.codex/sessions/` | JSONL + SQLite |
+
+Token Tracker 对 Agent 数据**只读**，不做任何修改。
+
 ## 环境要求
 
 - Python 3.11+
 - [Rich](https://github.com/Textualize/rich)（自动安装）
+
+## 开发
+
+```bash
+git clone https://github.com/stormzhang/token-tracker && cd token-tracker
+uv run --extra dev pytest                # 运行测试
+uv run --extra dev ruff check src tests  # Lint
+```
+
+包采用标准 src layout（`src/token_tracker/`）：发行名 `token-tracker`，导入名 `token_tracker`（0.4.0 起）。
 
 ## TODO
 

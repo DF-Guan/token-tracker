@@ -4,7 +4,7 @@ Track token usage across local AI agents. Supports **Claude Code** and **Codex**
 
 Custom StatusLine integration + CLI Dashboard — see token usage, cost, and rate limits at a glance.
 
-![Python](https://img.shields.io/badge/python-3.11+-blue) ![License](https://img.shields.io/badge/license-MIT-green)
+![Python](https://img.shields.io/badge/python-3.11+-blue) ![CI](https://github.com/stormzhang/token-tracker/actions/workflows/ci.yml/badge.svg) ![License](https://img.shields.io/badge/license-MIT-green)
 
 [中文](README.md)
 
@@ -61,6 +61,7 @@ The status line has three rows, left to right:
 - **Status line integration** — Claude Code statusLine + Codex status_line, auto-configured on first run, auto-upgraded on script updates
 - **Rate limit monitoring** — real-time 5h / 7d quota usage with reset countdown
 - **Cost analysis** — per-session, daily, weekly, monthly cost breakdown with per-agent grouping
+- **Pricing resolution** — litellm live pricing with built-in official-price fallback; new models in a known family are priced automatically (incl. Claude Fable 5 / Opus 4.8), and unknown models trigger an explicit warning instead of silently counting as $0
 - **Session insights** — project, model, duration, message count per session
 - **Zero config** — auto-detects installed agents, reads local data directly
 - **Privacy first** — all data stays local, no collection or upload of any user information, lightweight and worry-free
@@ -126,6 +127,16 @@ Token Tracker is **read-only** — it never modifies any agent data.
 
 - Python 3.11+
 - [Rich](https://github.com/Textualize/rich) (auto-installed)
+
+## Development
+
+```bash
+git clone https://github.com/stormzhang/token-tracker && cd token-tracker
+uv run --extra dev pytest                # run tests
+uv run --extra dev ruff check src tests  # lint
+```
+
+The package uses the standard src layout (`src/token_tracker/`): distribution name `token-tracker`, import name `token_tracker` (since 0.4.0).
 
 ## TODO
 
