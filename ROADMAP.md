@@ -27,6 +27,16 @@
 - `0.3.8`：识别 Claude Fable 5 定价 + 未知模型显形（不再静默归零）
 - `0.4.0`：包目录迁移标准 src layout（导入名 `src` → `token_tracker`）+ CI 适配新包名 + README 双语同步
 
+## 进行中（已实现并验证，待发布）
+
+- **`tt daily` 重构为 GitHub 风格 token 贡献热力图**（2026-06-16）：全角 ■ 深浅绿方格（5 档）+ 月份表头 + 紧凑总览 + 图例，替换原逐日表格。
+  - 新增 `ui/heatmap.py`（渲染 + 自带紧凑总览）；`ui/theme.py` 加 5 档 GitHub 绿 + 分位分档；`ui/console.py` 加 `forced_color_console()` 强制 24-bit truecolor。
+  - 自适应：按终端宽度决定显示周数（最多一年），`soft_wrap` 防折行；总览自渲染（不复用 dashboard 宽 header），半屏不折。
+  - 会话内彩色：在 Claude Code 里用户敲 `!tt daily` 才渲染真彩色（slash command 注入、模型工具输出都会 strip 颜色，唯用户 `!` bash 模式渲染 ANSI —— 已实测确认）。
+  - **原「会话内 skill 替代 + 删除终端 daily」设想撤销**：终端命令是彩色热力图的唯一载体，删了功能即失。
+  - 新增 `tests/test_heatmap.py` 6 用例。
+  - 待定：是否把 daily 收敛为纯 Claude Code（排除 Codex 数据与标题圆点），尚未确认。
+
 ## 待办 / 计划
 
 - **发布 `0.4.0`**：打 `v0.4.0` tag 并 push → 发 PyPI（属红线操作，待主人确认）
@@ -39,5 +49,5 @@
 
 ## 最近验证
 
-- **2026-06-16**：`uv run --extra dev pytest` 45 用例全绿；`ruff check src tests` 全过。
-  HEAD = `b2fd07c`（0.4.0 docs），最新 tag `v0.3.8` —— 即 `0.4.0` 尚未打 tag、未发布。
+- **2026-06-16**：daily 热力图实现完成。`uv run --extra dev pytest` 51 用例全绿（原 45 + 热力图 6）；`ruff check src tests` 全过；`tt daily` 终端实跑 truecolor 热力图正常。
+  `0.4.0` 仍未打 tag / 未发布；热力图作为 `0.4.0` 之后的改动，本次提交到本地 main。

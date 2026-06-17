@@ -46,3 +46,37 @@ def _token_heat_style(ratio: float) -> str:
 
 def _pct_style(pct: float) -> str:
     return _S.bar_high if pct > 80 else _S.bar_mid if pct > 50 else _S.bar_low
+
+
+# --- GitHub 贡献图热力配色（daily 热力图用）---
+# 0 档=无数据，1-4 档由浅到深。暗/亮两套，按背景选。0 档用稍亮灰，保证空格子在终端可辨。
+_HEAT_GREENS_DARK = [
+    "rgb(48,54,61)", "rgb(14,68,41)", "rgb(0,109,50)", "rgb(38,166,65)", "rgb(57,211,83)",
+]
+_HEAT_GREENS_LIGHT = [
+    "rgb(235,237,240)", "rgb(155,233,168)", "rgb(64,196,99)", "rgb(48,161,78)", "rgb(33,110,57)",
+]
+HEAT_GREENS = _HEAT_GREENS_LIGHT if _S.light else _HEAT_GREENS_DARK
+
+
+def _heat_thresholds(values: list[int]) -> list[float]:
+    """对非零 token 值取 25/50/75 分位，作为 1-4 档的上界阈值（GitHub 风格分位分档）。"""
+    nonzero = sorted(v for v in values if v > 0)
+    if not nonzero:
+        return [1, 1, 1]
+    n = len(nonzero)
+    return [nonzero[min(n - 1, int(n * q))] for q in (0.25, 0.5, 0.75)]
+
+
+def _heat_level(tokens: float, thresholds: list[float]) -> int:
+    """按阈值把当天 token 量映射到 0-4 档（0=无数据/最浅）。"""
+    if tokens <= 0:
+        return 0
+    t1, t2, t3 = thresholds
+    if tokens <= t1:
+        return 1
+    if tokens <= t2:
+        return 2
+    if tokens <= t3:
+        return 3
+    return 4

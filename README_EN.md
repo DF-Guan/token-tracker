@@ -85,19 +85,21 @@ tt setup          # initialize and configure Claude Code + Codex status_line
 tt                # interactive dashboard (arrow keys to switch agents)
 tt claude         # Claude Code only
 tt codex          # Codex only
-tt daily          # daily summary (sorted by token usage)
+tt daily          # daily token contribution heatmap (GitHub-style greens)
 tt weekly         # weekly summary (per-agent grouping)
 tt monthly        # monthly summary (per-agent grouping)
 tt sessions       # last 20 session details
 tt unsetup        # uninstall and restore previous config
 ```
 
+> 💡 `tt daily` is a GitHub-style token contribution heatmap (shaded green cells). In a Claude Code session, type `!tt daily` to see it in full color — commands you run yourself with `!` have their 24-bit true-color output rendered.
+
 ### Report Sorting
 
 All report commands support `--sort` and `--asc/--desc` flags:
 
 ```bash
-tt daily --sort cost --desc     # sort by cost, descending
+tt weekly --sort cost --desc    # sort by cost, descending
 tt sessions --sort tokens --asc # sort by tokens, ascending
 ```
 

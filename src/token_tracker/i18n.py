@@ -66,6 +66,9 @@ _STRINGS = {
         "msg_count": "消息      {n} 条",
         "limit_7d": "7d 限额",
         "idle_panel_title": "限额数据面板",
+        # --- heatmap.py ---
+        "heat_less": "少",
+        "heat_more": "多",
         # --- hooks.py ---
         "no_agent_install": "未检测到 Claude Code 或 Codex，请先安装其中之一",
         "first_setup": "首次使用，正在配置状态栏...",
@@ -152,6 +155,9 @@ _STRINGS = {
         "msg_count": "Messages  {n}",
         "limit_7d": "7d Limit",
         "idle_panel_title": "Rate Limits",
+        # --- heatmap.py ---
+        "heat_less": "Less",
+        "heat_more": "More",
         # --- hooks.py ---
         "no_agent_install": "Claude Code or Codex not detected, please install one first",
         "first_setup": "First run, configuring status bar...",

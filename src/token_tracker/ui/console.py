@@ -6,6 +6,7 @@
 """
 
 import contextlib
+import os
 from collections.abc import Iterator
 from io import StringIO
 
@@ -27,5 +28,22 @@ def capture_console(width: int) -> Iterator[StringIO]:
     _console = Console(file=buf, width=width, force_terminal=True)
     try:
         yield buf
+    finally:
+        _console = prev
+
+
+@contextlib.contextmanager
+def forced_color_console() -> Iterator[None]:
+    """临时把全局 console 换成强制 24-bit 彩色、输出到 stdout 的 console。
+
+    用于 `!tt daily` 这种「非 tty 但要彩色」的场景：Claude Code 的 bash 模式会渲染
+    命令输出的 ANSI，但 Rich 默认在非 tty 下关色，故需 force_terminal + truecolor。
+    复用的 header/summary 渲染都走 get_console()，因此一并彩色。尊重 NO_COLOR。
+    """
+    global _console
+    prev = _console
+    _console = Console(force_terminal=True, color_system="truecolor", no_color=bool(os.environ.get("NO_COLOR")))
+    try:
+        yield
     finally:
         _console = prev

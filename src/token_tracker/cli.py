@@ -13,9 +13,9 @@ from .analyzer.blocks import analyze_blocks, calculate_p90
 from .hooks import is_setup, needs_update, setup, unsetup, update_hook
 from .i18n import t
 from .ui.console import capture_console, get_console
+from .ui.heatmap import render_daily_heatmap
 from .ui.tables import (
     AGENT_LABEL,
-    render_daily,
     render_dashboard,
     render_monthly,
     render_sessions,
@@ -51,7 +51,7 @@ VALID_SORT_KEYS = (*SORT_ATTRS.keys(), "time")
 # 数据报表命令分发表：命令 → (聚合函数, 渲染函数, time 排序的属性, 无 --sort 时的默认属性, 默认降序)
 # time_attr 与 no_sort_attr 仅 daily 不同（默认按 token 排，--sort time 才按日期）
 _REPORT_COMMANDS = {
-    "daily": (aggregate_daily, render_daily, "date", "total_tokens", True),
+    "daily": (aggregate_daily, render_daily_heatmap, "date", "total_tokens", True),
     "weekly": (aggregate_weekly, render_weekly, "week", "week", True),
     "monthly": (aggregate_monthly, render_monthly, "month", "month", False),
     "sessions": (aggregate_sessions, render_sessions, "start_time", "start_time", True),

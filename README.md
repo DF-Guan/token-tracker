@@ -85,19 +85,21 @@ tt setup          # 初始化配置 Claude Code + Codex status_line
 tt                # 交互式 Dashboard（方向键切换 Agent）
 tt claude         # 仅展示 Claude Code
 tt codex          # 仅展示 Codex
-tt daily          # 按日汇总（按 token 消耗排序）
+tt daily          # 按日 token 贡献热力图（GitHub 风格深浅绿）
 tt weekly         # 按周汇总（多 Agent 分组展示）
 tt monthly        # 按月汇总（多 Agent 分组展示）
 tt sessions       # 最近 20 条会话明细数据
 tt unsetup        # 卸载并恢复安装前的配置
 ```
 
+> 💡 `tt daily` 是 GitHub 风格的 token 贡献热力图（深浅绿方格）。在 Claude Code 会话里输入 `!tt daily` 即可看到彩色热力图 —— 用户主动用 `!` 执行的命令，Claude Code 会渲染其 24-bit 真彩色输出。
+
 ### 报告排序
 
 所有报告命令支持 `--sort` 和 `--asc/--desc` 参数：
 
 ```bash
-tt daily --sort cost --desc     # 按成本降序
+tt weekly --sort cost --desc    # 按成本降序
 tt sessions --sort tokens --asc # 按 token 升序
 ```
 
