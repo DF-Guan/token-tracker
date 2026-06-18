@@ -351,21 +351,19 @@ def _render_week_summary(cur: WeeklyStats, prev: WeeklyStats | None, agents: lis
 
 
 def _render_weekly_trend(weeks: list[WeeklyStats], limit: int = 8) -> None:
-    """逐周 token 进度条（最近若干周，最新在上、本周高亮绿）。"""
+    """逐周 token 进度条（最近若干周，最新在上；逐周同亮绿，本周在最上无需另高亮）。"""
     recent = weeks[-limit:]
     max_tok = max((w.total_tokens for w in recent), default=0) or 1
-    cur_week = weeks[-1].week
     table = Table(title=Text("[Weekly Trend]", style=f"bold {_S.good}"), title_justify="left", box=box.SIMPLE,
                   header_style="bold", padding=(0, 1), expand=False, border_style=_S.good)
     table.add_column("Week", style=_S.good, no_wrap=True)
     table.add_column("Token", justify="right")
     table.add_column("", min_width=20)
     for w in reversed(recent):
-        is_cur = w.week == cur_week
         table.add_row(
-            Text(f"{w.week_start} ~ {w.week_end}", style="bold" if is_cur else ""),
+            f"{w.week_start} ~ {w.week_end}",
             _fmt_tokens(w.total_tokens),
-            _bar_text(w.total_tokens / max_tok, _S.good if is_cur else _darken(_S.good)),
+            _bar_text(w.total_tokens / max_tok, _S.good),
         )
     get_console().print(Padding(table, (0, 0, 0, 2), expand=False))
 
