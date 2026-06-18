@@ -63,9 +63,9 @@ def _render_summary(stats: list[DailyStats], agents: list[str] | None) -> None:
 
 def _append_stat_row(body: Text, label: str, rows: list[DailyStats]) -> None:
     """向 body 追加一行：行首标签 + Tokens/Cost/Sessions/Days，每项标签与值同色
-    （Tokens 青 / Cost 黄 / Sessions 紫 / Days 橙），值加粗、标签常规，项间用灰竖线 │ 分隔。"""
-    sep = " │ "
-    body.append(f"{label}:".ljust(11), style="bold")
+    （Tokens 青 / Cost 黄 / Sessions 紫 / Days 橙），值加粗、标签常规，项间用灰 | 分隔（同 statusline）；行首标签蓝。"""
+    sep = " | "
+    body.append(f"{label}:".ljust(11), style=f"bold {_S.blue}")
     body.append("Tokens: ", style=_S.token)
     body.append(_fmt_tokens(sum(s.total_tokens for s in rows)), style=_S.token_bold)
     body.append(sep, style=_S.dim)
