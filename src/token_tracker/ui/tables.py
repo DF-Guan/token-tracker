@@ -294,6 +294,13 @@ def _merge_weeks(stats: list[WeeklyStats]) -> list[WeeklyStats]:
     return [merged[k] for k in sorted(merged)]
 
 
+def _darken(color: str, factor: float = 0.6) -> str:
+    """把 #RRGGBB 按 factor 压暗（保持色相），用于突出排第一的项。"""
+    h = color.lstrip("#")
+    r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
+    return f"#{int(r * factor):02x}{int(g * factor):02x}{int(b * factor):02x}"
+
+
 def _bar_text(ratio: float, fill_style: str, width: int = 20) -> Text:
     """半高进度条（▄ 仅占行下半，相邻行天然空半行）：填充用 fill_style、
     空槽用同色 dim 版（同色深浅对比，仿 daily 方格）。"""
@@ -370,7 +377,7 @@ def _render_weekly_trend(weeks: list[WeeklyStats], limit: int = 8) -> None:
         table.add_row(
             Text(f"{w.week_start} ~ {w.week_end}", style="bold" if is_cur else ""),
             _fmt_tokens(w.total_tokens),
-            _bar_text(w.total_tokens / max_tok, _S.good),
+            _bar_text(w.total_tokens / max_tok, _S.good if is_cur else _darken(_S.good)),
         )
     get_console().print(table)
 
@@ -389,10 +396,11 @@ def _render_distribution(title: str, name_col: str, data: dict[str, int],
     table.add_column("Token", justify="right")
     table.add_column("", min_width=20)
     table.add_column("", justify="right", style=f"dim {accent}")
-    for name, tokens in items[:8]:
+    for idx, (name, tokens) in enumerate(items[:8]):
         pct = tokens / total * 100 if total else 0
+        fill = accent if idx == 0 else _darken(accent)
         table.add_row(short_fn(name), _fmt_tokens(tokens),
-                      _bar_text(pct / 100, accent), f"{pct:.1f}%")
+                      _bar_text(pct / 100, fill), f"{pct:.1f}%")
     get_console().print(table)
 
 
