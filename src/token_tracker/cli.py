@@ -150,13 +150,17 @@ def _build_agent_data(agent_id: str, agent_name: str) -> dict | None:
     )
 
 
-def _initial_agent_index(agents) -> int:
-    preferred = None
+def _current_session_agent() -> str | None:
+    """识别当前所在的 agent 会话（靠环境变量）：Codex / Claude Code；独立终端返回 None。"""
     if os.environ.get("CODEX_THREAD_ID") or os.environ.get("CODEX_SANDBOX"):
-        preferred = "codex"
-    elif os.environ.get("CLAUDE_CONFIG_DIR") or os.environ.get("CLAUDECODE"):
-        preferred = "claude-code"
+        return "codex"
+    if os.environ.get("CLAUDE_CONFIG_DIR") or os.environ.get("CLAUDECODE"):
+        return "claude-code"
+    return None
 
+
+def _initial_agent_index(agents) -> int:
+    preferred = _current_session_agent()
     if preferred:
         for i, agent in enumerate(agents):
             if agent.id == preferred:
@@ -373,7 +377,7 @@ def main():
 
     agent_ids = {a.id for a in agents}
 
-    if command != "dashboard":
+    if command not in ("dashboard", "daily"):
         get_console().print(f"[dim]{t('detected', agents=', '.join(a.name + ' ✓' for a in agents))}[/dim]")
 
     if not is_setup():
@@ -402,8 +406,6 @@ def main():
             _show_agent_dashboard(agents[0].id)
         return
 
-    # 其他命令使用合并数据
-    agent_names = [a.name for a in agents]
     rest_args, sort_key, sort_desc = _parse_sort_args(args[1:])
 
     if command not in _REPORT_COMMANDS:
@@ -411,8 +413,17 @@ def main():
         get_console().print(f"[dim]{t('available_cmds')}[/dim]")
         sys.exit(1)
 
+    # daily 热力图跟随当前会话：CC 会话只看 CC、Codex 会话只看 Codex；
+    # 独立终端（识别不到会话）暂保持合并所有 agent。
+    report_agents = agents
+    if command == "daily":
+        session_agent = _current_session_agent()
+        if session_agent and session_agent in agent_ids:
+            report_agents = [a for a in agents if a.id == session_agent]
+    agent_names = [a.name for a in report_agents]
+
     agg_fn, render_fn, time_attr, no_sort_attr, default_reverse = _REPORT_COMMANDS[command]
-    stats = _aggregate_per_agent(agents, agg_fn)
+    stats = _aggregate_per_agent(report_agents, agg_fn)
     default_attr = time_attr if sort_key == "time" else no_sort_attr
     _apply_sort(stats, sort_key, sort_desc, default_attr, default_reverse)
 

@@ -2,12 +2,14 @@
 
 替代原 daily 逐日表格：紧凑总览 + 月份表头 + 7 行（星期）× N 列（周）的深浅绿方格 + 图例。
 彩色靠 forced_color_console() 强制 24-bit 输出，因此终端直跑与会话内 `!tt daily` 都能看到颜色。
-每格 = 全角方块 ■ + 间隔空格（_CELL_W 显示宽），分离成方格；按终端宽度自适应周数、soft_wrap 避免折行。
+每格 = 方块 ■ + 间隔空格（_CELL_W 显示宽），分离成方格；按终端宽度自适应周数、soft_wrap 避免折行。
 总览自己渲染（不复用 dashboard 的宽 header），紧凑单行、半屏不折。
 """
 
+import os
 from datetime import UTC, datetime, timedelta
 
+from rich.panel import Panel
 from rich.text import Text
 
 from ..adapters.types import DailyStats
@@ -17,7 +19,7 @@ from .format import _fmt_cost, _fmt_tokens
 from .theme import _S, HEAT_GREENS, _heat_level, _heat_thresholds
 
 _WEEKS = 53
-_CELL_W = 3  # 每格显示宽：全角方块(2) + 间隔(1)
+_CELL_W = 2  # 每格显示宽：方块(1) + 间隔(1)；■ 在多数终端按 1 列渲染
 _DAY_LABELS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]
 _MONTHS = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
@@ -45,22 +47,40 @@ def _render_summary(stats: list[DailyStats], agents: list[str] | None) -> None:
     total_sessions = sum(s.session_count for s in stats)
     days = len({s.date for s in stats})
 
-    # 标题行：紧凑、无 Panel 框
-    title = Text()
-    title.append("Token Tracker", style="bold")
+    body = Text()
+    # 标题行
+    body.append("Token Tracker", style="bold")
     for a in agents or ["Claude Code"]:
-        title.append("  ● ", style=_S.good)
-        title.append(a, style="bold")
-    get_console().print(title, soft_wrap=True)
+        body.append("  ● ", style=_S.good)
+        body.append(a, style="bold")
+    body.append("\n")
+    # 数据行：每项带前置标签、· 分隔，明确各数值含义
+    body.append("Tokens ", style=_S.dim)
+    body.append(_fmt_tokens(total_tokens), style=_S.token_bold)
+    body.append(" · Cost ", style=_S.dim)
+    body.append(_fmt_cost(total_cost), style=_S.cost_bold)
+    body.append(f" · Sessions {total_sessions} · Msgs {total_msgs} · Days {days}", style=_S.dim)
 
-    # 数字行：· 分隔、短标签，控制在窄屏不折
-    line = Text()
-    line.append(_fmt_tokens(total_tokens), style=_S.token_bold)
-    line.append(" · ", style=_S.dim)
-    line.append(_fmt_cost(total_cost), style=_S.cost_bold)
-    line.append(f" · {total_sessions} sessions · {total_msgs} msgs · {days} days", style=_S.dim)
-    get_console().print(line, soft_wrap=True)
+    # 紧凑框（expand=False 贴合内容、不撑满）框住整个总览
+    get_console().print(Panel(body, expand=False, border_style="blue", padding=(0, 1)))
     get_console().print()
+
+
+def _display_weeks() -> int:
+    """要显示的周数。优先按真实终端宽度自适应；拿不到宽度时（Claude Code `!` 等非 tty
+    且无 COLUMNS）默认显示整年——全屏够宽即可，窄屏可 `export COLUMNS` 精确自适应。"""
+    cols = os.environ.get("COLUMNS")
+    width = int(cols) if cols and cols.isdigit() else None
+    if width is None:
+        for fd in (2, 1, 0):
+            try:
+                width = os.get_terminal_size(fd).columns
+                break
+            except OSError:
+                continue
+    if width is None:
+        return _WEEKS
+    return max(8, min(_WEEKS, (width - 4) // _CELL_W))
 
 
 def _render_grid(tokens_by_date: dict[str, int]) -> None:
@@ -70,8 +90,7 @@ def _render_grid(tokens_by_date: dict[str, int]) -> None:
 
     # 每格 _CELL_W 显示宽（全角方块 + 间隔）。按终端宽度自适应周数：
     # 窄终端少显示几周、不折行；宽终端最多 _WEEKS（一年）。
-    avail = max(0, get_console().width - 4)  # 4 = 星期标签 "Su  " 宽
-    weeks = max(8, min(_WEEKS, avail // _CELL_W))
+    weeks = _display_weeks()
     start_sunday = this_sunday - timedelta(weeks=weeks - 1)
 
     thresholds = _heat_thresholds(list(tokens_by_date.values()))
