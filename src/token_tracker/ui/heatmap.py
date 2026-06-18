@@ -40,29 +40,43 @@ def render_daily_heatmap(stats: list[DailyStats], agents: list[str] | None = Non
 
 
 def _render_summary(stats: list[DailyStats], agents: list[str] | None) -> None:
-    total_tokens = sum(s.total_tokens for s in stats)
-    total_cost = sum(s.cost_usd for s in stats)
-    total_msgs = sum(s.message_count for s in stats)
-    total_sessions = sum(s.session_count for s in stats)
-    days = len({s.date for s in stats})
+    today = datetime.now(UTC).date()
+    this_sunday = (today - timedelta(days=(today.weekday() + 1) % 7)).isoformat()
+    week = [s for s in stats if s.date >= this_sunday]
 
     body = Text()
     # 标题行
-    body.append("Token Tracker", style="bold")
+    body.append("Token Tracker", style=f"bold {_S.good}")
     for a in agents or ["Claude Code"]:
         body.append("  ● ", style=_S.good)
         body.append(a, style="bold")
     body.append("\n")
-    # 数据行：每项带前置标签、· 分隔，明确各数值含义
-    body.append("Tokens ", style=_S.dim)
-    body.append(_fmt_tokens(total_tokens), style=_S.token_bold)
-    body.append(" · Cost ", style=_S.dim)
-    body.append(_fmt_cost(total_cost), style=_S.cost_bold)
-    body.append(f" · Sessions {total_sessions} · Msgs {total_msgs} · Days {days}", style=_S.dim)
+    # 总计行 + 本周行（本周日起至今）
+    _append_stat_row(body, "Overview", stats)
+    body.append("\n")
+    _append_stat_row(body, "This Week", week)
 
     # 紧凑框（expand=False 贴合内容、不撑满）框住整个总览
-    get_console().print(Panel(body, expand=False, border_style="blue", padding=(0, 1)))
+    get_console().print(Panel(body, expand=False, border_style=_S.blue, padding=(0, 1)))
     get_console().print()
+
+
+def _append_stat_row(body: Text, label: str, rows: list[DailyStats]) -> None:
+    """向 body 追加一行：行首标签 + Tokens/Cost/Sessions/Days，每项标签与值同色
+    （Tokens 青 / Cost 黄 / Sessions 紫 / Days 橙），值加粗、标签常规，项间用灰竖线 │ 分隔。"""
+    sep = " │ "
+    body.append(f"{label}:".ljust(11), style="bold")
+    body.append("Tokens: ", style=_S.token)
+    body.append(_fmt_tokens(sum(s.total_tokens for s in rows)), style=_S.token_bold)
+    body.append(sep, style=_S.dim)
+    body.append("Cost: ", style=_S.cost)
+    body.append(_fmt_cost(sum(s.cost_usd for s in rows)), style=_S.cost_bold)
+    body.append(sep, style=_S.dim)
+    body.append("Sessions: ", style=_S.mauve)
+    body.append(str(sum(s.session_count for s in rows)), style=f"bold {_S.mauve}")
+    body.append(sep, style=_S.dim)
+    body.append("Days: ", style=_S.peach)
+    body.append(str(len({s.date for s in rows})), style=f"bold {_S.peach}")
 
 
 def _display_weeks() -> int:

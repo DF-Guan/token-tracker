@@ -38,6 +38,9 @@
   - **daily 跟随当前会话 agent**（环境变量识别）：CC 会话只显示 CC、Codex 会话只显示 Codex；独立终端暂保持合并（待后续处理）。
   - 修复 `■` 实为 1 列宽导致的月份/方块错位（`_CELL_W=2`）；拿不到终端宽度（Claude Code `!` 非 tty）时默认显示整年。
   - 总览改紧凑卡片（`Panel` expand=False，贴合内容不撑满）+ 数据前置标签；daily 不再打 Detected 行。
+- **全 CLI 配色切到 Catppuccin Mocha / Latte 双 flavor**（2026-06-18）：`ui/theme.py` 重构——`_MOCHA`/`_LATTE` 官方调色板（truecolor）映射到 `_S` 语义槽位，暗终端 Mocha、亮终端 Latte 按 `COLORFGBG` 自动选，`TT_THEME=mocha/latte` 手动覆盖（兼容旧 light/dark）；热力梯度出 `_HEAT_MOCHA`/`_HEAT_LATTE` 双版。dashboard / daily / weekly / monthly / sessions 全部统一（`panels.py`/`tables.py` 硬编码 blue → `_S.blue`），和 statusline 同源。
+- **daily 概览改版**（2026-06-18）：紧凑卡片改为「Token Tracker 标题（绿）+ Overview / This Week 双行」；每行 Tokens / Cost / Sessions / Days 四项标签与值同色（青 / 黄 / 紫 / 橙）、值加粗、灰竖线 │ 分隔；删除 Msgs（信息量低）。This Week 按本周日起至今汇总。
+- **`!tt` 非 tty 宽度探测修复**（2026-06-18，已提交 73916af）：`ui/console.py` 加 `_forced_width()`，从 `_P9K_TTY`/`SSH_TTY` ioctl 取真实终端宽度（忽略 Claude Code 子进程置的占位 `COLUMNS=0`），daily 周数判定交回 Rich console。
 
 ## 待办 / 计划
 
@@ -51,5 +54,6 @@
 
 ## 最近验证
 
+- **2026-06-18**：daily 概览改版 + 全 CLI 切 Catppuccin 配色。`uv run --extra dev pytest` 51 用例全绿；`ruff check src tests` 全过；`mypy src` 仍 5 个历史遗留报错、无新增；`tt daily` / `tt` 终端实跑 Mocha 配色正常，色码核对一致。
 - **2026-06-16**：daily 热力图实现完成。`uv run --extra dev pytest` 51 用例全绿（原 45 + 热力图 6）；`ruff check src tests` 全过；`tt daily` 终端实跑 truecolor 热力图正常。
   `0.4.0` 仍未打 tag / 未发布；热力图作为 `0.4.0` 之后的改动，本次提交到本地 main。
