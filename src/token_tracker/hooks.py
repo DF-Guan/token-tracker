@@ -12,7 +12,7 @@ CLAUDE_SETTINGS = os.path.expanduser("~/.claude/settings.json")
 HOOK_SCRIPT_PATH = os.path.expanduser("~/.claude/tt-statusline.py")
 CODEX_CONFIG = os.path.expanduser("~/.codex/config.toml")
 CODEX_BACKUP = os.path.expanduser("~/.codex/tt-backup.json")
-HOOK_VERSION = "1.6"
+HOOK_VERSION = "1.7"
 _BACKUP_KEY = "tokenTracker"
 _PREV_SL_KEY = "previousStatusLine"
 _SL_REGEX = re.compile(r'status_line\s*=\s*\[.*?\]', re.DOTALL)
@@ -171,9 +171,9 @@ def render(data, now):
         name = os.path.basename(project)
         branch = git_branch(project)
         if branch:
-            line1.append(f"{C['project']}{name}{C['reset']}({C['branch']}{branch}{C['reset']})")
+            line1.append(f"{C['project']}[{name}]{C['reset']}({C['branch']}{branch}{C['reset']})")
         else:
-            line1.append(f"{C['project']}{name}{C['reset']}")
+            line1.append(f"{C['project']}[{name}]{C['reset']}")
 
     rl = data.get("rate_limits") or {}
     rl_parts = []
