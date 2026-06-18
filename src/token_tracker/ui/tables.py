@@ -238,38 +238,66 @@ def render_weekly(stats: list[WeeklyStats], agents: list[str] | None = None,
 
 
 def _render_daily_barchart(by_date: dict[str, int], days_back: int = 30, height: int = 6) -> None:
-    """最近 days_back 天的每日 token 垂直柱状图（▁-█ sub-cell 精度，列间留白）；
-    峰值柱子上方标其日期，底部两端标起止日期。"""
+    """最近 days_back 天的每日 token 垂直柱状图（▁-█ sub-cell 精度，列间留白）；峰值柱子上方标
+    日期、底部两端标起止日期。数据稀疏时：去开头前导空白天（至少留 7 天）、中间 > 5 天的连续空段
+    压成 3 列「·」gap（既不留大片空、也不把两端柱子谎称成连续）。"""
     today = datetime.now(UTC).date()
     dates = [today - timedelta(days=i) for i in range(days_back - 1, -1, -1)]
     vals = [by_date.get(d.isoformat(), 0) for d in dates]
+    # 去开头前导空白天（从第一个有活动那天画起），但至少留 7 天、避免缩成几根
+    first = next((i for i, v in enumerate(vals) if v > 0), 0)
+    start_idx = min(first, max(0, len(vals) - 7))
+    dates, vals = dates[start_idx:], vals[start_idx:]
     max_v = max(vals) or 1
     blocks = " ▁▂▃▄▅▆▇█"
-    heights = [v / max_v * height for v in vals]
-    width = len(dates) * 2 - 1  # 每天 1 字符 + 1 间隔
+
+    # 列结构 (is_gap, 柱高, tokens, 日期标签)：中间连续空 > 5 天压成 3 列 gap、避免大片留白
+    cols: list[tuple[bool, float, int, str]] = []
+    i, n = 0, len(vals)
+    while i < n:
+        if vals[i] == 0:
+            j = i
+            while j < n and vals[j] == 0:
+                j += 1
+            if j - i > 5 and i > 0 and j < n:  # 中间长空段
+                cols += [(True, 0.0, 0, "")] * 3
+            else:                              # 首尾空 / 短空：如实保留
+                cols += [(False, 0.0, 0, dates[k].strftime("%m/%d")) for k in range(i, j)]
+            i = j
+        else:
+            cols.append((False, vals[i] / max_v * height, vals[i], dates[i].strftime("%m/%d")))
+            i += 1
+
+    width = len(cols) * 2 - 1
+    mid_row = (height + 1) // 2
+    day_k = [k for k, c in enumerate(cols) if not c[0]]
+    top3 = set(sorted(day_k, key=lambda k: cols[k][2], reverse=True)[:3])
+    peak_k = max(day_k, key=lambda k: cols[k][2]) if day_k else 0
 
     title = Text()
     title.append("[Daily Trend]", style=f"bold {_S.peach}")
-    title.append(" (last 30d)", style=f"dim {_S.peach}")
+    title.append(f" (last {len(dates)}d)", style=f"dim {_S.peach}")
     lines: list[Text] = [title, Text()]
-    peak_idx = vals.index(max(vals))
-    peak_label = dates[peak_idx].strftime("%m/%d")
+    peak_label = cols[peak_k][3]
     top = [" "] * width
-    pos = max(0, min(width - len(peak_label), peak_idx * 2 - len(peak_label) // 2))
-    for j, ch in enumerate(peak_label):
-        top[pos + j] = ch
+    pos = max(0, min(width - len(peak_label), peak_k * 2 - len(peak_label) // 2))
+    for jx, ch in enumerate(peak_label):
+        top[pos + jx] = ch
     lines.append(Text("".join(top), style=_S.peach))
-    top3 = set(sorted(range(len(vals)), key=lambda i: vals[i], reverse=True)[:3])
     for row in range(height, 0, -1):
         line = Text()
-        for i, h in enumerate(heights):
-            diff = h - (row - 1)
-            ch = "█" if diff >= 1 else " " if diff <= 0 else blocks[round(diff * 8)]
-            line.append(ch, style=_S.peach if i in top3 else f"dim {_S.peach}")
-            if i < len(heights) - 1:
+        for k, c in enumerate(cols):
+            if c[0]:  # gap 列：中间行画「·」表示这里跳过了若干天
+                line.append("·" if row == mid_row else " ", style=f"dim {_S.peach}")
+            else:
+                diff = c[1] - (row - 1)
+                ch = "█" if diff >= 1 else " " if diff <= 0 else blocks[round(diff * 8)]
+                line.append(ch, style=_S.peach if k in top3 else f"dim {_S.peach}")
+            if k < len(cols) - 1:
                 line.append(" ")
         lines.append(line)
-    start, end = dates[0].strftime("%m/%d"), dates[-1].strftime("%m/%d")
+    day_labels = [c[3] for c in cols if not c[0]]
+    start, end = day_labels[0], day_labels[-1]
     gap = max(1, width - len(start) - len(end))
     lines.append(Text(start + " " * gap + end, style=_S.dim))
     get_console().print(Padding(Group(*lines), (0, 0, 0, 2), expand=False))
