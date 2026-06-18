@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 
 from rich import box
 from rich.console import Group
+from rich.padding import Padding
 from rich.panel import Panel
 from rich.rule import Rule
 from rich.table import Table
@@ -231,6 +232,7 @@ def render_weekly(stats: list[WeeklyStats], agents: list[str] | None = None,
         _render_weekly_trend(weeks)
         _render_distribution("Project Trend", "Project", cur.projects, _project_short, _S.pink)
         _render_distribution("Model Trend", "Model", cur.models, _model_short, _S.blue)
+        get_console().print(Text("  tt · by stormzhang", style=_S.dim))
 
 
 def _render_daily_barchart(by_date: dict[str, int], days_back: int = 30, height: int = 6) -> None:
@@ -247,28 +249,28 @@ def _render_daily_barchart(by_date: dict[str, int], days_back: int = 30, height:
     title = Text()
     title.append("[Daily Trend]", style=f"bold {_S.peach}")
     title.append(" (last 30d)", style=f"dim {_S.peach}")
-    get_console().print(title)
-    get_console().print()
+    lines: list[Text] = [title, Text()]
     peak_idx = vals.index(max(vals))
     peak_label = dates[peak_idx].strftime("%m/%d")
     top = [" "] * width
     pos = max(0, min(width - len(peak_label), peak_idx * 2 - len(peak_label) // 2))
     for j, ch in enumerate(peak_label):
         top[pos + j] = ch
-    get_console().print(Text("  " + "".join(top), style=_S.peach))
+    lines.append(Text("".join(top), style=_S.peach))
     top3 = set(sorted(range(len(vals)), key=lambda i: vals[i], reverse=True)[:3])
     for row in range(height, 0, -1):
-        line = Text("  ")
+        line = Text()
         for i, h in enumerate(heights):
             diff = h - (row - 1)
             ch = "█" if diff >= 1 else " " if diff <= 0 else blocks[round(diff * 8)]
             line.append(ch, style=_S.peach if i in top3 else f"dim {_S.peach}")
             if i < len(heights) - 1:
                 line.append(" ")
-        get_console().print(line)
+        lines.append(line)
     start, end = dates[0].strftime("%m/%d"), dates[-1].strftime("%m/%d")
     gap = max(1, width - len(start) - len(end))
-    get_console().print(Text("  " + start + " " * gap + end, style=_S.dim))
+    lines.append(Text(start + " " * gap + end, style=_S.dim))
+    get_console().print(Padding(Group(*lines), (0, 0, 0, 2), expand=False))
     get_console().print()
 
 
@@ -379,7 +381,7 @@ def _render_weekly_trend(weeks: list[WeeklyStats], limit: int = 8) -> None:
             _fmt_tokens(w.total_tokens),
             _bar_text(w.total_tokens / max_tok, _S.good if is_cur else _darken(_S.good)),
         )
-    get_console().print(table)
+    get_console().print(Padding(table, (0, 0, 0, 2), expand=False))
 
 
 def _render_distribution(title: str, name_col: str, data: dict[str, int],
@@ -401,7 +403,7 @@ def _render_distribution(title: str, name_col: str, data: dict[str, int],
         fill = accent if idx == 0 else _darken(accent)
         table.add_row(short_fn(name), _fmt_tokens(tokens),
                       _bar_text(pct / 100, fill), f"{pct:.1f}%")
-    get_console().print(table)
+    get_console().print(Padding(table, (0, 0, 0, 2), expand=False))
 
 
 def _render_monthly_table(stats: list[MonthlyStats], title: str | None = None) -> None:

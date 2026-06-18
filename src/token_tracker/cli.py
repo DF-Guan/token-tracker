@@ -356,7 +356,8 @@ def main():
 
     # 版本查询不该触发任何文件读写，放在 auto-update 之前短路返回
     if command in ("--version", "-v", "-V"):
-        print(f"tt {_get_version()}")
+        print(f"token-tracker {_get_version()}")
+        print("by stormzhang · https://github.com/stormzhang/token-tracker")
         return
 
     # 已配置过的情况下，任意命令都顺带同步状态栏脚本（setup/unsetup 自行处理）

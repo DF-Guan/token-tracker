@@ -10,6 +10,7 @@ from collections import defaultdict
 from datetime import UTC, date, datetime, timedelta
 
 from rich.console import Group
+from rich.padding import Padding
 from rich.panel import Panel
 from rich.rule import Rule
 from rich.text import Text
@@ -131,8 +132,9 @@ def _render_summary(stats: list[DailyStats], agents: list[str] | None,
     body.append("Active Hour: ", style=_S.pink)
     body.append(active, style=f"bold {_S.pink}")
 
-    get_console().print(Panel(Group(brand, Rule(style=f"bold {_S.red}"), body),
-                              expand=False, border_style=_S.blue, padding=(0, 1)))
+    get_console().print(Padding(Panel(Group(brand, Rule(style=f"bold {_S.red}"), body),
+                                      expand=False, border_style=_S.blue, padding=(0, 1)),
+                                (0, 0, 0, 2), expand=False))
     get_console().print()
 
 
@@ -162,7 +164,7 @@ def _display_weeks() -> int:
     尺寸、`COLUMNS`，都拿不到才回落 80）；装不下整年时砍掉最左（最老）的周、不折行。
     `!` 非 tty 或窄屏想多显示几周，可 `export COLUMNS=<列数>` 精确控制。"""
     width = get_console().width
-    return max(8, min(_WEEKS, (width - 4) // _CELL_W))
+    return max(8, min(_WEEKS, (width - 6) // _CELL_W))  # -6 = 缩进 2 + 星期标签列 4
 
 
 def _render_grid(tokens_by_date: dict[str, int]) -> None:
@@ -189,11 +191,11 @@ def _render_grid(tokens_by_date: dict[str, int]) -> None:
                     if c * _CELL_W + i < len(header):
                         header[c * _CELL_W + i] = ch
                 last_end = c + 1
-    get_console().print(Text("    " + "".join(header).rstrip(), style=_S.dim), soft_wrap=True)
+    get_console().print(Text("      " + "".join(header).rstrip(), style=_S.dim), soft_wrap=True)
 
     # 7 行：星期标签 + 方块 + 间隔
     for r in range(7):
-        line = Text()
+        line = Text("  ")
         line.append(f"{_DAY_LABELS[r]}  ", style=_S.dim)
         for c in range(weeks):
             d = start_sunday + timedelta(weeks=c, days=r)
@@ -208,9 +210,10 @@ def _render_grid(tokens_by_date: dict[str, int]) -> None:
 
 def _render_legend() -> None:
     line = Text()
-    line.append(f"\n    {t('heat_less')} ", style=_S.dim)
+    line.append(f"\n      {t('heat_less')} ", style=_S.dim)
     for color in HEAT_GREENS:
         line.append("■", style=color)
         line.append(" ")
     line.append(t("heat_more"), style=_S.dim)
+    line.append("    tt · by stormzhang", style=_S.dim)
     get_console().print(line, soft_wrap=True)
