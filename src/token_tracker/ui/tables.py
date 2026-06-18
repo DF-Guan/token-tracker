@@ -29,6 +29,8 @@ from .format import (
     _model_short,
     _project_short,
     _width_mode,
+    append_metric,
+    brand_line,
 )
 from .panels import (
     _render_active_block,
@@ -313,27 +315,11 @@ def _bar_text(ratio: float, fill_style: str, width: int = 20) -> Text:
     return t
 
 
-def _append_metric(body: Text, label: str, value: str, color: str,
-                   cur_val: float, prev_val: float | None) -> None:
-    body.append(f"{label}: ", style=color)
-    body.append(value, style=f"bold {color}")
-    if prev_val and prev_val > 0:
-        pct = (cur_val - prev_val) / prev_val * 100
-        body.append(f" ({'↑' if pct >= 0 else '↓'}{abs(pct):.0f}%)", style=f"dim {color}")
-
-
 def _render_week_summary(cur: WeeklyStats, prev: WeeklyStats | None, agents: list[str],
                          active_days: int) -> None:
     """本周分析卡片：品牌行 + 分割线 + 本周区间；第二行 Tokens/Cost/Avg·Cost（橙）、
     第三行 Sessions/Msgs/Active Days（蓝），带环比上周。Avg/Cost = 本周成本 ÷ 已过天数（日均）。"""
-    brand = Text()
-    brand.append("Token Tracker", style=f"bold {_S.red}")
-    brand.append(": ", style=f"bold {_S.red}")
-    for i, a in enumerate(agents):
-        if i:
-            brand.append(" + ", style=f"dim {_S.red}")
-        brand.append(a, style=f"dim {_S.red}")
-
+    brand = brand_line(agents)
     body = Text()
     body.append("This Week", style=f"bold {_S.good}")
     body.append(f"  {cur.week_start} ~ {cur.week_end}", style=f"dim {_S.good}")
@@ -343,22 +329,22 @@ def _render_week_summary(cur: WeeklyStats, prev: WeeklyStats | None, agents: lis
     cur_avg = cur.cost_usd / days
     prev_avg = prev.cost_usd / 7 if prev else None
     # 第二行（橙）：Tokens / Cost / Avg/Cost（日均花费）
-    _append_metric(body, "Tokens", _fmt_tokens(cur.total_tokens), _S.peach,
+    append_metric(body,"Tokens", _fmt_tokens(cur.total_tokens), _S.peach,
                    cur.total_tokens, prev.total_tokens if prev else None)
     body.append("   ")
-    _append_metric(body, "Cost", _fmt_cost(cur.cost_usd), _S.peach,
+    append_metric(body,"Cost", _fmt_cost(cur.cost_usd), _S.peach,
                    cur.cost_usd, prev.cost_usd if prev else None)
     body.append("   ")
-    _append_metric(body, "Avg/Cost", _fmt_cost(cur_avg), _S.peach, cur_avg, prev_avg)
+    append_metric(body,"Avg/Cost", _fmt_cost(cur_avg), _S.peach, cur_avg, prev_avg)
     body.append("\n")
     # 第三行（粉）：Sessions / Msgs
-    _append_metric(body, "Sessions", str(cur.session_count), _S.blue,
+    append_metric(body,"Sessions", str(cur.session_count), _S.blue,
                    cur.session_count, prev.session_count if prev else None)
     body.append("   ")
-    _append_metric(body, "Msgs", str(cur.message_count), _S.blue,
+    append_metric(body,"Msgs", str(cur.message_count), _S.blue,
                    cur.message_count, prev.message_count if prev else None)
     body.append("   ")
-    _append_metric(body, "Active Days", f"{active_days}/7", _S.blue, active_days, None)
+    append_metric(body,"Active Days", f"{active_days}/7", _S.blue, active_days, None)
     get_console().print(Panel(Group(brand, Rule(style=f"bold {_S.red}"), body),
                               expand=False, border_style=_S.blue, padding=(0, 1)))
     get_console().print()
