@@ -41,7 +41,7 @@
 - **全 CLI 配色切到 Catppuccin Mocha / Latte 双 flavor**（2026-06-18）：`ui/theme.py` 重构——`_MOCHA`/`_LATTE` 官方调色板（truecolor）映射到 `_S` 语义槽位，暗终端 Mocha、亮终端 Latte 按 `COLORFGBG` 自动选，`TT_THEME=mocha/latte` 手动覆盖（兼容旧 light/dark）；热力梯度出 `_HEAT_MOCHA`/`_HEAT_LATTE` 双版。dashboard / daily / weekly / monthly / sessions 全部统一（`panels.py`/`tables.py` 硬编码 blue → `_S.blue`），和 statusline 同源。
 - **daily 概览改版**（2026-06-18）：紧凑卡片改为「Token Tracker 标题 + Overview / This Week 双行」；每行 Tokens / Cost / Sessions / Days 四项标签与值同色区分、值加粗、灰 | 分隔（同 statusline）；删除 Msgs（信息量低）。This Week 按本周日起至今汇总。配色走 Catppuccin 语义槽位、具体色值见 `theme.py`（仍在微调）。
 - **`!tt` 非 tty 宽度探测修复**（2026-06-18，已提交 73916af）：`ui/console.py` 加 `_forced_width()`，从 `_P9K_TTY`/`SSH_TTY` ioctl 取真实终端宽度（忽略 Claude Code 子进程置的占位 `COLUMNS=0`），daily 周数判定交回 Rich console。
-- **`tt weekly` 重构为五区块周报**（2026-06-18）：① This Week 卡片（本周 Tokens/Cost/Sessions/Msgs + 环比上周 ↑↓% + Avg/Session、$/Session、Cache Hit）② Daily Trend 每日 token 垂直柱状图（近 30 天，峰值标日期、底部起止）③ Weekly Trend 逐周进度条 ④ Project Trend ⑤ Model Trend（均本周口径）。
+- **`tt weekly` 重构为五区块周报**（2026-06-18）：① This Week 卡片（品牌行 Token Tracker + agent、红分割线；第二行 Tokens/Cost/Avg-Cost 橙、第三行 Sessions/Msgs/Active Days 蓝，均带环比上周；Avg/Cost=本周成本÷已过天数）② Daily Trend 每日 token 垂直柱状图（近 30 天，前三天亮、峰值标日期、底部起止）③ Weekly Trend 逐周进度条 ④ Project Trend ⑤ Model Trend（均本周口径）。四块各用主色（橙/绿/粉/蓝），标题/名称列/进度条/分割线统一该主色，进度条用同色深浅。
   - 数据层：`WeeklyStats`（连带 Daily/Monthly）加 `projects` 字段 + `_aggregate` 按 project 累加（同 models 机制）；新增 `test_aggregator.py::test_aggregate_fills_projects_by_token`。
   - weekly 也跟随当前会话（原仅 daily）：CC 会话只看 CC、独立终端合并；去掉 weekly 的 Detected 行。
   - daily / weekly 品牌行统一为 `Token Tracker: a + b`（冒号 + 连接、去圆点、跟随会话）。

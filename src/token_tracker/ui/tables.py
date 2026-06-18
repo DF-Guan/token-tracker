@@ -8,7 +8,9 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
 from rich import box
+from rich.console import Group
 from rich.panel import Panel
+from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
 
@@ -219,7 +221,8 @@ def render_weekly(stats: list[WeeklyStats], agents: list[str] | None = None,
     prev = weeks[-2] if len(weeks) >= 2 else None
 
     with forced_color_console():
-        _render_week_summary(cur, prev, agents or ["Claude Code"])
+        active_days = len({d.date for d in daily if d.date >= cur.week}) if daily else 0
+        _render_week_summary(cur, prev, agents or ["Claude Code"], active_days)
         if daily:
             by_date: dict[str, int] = {}
             for d in daily:
@@ -242,9 +245,8 @@ def _render_daily_barchart(by_date: dict[str, int], days_back: int = 30, height:
     width = len(dates) * 2 - 1  # 每天 1 字符 + 1 间隔
 
     title = Text()
-    title.append("[Daily Trend ", style=f"bold {_S.peach}")
-    title.append("(last 30d)", style=f"dim {_S.peach}")
-    title.append("]", style=f"bold {_S.peach}")
+    title.append("[Daily Trend]", style=f"bold {_S.peach}")
+    title.append(" (last 30d)", style=f"dim {_S.peach}")
     get_console().print(title)
     get_console().print()
     peak_idx = vals.index(max(vals))
@@ -304,53 +306,53 @@ def _bar_text(ratio: float, fill_style: str, width: int = 20) -> Text:
 
 def _append_metric(body: Text, label: str, value: str, color: str,
                    cur_val: float, prev_val: float | None) -> None:
-    body.append(f"{label} ", style=color)
+    body.append(f"{label}: ", style=color)
     body.append(value, style=f"bold {color}")
     if prev_val and prev_val > 0:
         pct = (cur_val - prev_val) / prev_val * 100
-        body.append(f" {'↑' if pct >= 0 else '↓'}{abs(pct):.0f}%", style=_S.dim)
+        body.append(f" ({'↑' if pct >= 0 else '↓'}{abs(pct):.0f}%)", style=f"dim {color}")
 
 
-def _render_week_summary(cur: WeeklyStats, prev: WeeklyStats | None, agents: list[str]) -> None:
-    """本周分析卡片：品牌行（Token Tracker + 跟随会话的 agent）+ 本周区间 + 四项指标 + 环比。"""
-    body = Text()
-    body.append("Token Tracker", style=f"bold {_S.red}")
-    body.append(": ", style=f"bold {_S.red}")
+def _render_week_summary(cur: WeeklyStats, prev: WeeklyStats | None, agents: list[str],
+                         active_days: int) -> None:
+    """本周分析卡片：品牌行 + 分割线 + 本周区间；第二行 Tokens/Cost/Avg·Cost（橙）、
+    第三行 Sessions/Msgs/Active Days（蓝），带环比上周。Avg/Cost = 本周成本 ÷ 已过天数（日均）。"""
+    brand = Text()
+    brand.append("Token Tracker", style=f"bold {_S.red}")
+    brand.append(": ", style=f"bold {_S.red}")
     for i, a in enumerate(agents):
         if i:
-            body.append(" + ", style=_S.dim)
-        body.append(a, style="bold")
-    body.append("\n")
+            brand.append(" + ", style=f"dim {_S.red}")
+        brand.append(a, style=f"dim {_S.red}")
+
+    body = Text()
     body.append("This Week", style=f"bold {_S.good}")
-    body.append(f"  {cur.week_start} ~ {cur.week_end}", style=_S.dim)
+    body.append(f"  {cur.week_start} ~ {cur.week_end}", style=f"dim {_S.good}")
     body.append("\n")
-    _append_metric(body, "Tokens", _fmt_tokens(cur.total_tokens), _S.pink,
+    this_monday = datetime.fromisoformat(cur.week).date()
+    days = max(1, min(7, (datetime.now(UTC).date() - this_monday).days + 1))
+    cur_avg = cur.cost_usd / days
+    prev_avg = prev.cost_usd / 7 if prev else None
+    # 第二行（橙）：Tokens / Cost / Avg/Cost（日均花费）
+    _append_metric(body, "Tokens", _fmt_tokens(cur.total_tokens), _S.peach,
                    cur.total_tokens, prev.total_tokens if prev else None)
     body.append("   ")
-    _append_metric(body, "Cost", _fmt_cost(cur.cost_usd), _S.cost,
+    _append_metric(body, "Cost", _fmt_cost(cur.cost_usd), _S.peach,
                    cur.cost_usd, prev.cost_usd if prev else None)
     body.append("   ")
-    _append_metric(body, "Sessions", str(cur.session_count), _S.mauve,
+    _append_metric(body, "Avg/Cost", _fmt_cost(cur_avg), _S.peach, cur_avg, prev_avg)
+    body.append("\n")
+    # 第三行（粉）：Sessions / Msgs
+    _append_metric(body, "Sessions", str(cur.session_count), _S.blue,
                    cur.session_count, prev.session_count if prev else None)
     body.append("   ")
-    _append_metric(body, "Msgs", str(cur.message_count), _S.peach,
+    _append_metric(body, "Msgs", str(cur.message_count), _S.blue,
                    cur.message_count, prev.message_count if prev else None)
-    _append_analysis(body, cur)
-    get_console().print(Panel(body, expand=False, border_style=_S.blue, padding=(0, 1)))
+    body.append("   ")
+    _append_metric(body, "Active Days", f"{active_days}/7", _S.blue, active_days, None)
+    get_console().print(Panel(Group(brand, Rule(style=f"bold {_S.red}"), body),
+                              expand=False, border_style=_S.blue, padding=(0, 1)))
     get_console().print()
-
-
-def _append_analysis(body: Text, cur: WeeklyStats) -> None:
-    """本周分析行：平均每会话 token / 成本、缓存命中率（输入侧缓存读占比）。"""
-    if cur.session_count:
-        body.append("\nAvg/Session ", style=_S.dim)
-        body.append(_fmt_tokens(cur.total_tokens // cur.session_count), style="bold")
-        body.append("   $/Session ", style=_S.dim)
-        body.append(_fmt_cost(cur.cost_usd / cur.session_count), style="bold")
-    cache_base = cur.input_tokens + cur.cache_creation_tokens + cur.cache_read_tokens
-    if cache_base:
-        body.append("   Cache Hit ", style=_S.dim)
-        body.append(f"{cur.cache_read_tokens / cache_base * 100:.0f}%", style="bold")
 
 
 def _render_weekly_trend(weeks: list[WeeklyStats], limit: int = 8) -> None:
@@ -359,7 +361,7 @@ def _render_weekly_trend(weeks: list[WeeklyStats], limit: int = 8) -> None:
     max_tok = max((w.total_tokens for w in recent), default=0) or 1
     cur_week = weeks[-1].week
     table = Table(title=Text("[Weekly Trend]", style=f"bold {_S.good}"), title_justify="left", box=box.SIMPLE,
-                  header_style="bold", padding=(0, 1), expand=False)
+                  header_style="bold", padding=(0, 1), expand=False, border_style=_S.good)
     table.add_column("Week", style=_S.good, no_wrap=True)
     table.add_column("Token", justify="right")
     table.add_column("", min_width=20)
@@ -382,11 +384,11 @@ def _render_distribution(title: str, name_col: str, data: dict[str, int],
     total = sum(data.values())
     items = sorted(data.items(), key=lambda x: x[1], reverse=True)
     table = Table(title=Text(f"[{title}]", style=f"bold {accent}"), title_justify="left", box=box.SIMPLE,
-                  header_style="bold", padding=(0, 1), expand=False)
+                  header_style="bold", padding=(0, 1), expand=False, border_style=accent)
     table.add_column(name_col, style=accent, no_wrap=True)
     table.add_column("Token", justify="right")
     table.add_column("", min_width=20)
-    table.add_column("Ratio", justify="right", style=f"dim {accent}")
+    table.add_column("", justify="right", style=f"dim {accent}")
     for name, tokens in items[:8]:
         pct = tokens / total * 100 if total else 0
         table.add_row(short_fn(name), _fmt_tokens(tokens),
