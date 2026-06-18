@@ -18,7 +18,7 @@ from rich.text import Text
 from ..adapters.types import DailyStats
 from ..i18n import t
 from .console import forced_color_console, get_console
-from .format import _fmt_cost, _fmt_tokens, _model_short, append_metric, brand_line
+from .format import _fmt_cost, _fmt_tokens, _model_short, brand_line, emit_metrics
 from .theme import _S, HEAT_GREENS, _heat_level, _heat_thresholds
 
 _WEEKS = 53
@@ -53,23 +53,21 @@ def _render_summary(stats: list[DailyStats], agents: list[str] | None,
     # 品牌行（Token Tracker + agent 暗红）+ 红分割线 + 过去一年汇总（同 weekly 顶部样式）
     brand = brand_line(agents or ["Claude Code"])
 
-    sep = "   "
+    avail = max(40, get_console().width - 6)  # 卡片可用内容宽 = 终端 - 缩进2 - 边框2 - padding2
     body = Text()
     body.append("Last 12 months", style=f"bold {_S.good}")
     body.append(f"  {year_ago} ~ {today.isoformat()}", style=f"dim {_S.good}")
     body.append("\n")
     days = len({s.date for s in rows})
     total_cost = sum(s.cost_usd for s in rows)
-    # 第一行（橙）：Tokens / Cost / Avg/Cost / Active Days（Avg/Cost = 总成本 ÷ 活跃天数）
-    append_metric(body, "Tokens", _fmt_tokens(sum(s.total_tokens for s in rows)), _S.peach)
-    body.append(sep, style=_S.dim)
-    append_metric(body, "Cost", _fmt_cost(total_cost), _S.peach)
-    body.append(sep, style=_S.dim)
-    append_metric(body, "Sessions", str(sum(s.session_count for s in rows)), _S.peach)
-    body.append(sep, style=_S.dim)
-    append_metric(body, "Avg/Cost", _fmt_cost(total_cost / days if days else 0), _S.peach)
-    body.append(sep, style=_S.dim)
-    append_metric(body, "Active Days", str(days), _S.peach)
+    # 第一行（橙）：Tokens / Cost / Sessions / Avg/Cost / Active Days（Avg/Cost = 总成本 ÷ 活跃天数）
+    emit_metrics(body, [
+        ("Tokens", _fmt_tokens(sum(s.total_tokens for s in rows))),
+        ("Cost", _fmt_cost(total_cost)),
+        ("Sessions", str(sum(s.session_count for s in rows))),
+        ("Avg/Cost", _fmt_cost(total_cost / days if days else 0)),
+        ("Active Days", str(days)),
+    ], _S.peach, avail)
     body.append("\n")
     # 第二行（蓝）：单日峰值 token / 当前·最长连续活跃天数
     peak = max(rows, key=lambda s: s.total_tokens)
@@ -80,11 +78,12 @@ def _render_summary(stats: list[DailyStats], agents: list[str] | None,
         longest_streak = max(longest_streak, cur_streak)
     if dts and (today - dts[-1]).days > 1:  # 最近活跃日距今 > 1 天，当前连续已断
         cur_streak = 0
-    append_metric(body, "Peak", f"{peak.date[5:]} ({_fmt_tokens(peak.total_tokens)})", _S.blue)
-    body.append(sep, style=_S.dim)
-    append_metric(body, "Current/Longest Streak", f"{cur_streak}/{longest_streak}d", _S.blue)
+    emit_metrics(body, [
+        ("Peak", f"{peak.date[5:]} ({_fmt_tokens(peak.total_tokens)})"),
+        ("Current/Longest Streak", f"{cur_streak}/{longest_streak}d"),
+    ], _S.blue, avail)
     body.append("\n")
-    # 第三行（紫）：最忙星期几 / Top Model / 最活跃时段（按会话开始时间近似）
+    # 第三行（粉）：最忙星期几 / Top Model / 最活跃时段（按会话开始时间近似）
     wd_tokens: dict[int, int] = defaultdict(int)
     model_tokens: dict[str, int] = defaultdict(int)
     for s in rows:
@@ -96,11 +95,9 @@ def _render_summary(stats: list[DailyStats], agents: list[str] | None,
     top_model = _model_short(max(model_tokens.items(), key=lambda x: x[1])[0]) if model_tokens else "-"
     rng = _active_hour_range(hourly or {})
     active = f"{rng[0]:02d}:00-{rng[1]:02d}:00" if rng else "-"
-    append_metric(body, "Busiest", busiest, _S.pink)
-    body.append(sep, style=_S.dim)
-    append_metric(body, "Top Model", top_model, _S.pink)
-    body.append(sep, style=_S.dim)
-    append_metric(body, "Active Hour", active, _S.pink)
+    emit_metrics(body, [
+        ("Busiest", busiest), ("Top Model", top_model), ("Active Hour", active),
+    ], _S.pink, avail)
 
     get_console().print(Padding(Panel(Group(brand, Rule(style=f"bold {_S.red}"), body),
                                       expand=False, border_style=_S.blue, padding=(0, 1)),

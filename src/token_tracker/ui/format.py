@@ -109,3 +109,20 @@ def append_metric(body: Text, label: str, value: str, color: str,
     if cur is not None and prev and prev > 0:
         pct = (cur - prev) / prev * 100
         body.append(f" ({'↑' if pct >= 0 else '↓'}{abs(pct):.0f}%)", style=f"dim {color}")
+
+
+def emit_metrics(body: Text, metrics: list[tuple[str, str]], color: str, avail: int) -> None:
+    """把 (label, value) 列表追加到 body：字段间 3 空格分隔，按可用列宽 avail 贪心折行
+    （窄终端下不溢出卡片、自动换到下一行）；不加行尾换行，行间换行由调用方控制。"""
+    sep = "   "
+    line_w = 0
+    for i, (label, value) in enumerate(metrics):
+        w = _display_width(f"{label}: {value}")
+        if i and line_w + len(sep) + w > avail:
+            body.append("\n")
+            line_w = 0
+        elif i:
+            body.append(sep, style=_S.dim)
+            line_w += len(sep)
+        append_metric(body, label, value, color)
+        line_w += w
