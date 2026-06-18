@@ -63,6 +63,7 @@
 - **成本分析** — 按会话、日、周、月维度的等效成本统计，多 Agent 按来源分组展示
 - **定价识别** — litellm 在线定价 + 内置官方价双层兜底；同系列新模型自动套用本档定价（含 Claude Fable 5 / Opus 4.8），全新系列缺价时明确提示，不静默按 $0 统计
 - **会话洞察** — 项目、模型、时长、消息数一览
+- **Catppuccin 配色** — 全 CLI 统一 Catppuccin 主题，暗终端 Mocha、亮终端 Latte 自动适配，`TT_THEME` 可覆盖
 - **零配置** — 自动检测已安装的 Agent，直接读取本地数据
 - **隐私安全** — 数据纯本地存储，不采集、不上传任何用户信息，极轻量无后顾之忧
 
@@ -85,8 +86,8 @@ tt setup          # 初始化配置 Claude Code + Codex status_line
 tt                # 交互式 Dashboard（方向键切换 Agent）
 tt claude         # 仅展示 Claude Code
 tt codex          # 仅展示 Codex
-tt daily          # 按日 token 贡献热力图（GitHub 风格深浅绿）
-tt weekly         # 按周汇总（多 Agent 分组展示）
+tt daily          # 过去一年 token 贡献热力图（GitHub 风格）+ 年度分析卡片
+tt weekly         # 周报：本周分析卡片 + 每日趋势柱状图 + 周 / 项目 / 模型趋势
 tt monthly        # 按月汇总（多 Agent 分组展示）
 tt sessions       # 最近 20 条会话明细数据
 tt unsetup        # 卸载并恢复安装前的配置

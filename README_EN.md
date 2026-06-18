@@ -63,6 +63,7 @@ The status line has three rows, left to right:
 - **Cost analysis** — per-session, daily, weekly, monthly cost breakdown with per-agent grouping
 - **Pricing resolution** — litellm live pricing with built-in official-price fallback; new models in a known family are priced automatically (incl. Claude Fable 5 / Opus 4.8), and unknown models trigger an explicit warning instead of silently counting as $0
 - **Session insights** — project, model, duration, message count per session
+- **Catppuccin theme** — unified Catppuccin colors across the CLI; Mocha on dark terminals, Latte on light, auto-selected (override with `TT_THEME`)
 - **Zero config** — auto-detects installed agents, reads local data directly
 - **Privacy first** — all data stays local, no collection or upload of any user information, lightweight and worry-free
 
@@ -85,8 +86,8 @@ tt setup          # initialize and configure Claude Code + Codex status_line
 tt                # interactive dashboard (arrow keys to switch agents)
 tt claude         # Claude Code only
 tt codex          # Codex only
-tt daily          # daily token contribution heatmap (GitHub-style greens)
-tt weekly         # weekly summary (per-agent grouping)
+tt daily          # last-12-months token contribution heatmap (GitHub-style) + yearly analysis card
+tt weekly         # weekly report: this-week card + daily-trend bars + weekly / project / model trends
 tt monthly        # monthly summary (per-agent grouping)
 tt sessions       # last 20 session details
 tt unsetup        # uninstall and restore previous config
