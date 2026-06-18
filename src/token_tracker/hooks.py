@@ -12,7 +12,7 @@ CLAUDE_SETTINGS = os.path.expanduser("~/.claude/settings.json")
 HOOK_SCRIPT_PATH = os.path.expanduser("~/.claude/tt-statusline.py")
 CODEX_CONFIG = os.path.expanduser("~/.codex/config.toml")
 CODEX_BACKUP = os.path.expanduser("~/.codex/tt-backup.json")
-HOOK_VERSION = "1.7"
+HOOK_VERSION = "1.8"
 _BACKUP_KEY = "tokenTracker"
 _PREV_SL_KEY = "previousStatusLine"
 _SL_REGEX = re.compile(r'status_line\s*=\s*\[.*?\]', re.DOTALL)
@@ -197,8 +197,8 @@ def render(data, now):
     if ctx.get("used_percentage") is not None:
         size = ctx.get("context_window_size", 0)
         ctx_parts = [
-            f"{C['label']}{fmt_tokens(size)} Context:{C['reset']}{progress_bar(ctx['used_percentage'], bar_w)}",
-            f"{C['label']}{fmt_tokens(size)} CTX:{ctx['used_percentage']:.0f}%{C['reset']}",
+            f"{C['label']}{fmt_tokens(size)} Ctx:{C['reset']}{progress_bar(ctx['used_percentage'], bar_w)}",
+            f"{C['label']}{fmt_tokens(size)} Ctx:{ctx['used_percentage']:.0f}%{C['reset']}",
         ]
 
     # 尝试完整版（带进度条+reset time）
