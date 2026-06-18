@@ -6,7 +6,6 @@
 总览自己渲染（不复用 dashboard 的宽 header），紧凑单行、半屏不折。
 """
 
-import os
 from datetime import UTC, datetime, timedelta
 
 from rich.panel import Panel
@@ -67,19 +66,10 @@ def _render_summary(stats: list[DailyStats], agents: list[str] | None) -> None:
 
 
 def _display_weeks() -> int:
-    """要显示的周数。优先按真实终端宽度自适应；拿不到宽度时（Claude Code `!` 等非 tty
-    且无 COLUMNS）默认显示整年——全屏够宽即可，窄屏可 `export COLUMNS` 精确自适应。"""
-    cols = os.environ.get("COLUMNS")
-    width = int(cols) if cols and cols.isdigit() else None
-    if width is None:
-        for fd in (2, 1, 0):
-            try:
-                width = os.get_terminal_size(fd).columns
-                break
-            except OSError:
-                continue
-    if width is None:
-        return _WEEKS
+    """要显示的周数，右对齐只保留最近若干周。宽度交给 Rich console 判定（它依次读 tty
+    尺寸、`COLUMNS`，都拿不到才回落 80）；装不下整年时砍掉最左（最老）的周、不折行。
+    `!` 非 tty 或窄屏想多显示几周，可 `export COLUMNS=<列数>` 精确控制。"""
+    width = get_console().width
     return max(8, min(_WEEKS, (width - 4) // _CELL_W))
 
 
