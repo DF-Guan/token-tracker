@@ -47,8 +47,10 @@ def _render_summary(stats: list[DailyStats], agents: list[str] | None) -> None:
     body = Text()
     # 标题行
     body.append("Token Tracker", style=f"bold {_S.red}")
-    for a in agents or ["Claude Code"]:
-        body.append("  ● ", style=_S.good)
+    body.append(": ", style=_S.dim)
+    for i, a in enumerate(agents or ["Claude Code"]):
+        if i:
+            body.append(" + ", style=_S.dim)
         body.append(a, style="bold")
     body.append("\n")
     # 总计行 + 本周行（本周日起至今）

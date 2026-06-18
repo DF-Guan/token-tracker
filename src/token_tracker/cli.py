@@ -377,7 +377,7 @@ def main():
 
     agent_ids = {a.id for a in agents}
 
-    if command not in ("dashboard", "daily"):
+    if command not in ("dashboard", "daily", "weekly"):
         get_console().print(f"[dim]{t('detected', agents=', '.join(a.name + ' ✓' for a in agents))}[/dim]")
 
     if not is_setup():
@@ -413,10 +413,10 @@ def main():
         get_console().print(f"[dim]{t('available_cmds')}[/dim]")
         sys.exit(1)
 
-    # daily 热力图跟随当前会话：CC 会话只看 CC、Codex 会话只看 Codex；
-    # 独立终端（识别不到会话）暂保持合并所有 agent。
+    # daily / weekly 跟随当前会话：CC 会话只看 CC、Codex 会话只看 Codex；
+    # 独立终端（识别不到会话）保持合并所有 agent。
     report_agents = agents
-    if command == "daily":
+    if command in ("daily", "weekly"):
         session_agent = _current_session_agent()
         if session_agent and session_agent in agent_ids:
             report_agents = [a for a in agents if a.id == session_agent]
@@ -429,6 +429,8 @@ def main():
 
     if command == "sessions":
         render_fn(stats, _parse_limit(rest_args, default=20))
+    elif command == "weekly":
+        render_weekly(stats, agents=agent_names, daily=_aggregate_per_agent(report_agents, aggregate_daily))
     else:
         render_fn(stats, agents=agent_names)
 
