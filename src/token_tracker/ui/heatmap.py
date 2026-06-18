@@ -176,11 +176,18 @@ def _render_grid(tokens_by_date: dict[str, int]) -> None:
 
 
 def _render_legend() -> None:
+    get_console().print()
     line = Text()
-    line.append(f"\n      {t('heat_less')} ", style=_S.dim)
+    line.append(f"      {t('heat_less')} ", style=_S.dim)
     for color in HEAT_GREENS:
         line.append("■", style=color)
         line.append(" ")
     line.append(t("heat_more"), style=_S.dim)
-    line.append("    tt · by stormzhang", style=_S.dim)
-    get_console().print(line, soft_wrap=True)
+    footer = "tt · by stormzhang"
+    # 宽够把署名接图例右边（空 4 格）；窄了另起一行（缩进 2），避免终端硬折导致折行 + 掉色
+    if line.cell_len + 4 + len(footer) <= get_console().width:
+        line.append("    " + footer, style=_S.dim)
+        get_console().print(line, soft_wrap=True)
+    else:
+        get_console().print(line, soft_wrap=True)
+        get_console().print(Text("  " + footer, style=_S.dim))
