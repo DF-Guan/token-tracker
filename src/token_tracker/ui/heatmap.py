@@ -47,7 +47,7 @@ def _render_summary(stats: list[DailyStats], agents: list[str] | None) -> None:
     body = Text()
     # 标题行
     body.append("Token Tracker", style=f"bold {_S.red}")
-    body.append(": ", style=_S.dim)
+    body.append(": ", style=f"bold {_S.red}")
     for i, a in enumerate(agents or ["Claude Code"]):
         if i:
             body.append(" + ", style=_S.dim)

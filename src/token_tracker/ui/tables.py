@@ -242,6 +242,7 @@ def _render_daily_barchart(by_date: dict[str, int], days_back: int = 30, height:
     width = len(dates) * 2 - 1  # 每天 1 字符 + 1 间隔
 
     get_console().print(Text("[Daily Trend (last 30d)]", style=f"bold {_S.good}"))
+    get_console().print()
     peak_idx = vals.index(max(vals))
     peak_label = dates[peak_idx].strftime("%m/%d")
     top = [" "] * width
@@ -283,9 +284,13 @@ def _merge_weeks(stats: list[WeeklyStats]) -> list[WeeklyStats]:
     return [merged[k] for k in sorted(merged)]
 
 
-def _week_bar(ratio: float, width: int = 20) -> str:
+def _bar_text(ratio: float, fill_style: str, width: int = 20) -> Text:
+    """半高进度条（▄ 仅占行下半，相邻行天然空半行）：填充用 fill_style、空槽灰。"""
     filled = round(max(0.0, min(1.0, ratio)) * width)
-    return "█" * filled + "░" * (width - filled)
+    t = Text()
+    t.append("▄" * filled, style=fill_style)
+    t.append("▄" * (width - filled), style=_S.dim)
+    return t
 
 
 def _append_metric(body: Text, label: str, value: str, color: str,
@@ -301,7 +306,7 @@ def _render_week_summary(cur: WeeklyStats, prev: WeeklyStats | None, agents: lis
     """本周分析卡片：品牌行（Token Tracker + 跟随会话的 agent）+ 本周区间 + 四项指标 + 环比。"""
     body = Text()
     body.append("Token Tracker", style=f"bold {_S.red}")
-    body.append(": ", style=_S.dim)
+    body.append(": ", style=f"bold {_S.red}")
     for i, a in enumerate(agents):
         if i:
             body.append(" + ", style=_S.dim)
@@ -354,7 +359,7 @@ def _render_weekly_trend(weeks: list[WeeklyStats], limit: int = 8) -> None:
         table.add_row(
             Text(f"{w.week_start} ~ {w.week_end}", style="bold" if is_cur else ""),
             _fmt_tokens(w.total_tokens),
-            Text(_week_bar(w.total_tokens / max_tok), style=_S.good if is_cur else _S.blue),
+            _bar_text(w.total_tokens / max_tok, _S.good if is_cur else _S.blue),
         )
     get_console().print(table)
     get_console().print()
@@ -377,7 +382,7 @@ def _render_distribution(title: str, name_col: str, data: dict[str, int],
         pct = tokens / total * 100 if total else 0
         bar_style = _S.token_bold if pct > 50 else _S.blue if pct > 20 else _S.dim
         table.add_row(short_fn(name), _fmt_tokens(tokens), f"{pct:.1f}%",
-                      Text(_week_bar(pct / 100), style=bar_style))
+                      _bar_text(pct / 100, bar_style))
     get_console().print(table)
     get_console().print()
 
