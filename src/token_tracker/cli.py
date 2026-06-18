@@ -2,6 +2,7 @@ import contextlib
 import os
 import shutil
 import sys
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
@@ -431,6 +432,16 @@ def main():
         render_fn(stats, _parse_limit(rest_args, default=20))
     elif command == "weekly":
         render_weekly(stats, agents=agent_names, daily=_aggregate_per_agent(report_agents, aggregate_daily))
+    elif command == "daily":
+        d_entries = [e for a in report_agents for e in _load_entries(a.id)]
+        # 最活跃时段：过去一个月按小时聚合 token（24 小时分布），渲染层据此求活跃区间
+        month_ago = (datetime.now(UTC) - timedelta(days=30)).date()
+        hourly: dict[int, int] = defaultdict(int)
+        for e in d_entries:
+            if e.timestamp.date() >= month_ago:
+                hourly[e.timestamp.astimezone().hour] += e.total_tokens  # 转本地时区
+        render_daily_heatmap(stats, agents=agent_names,
+                             sessions=aggregate_sessions(d_entries), hourly=dict(hourly))
     else:
         render_fn(stats, agents=agent_names)
 
