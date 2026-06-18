@@ -54,6 +54,7 @@
 
 ## 最近验证
 
+- **2026-06-18（调研）**：确认 **CC 与 Codex 的本地 JSONL 日志都不含成本字段**——CC 日志无 `costUSD`（扫多个文件零匹配，新版只写 token usage）、Codex `token_count` 仅有纯 token。故 CLI 报表成本一律由 `cost.py` 定价表**估算**（`calculate_cost` 里 `cost_usd` 优先分支因 `cost_usd` 恒为 None 而从不触发）；状态栏能显示 CC 自带成本是因为走 CC 实时 stdin 推送的 `total_cost_usd`（数据源不同），历史 JSONL 无法回填成本。
 - **2026-06-18**：daily 概览改版 + 全 CLI 切 Catppuccin 配色。`uv run --extra dev pytest` 51 用例全绿；`ruff check src tests` 全过；`mypy src` 仍 5 个历史遗留报错、无新增；`tt daily` / `tt` 终端实跑 Mocha 配色正常，色码核对一致。
 - **2026-06-16**：daily 热力图实现完成。`uv run --extra dev pytest` 51 用例全绿（原 45 + 热力图 6）；`ruff check src tests` 全过；`tt daily` 终端实跑 truecolor 热力图正常。
   `0.4.0` 仍未打 tag / 未发布；热力图作为 `0.4.0` 之后的改动，本次提交到本地 main。
