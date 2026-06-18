@@ -8,7 +8,9 @@
 
 from datetime import UTC, datetime, timedelta
 
+from rich.console import Group
 from rich.panel import Panel
+from rich.rule import Rule
 from rich.text import Text
 
 from ..adapters.types import DailyStats
@@ -41,44 +43,42 @@ def render_daily_heatmap(stats: list[DailyStats], agents: list[str] | None = Non
 
 def _render_summary(stats: list[DailyStats], agents: list[str] | None) -> None:
     today = datetime.now(UTC).date()
-    this_sunday = (today - timedelta(days=(today.weekday() + 1) % 7)).isoformat()
-    week = [s for s in stats if s.date >= this_sunday]
+    year_ago = (today - timedelta(days=365)).isoformat()
+    rows = [s for s in stats if s.date >= year_ago]  # 过去一年（与热力图范围一致）
 
-    body = Text()
-    # 标题行
-    body.append("Token Tracker", style=f"bold {_S.red}")
-    body.append(": ", style=f"bold {_S.red}")
+    # 品牌行（Token Tracker + agent 暗红）+ 红分割线 + 过去一年汇总（同 weekly 顶部样式）
+    brand = Text()
+    brand.append("Token Tracker", style=f"bold {_S.red}")
+    brand.append(": ", style=f"bold {_S.red}")
     for i, a in enumerate(agents or ["Claude Code"]):
         if i:
-            body.append(" + ", style=_S.dim)
-        body.append(a, style="bold")
+            brand.append(" + ", style=f"dim {_S.red}")
+        brand.append(a, style=f"dim {_S.red}")
+
+    sep = "   "
+    body = Text()
+    body.append("Last 12 months", style=f"bold {_S.good}")
     body.append("\n")
-    # 总计行 + 本周行（本周日起至今）
-    _append_stat_row(body, "Overview", stats)
-    body.append("\n")
-    _append_stat_row(body, "This Week", week)
-
-    # 紧凑框（expand=False 贴合内容、不撑满）框住整个总览
-    get_console().print(Panel(body, expand=False, border_style=_S.blue, padding=(0, 1)))
-    get_console().print()
-
-
-def _append_stat_row(body: Text, label: str, rows: list[DailyStats]) -> None:
-    """向 body 追加一行：行首标签 + Tokens/Cost/Sessions/Days，每项标签与值同色
-    （Tokens 粉 / Cost 黄 / Sessions 紫 / Days 橙），值加粗、标签常规，项间用灰 | 分隔（同 statusline）；行首标签绿。"""
-    sep = " | "
-    body.append(f"{label}:".ljust(11), style=f"bold {_S.good}")
-    body.append("Tokens: ", style=_S.pink)
-    body.append(_fmt_tokens(sum(s.total_tokens for s in rows)), style=f"bold {_S.pink}")
+    # 第一行（橙）：Tokens / Cost / Days
+    body.append("Tokens: ", style=_S.peach)
+    body.append(_fmt_tokens(sum(s.total_tokens for s in rows)), style=f"bold {_S.peach}")
     body.append(sep, style=_S.dim)
-    body.append("Cost: ", style=_S.cost)
-    body.append(_fmt_cost(sum(s.cost_usd for s in rows)), style=_S.cost_bold)
-    body.append(sep, style=_S.dim)
-    body.append("Sessions: ", style=_S.mauve)
-    body.append(str(sum(s.session_count for s in rows)), style=f"bold {_S.mauve}")
+    body.append("Cost: ", style=_S.peach)
+    body.append(_fmt_cost(sum(s.cost_usd for s in rows)), style=f"bold {_S.peach}")
     body.append(sep, style=_S.dim)
     body.append("Days: ", style=_S.peach)
     body.append(str(len({s.date for s in rows})), style=f"bold {_S.peach}")
+    body.append("\n")
+    # 第二行（蓝）：Sessions / Msgs
+    body.append("Sessions: ", style=_S.blue)
+    body.append(str(sum(s.session_count for s in rows)), style=f"bold {_S.blue}")
+    body.append(sep, style=_S.dim)
+    body.append("Msgs: ", style=_S.blue)
+    body.append(str(sum(s.message_count for s in rows)), style=f"bold {_S.blue}")
+
+    get_console().print(Panel(Group(brand, Rule(style=f"bold {_S.red}"), body),
+                              expand=False, border_style=_S.blue, padding=(0, 1)))
+    get_console().print()
 
 
 def _display_weeks() -> int:
