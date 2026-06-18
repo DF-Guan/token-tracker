@@ -83,3 +83,14 @@ def test_aggregate_sessions_computes_duration_and_primary_model():
     assert s.cost_usd == 2.0
     # primary model = the one with the most tokens (sonnet 300 > opus 100)
     assert s.model == "claude-sonnet-4-6"
+
+
+def test_aggregate_fills_projects_by_token():
+    # projects 维度（weekly 项目分布用）：按 project 累加 token，与 models 同机制
+    d = datetime(2026, 1, 1, 10, tzinfo=UTC)
+    daily = aggregate_daily([
+        entry(d, "s1", tokens=100, project="alpha"),
+        entry(d, "s2", tokens=300, project="beta"),
+        entry(d, "s3", tokens=50, project="alpha"),
+    ])
+    assert daily[0].projects == {"alpha": 150, "beta": 300}

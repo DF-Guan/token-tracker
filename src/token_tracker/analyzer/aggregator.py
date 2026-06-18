@@ -38,6 +38,7 @@ def _aggregate_by_key(
         add_token_fields(s, e, calculate_cost(e))
         s.message_count += e.message_count
         s.models[e.model] = s.models.get(e.model, 0) + e.total_tokens
+        s.projects[e.project] = s.projects.get(e.project, 0) + e.total_tokens
         sessions_by_key[k].add(e.session_id)
 
     for k, sessions in sessions_by_key.items():

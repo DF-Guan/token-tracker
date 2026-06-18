@@ -57,6 +57,7 @@ class DailyStats:
     session_count: int = 0
     message_count: int = 0
     models: dict[str, int] = field(default_factory=dict)
+    projects: dict[str, int] = field(default_factory=dict)
     agent_id: str = ""
 
 
@@ -74,6 +75,7 @@ class WeeklyStats:
     session_count: int = 0
     message_count: int = 0
     models: dict[str, int] = field(default_factory=dict)
+    projects: dict[str, int] = field(default_factory=dict)
     agent_id: str = ""
 
 
@@ -107,6 +109,7 @@ class MonthlyStats:
     session_count: int = 0
     message_count: int = 0
     models: dict[str, int] = field(default_factory=dict)
+    projects: dict[str, int] = field(default_factory=dict)
     agent_id: str = ""
 
 
