@@ -46,7 +46,7 @@ def _render_summary(stats: list[DailyStats], agents: list[str] | None) -> None:
 
     body = Text()
     # 标题行
-    body.append("Token Tracker", style=f"bold {_S.good}")
+    body.append("Token Tracker", style=f"bold {_S.red}")
     for a in agents or ["Claude Code"]:
         body.append("  ● ", style=_S.good)
         body.append(a, style="bold")
@@ -63,11 +63,11 @@ def _render_summary(stats: list[DailyStats], agents: list[str] | None) -> None:
 
 def _append_stat_row(body: Text, label: str, rows: list[DailyStats]) -> None:
     """向 body 追加一行：行首标签 + Tokens/Cost/Sessions/Days，每项标签与值同色
-    （Tokens 青 / Cost 黄 / Sessions 紫 / Days 橙），值加粗、标签常规，项间用灰 | 分隔（同 statusline）；行首标签蓝。"""
+    （Tokens 粉 / Cost 黄 / Sessions 紫 / Days 橙），值加粗、标签常规，项间用灰 | 分隔（同 statusline）；行首标签绿。"""
     sep = " | "
-    body.append(f"{label}:".ljust(11), style=f"bold {_S.blue}")
-    body.append("Tokens: ", style=_S.token)
-    body.append(_fmt_tokens(sum(s.total_tokens for s in rows)), style=_S.token_bold)
+    body.append(f"{label}:".ljust(11), style=f"bold {_S.good}")
+    body.append("Tokens: ", style=_S.pink)
+    body.append(_fmt_tokens(sum(s.total_tokens for s in rows)), style=f"bold {_S.pink}")
     body.append(sep, style=_S.dim)
     body.append("Cost: ", style=_S.cost)
     body.append(_fmt_cost(sum(s.cost_usd for s in rows)), style=_S.cost_bold)

@@ -27,11 +27,11 @@ def _is_light_theme() -> bool:
 # Catppuccin 官方调色板（truecolor）。暗终端 Mocha、亮终端 Latte，槽位一一对应。
 _MOCHA = {
     "overlay0": "#6c7086", "green": "#a6e3a1", "yellow": "#f9e2af", "peach": "#fab387",
-    "red": "#f38ba8", "blue": "#89b4fa", "sapphire": "#74c7ec", "mauve": "#cba6f7",
+    "red": "#f38ba8", "blue": "#89b4fa", "sapphire": "#74c7ec", "mauve": "#cba6f7", "pink": "#f5c2e7",
 }
 _LATTE = {
     "overlay0": "#9ca0b0", "green": "#40a02b", "yellow": "#df8e1d", "peach": "#fe640b",
-    "red": "#d20f39", "blue": "#1e66f5", "sapphire": "#209fb5", "mauve": "#8839ef",
+    "red": "#d20f39", "blue": "#1e66f5", "sapphire": "#209fb5", "mauve": "#8839ef", "pink": "#ea76cb",
 }
 
 
@@ -47,6 +47,8 @@ class _S:
     cost_bold = f"bold {_p['yellow']}"
     peach = _p["peach"]
     mauve = _p["mauve"]
+    pink = _p["pink"]
+    red = _p["red"]
     accent = f"bold {_p['green']}"
     bar_low = _p["green"]
     bar_mid = _p["yellow"]
