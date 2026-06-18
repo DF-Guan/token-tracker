@@ -190,4 +190,5 @@ def _render_legend() -> None:
         get_console().print(line, soft_wrap=True)
     else:
         get_console().print(line, soft_wrap=True)
-        get_console().print(Text("  " + footer, style=_S.dim))
+        get_console().print()                       # 空一行
+        get_console().print(Text("      " + footer, style=_S.dim))  # 缩进 6 对齐 Less
