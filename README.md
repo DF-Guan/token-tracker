@@ -95,6 +95,17 @@ tt unsetup        # 卸载并恢复安装前的配置
 
 > 💡 `tt daily` 是 GitHub 风格的 token 贡献热力图（深浅绿方格）。在 Claude Code 会话里输入 `!tt daily` 即可看到彩色热力图 —— 用户主动用 `!` 执行的命令，Claude Code 会渲染其 24-bit 真彩色输出。
 
+### 会话内彩色命令（`tt setup` 自动注册）
+
+`tt setup` 会顺带注册一组「会话内彩色命令」，让你在 AI 会话里直接渲染真彩色 daily / weekly 报表，**不经过模型、不占上下文 token**：
+
+- **Claude Code**：输入 `/tt-daily`、`/tt-weekly`
+- **Codex**：输入 `ttdaily`、`ttweekly`（Codex 无斜杠命令拦截，用纯文本触发词）
+
+原理：通过 Claude Code 的 `UserPromptExpansion` / Codex 的 `UserPromptSubmit` hook 拦截命令、跑对应 `tt` 子命令、把彩色输出直接回显，全程不发给模型。`tt unsetup` 会一并移除。
+
+> ⚠️ **仅终端 CLI 支持彩色**：桌面 app / web 版是 GUI、不渲染终端 ANSI，这些命令会显示异常（乱码 / 纯文本）。桌面端请改用普通 `tt daily`。
+
 ### 报告排序
 
 所有报告命令支持 `--sort` 和 `--asc/--desc` 参数：

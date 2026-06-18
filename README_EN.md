@@ -95,6 +95,17 @@ tt unsetup        # uninstall and restore previous config
 
 > 💡 `tt daily` is a GitHub-style token contribution heatmap (shaded green cells). In a Claude Code session, type `!tt daily` to see it in full color — commands you run yourself with `!` have their 24-bit true-color output rendered.
 
+### In-session color commands (auto-registered by `tt setup`)
+
+`tt setup` also registers a set of in-session color commands so you can render full-color daily / weekly reports right inside an AI session — **without going through the model or spending context tokens**:
+
+- **Claude Code**: type `/tt-daily`, `/tt-weekly`
+- **Codex**: type `ttdaily`, `ttweekly` (Codex has no slash-command interception, so plain-text triggers are used)
+
+How it works: a Claude Code `UserPromptExpansion` / Codex `UserPromptSubmit` hook intercepts the command, runs the matching `tt` subcommand, and echoes the colored output back directly — never sent to the model. `tt unsetup` removes them.
+
+> ⚠️ **Terminal CLI only**: the desktop app / web versions are GUIs and don't render terminal ANSI, so these commands show up garbled / as plain text there. On desktop, use plain `tt daily` instead.
+
 ### Report Sorting
 
 All report commands support `--sort` and `--asc/--desc` flags:
