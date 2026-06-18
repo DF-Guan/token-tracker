@@ -4,7 +4,7 @@ import shutil
 import sys
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 
 from .adapters import claude, codex
 from .adapters.rate_limits import load_rate_limits as load_claude_rate_limits
@@ -437,12 +437,12 @@ def main():
         d_entries = [e for a in report_agents for e in _load_entries(a.id)]
         # 最活跃时段：过去一个月按小时聚合 token（24 小时分布），渲染层据此求活跃区间
         month_ago = (datetime.now(UTC) - timedelta(days=30)).date()
+        beijing = timezone(timedelta(hours=8))  # Active Hour 固定北京时区（UTC+8）
         hourly: dict[int, int] = defaultdict(int)
         for e in d_entries:
             if e.timestamp.date() >= month_ago:
-                hourly[e.timestamp.astimezone().hour] += e.total_tokens  # 转本地时区
-        render_daily_heatmap(stats, agents=agent_names,
-                             sessions=aggregate_sessions(d_entries), hourly=dict(hourly))
+                hourly[e.timestamp.astimezone(beijing).hour] += e.total_tokens
+        render_daily_heatmap(stats, agents=agent_names, hourly=dict(hourly))
     else:
         render_fn(stats, agents=agent_names)
 
