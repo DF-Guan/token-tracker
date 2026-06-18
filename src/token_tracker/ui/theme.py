@@ -1,13 +1,18 @@
-"""终端主题与样式选择：根据明/暗背景给出语义化 Rich 样式。"""
+"""终端主题与样式选择：配色走 Catppuccin。
+
+暗终端用 Mocha、亮终端用 Latte，两套 flavor 的颜色槽位一一对应。默认按终端深浅
+自动选，`TT_THEME=mocha/latte` 可手动覆盖（自动检测失灵时用，兼容旧 light/dark 别名）。
+"""
 
 import os
 
 
 def _is_light_theme() -> bool:
+    """是否浅色（Latte）flavor。TT_THEME 手动覆盖，否则按 COLORFGBG 自动判深浅。"""
     theme = os.environ.get("TT_THEME", "").lower()
-    if theme == "light":
+    if theme in ("latte", "light"):
         return True
-    if theme == "dark":
+    if theme in ("mocha", "dark"):
         return False
     colorfgbg = os.environ.get("COLORFGBG", "")
     if colorfgbg:
@@ -19,21 +24,36 @@ def _is_light_theme() -> bool:
     return False
 
 
+# Catppuccin 官方调色板（truecolor）。暗终端 Mocha、亮终端 Latte，槽位一一对应。
+_MOCHA = {
+    "overlay0": "#6c7086", "green": "#a6e3a1", "yellow": "#f9e2af", "peach": "#fab387",
+    "red": "#f38ba8", "blue": "#89b4fa", "sapphire": "#74c7ec", "mauve": "#cba6f7",
+}
+_LATTE = {
+    "overlay0": "#9ca0b0", "green": "#40a02b", "yellow": "#df8e1d", "peach": "#fe640b",
+    "red": "#d20f39", "blue": "#1e66f5", "sapphire": "#209fb5", "mauve": "#8839ef",
+}
+
+
 class _S:
-    """语义化样式，根据终端主题自动切换"""
+    """语义化样式，按终端深浅映射到 Catppuccin Mocha / Latte 槽位。"""
     light = _is_light_theme()
-    dim = "grey50" if light else "dim"
-    token = "dark_cyan" if light else "dim cyan"
-    token_bold = "bold dark_cyan" if light else "bold cyan"
-    cost = "rgb(180,130,0)" if light else "dim yellow"
-    cost_bold = "bold rgb(180,130,0)" if light else "bold yellow"
-    accent = "bold dark_green" if light else "bold green"
-    bar_low = "dark_green" if light else "green"
-    bar_mid = "rgb(200,150,0)" if light else "yellow"
-    bar_high = "red"
-    good = "dark_green" if light else "green"
-    warn = "rgb(200,150,0)" if light else "yellow"
-    bad = "red"
+    _p = _LATTE if light else _MOCHA
+    dim = _p["overlay0"]
+    blue = _p["blue"]
+    token = _p["sapphire"]
+    token_bold = f"bold {_p['sapphire']}"
+    cost = _p["yellow"]
+    cost_bold = f"bold {_p['yellow']}"
+    peach = _p["peach"]
+    mauve = _p["mauve"]
+    accent = f"bold {_p['green']}"
+    bar_low = _p["green"]
+    bar_mid = _p["yellow"]
+    bar_high = _p["red"]
+    good = _p["green"]
+    warn = _p["yellow"]
+    bad = _p["red"]
 
 
 def _token_heat_style(ratio: float) -> str:
@@ -48,15 +68,11 @@ def _pct_style(pct: float) -> str:
     return _S.bar_high if pct > 80 else _S.bar_mid if pct > 50 else _S.bar_low
 
 
-# --- GitHub 贡献图热力配色（daily 热力图用）---
-# 0 档=无数据，1-4 档由浅到深。暗/亮两套，按背景选。0 档用稍亮灰，保证空格子在终端可辨。
-_HEAT_GREENS_DARK = [
-    "rgb(48,54,61)", "rgb(14,68,41)", "rgb(0,109,50)", "rgb(38,166,65)", "rgb(57,211,83)",
-]
-_HEAT_GREENS_LIGHT = [
-    "rgb(235,237,240)", "rgb(155,233,168)", "rgb(64,196,99)", "rgb(48,161,78)", "rgb(33,110,57)",
-]
-HEAT_GREENS = _HEAT_GREENS_LIGHT if _S.light else _HEAT_GREENS_DARK
+# --- Catppuccin 贡献图热力配色（daily 热力图用）---
+# 0 档=无数据（surface0），1-4 档由 green 叠在 base 上逐档加深。暗用 Mocha、亮用 Latte。
+_HEAT_MOCHA = ["#313244", "#475951", "#628168", "#7da87f", "#a6e3a1"]
+_HEAT_LATTE = ["#ccd0da", "#bbd9b8", "#98c990", "#75b868", "#40a02b"]
+HEAT_GREENS = _HEAT_LATTE if _S.light else _HEAT_MOCHA
 
 
 def _heat_thresholds(values: list[int]) -> list[float]:

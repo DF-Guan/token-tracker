@@ -398,7 +398,7 @@ def _render_model_breakdown(stats: list[MonthlyStats]) -> None:
         if pct > 50:
             bar_style = _S.token_bold
         elif pct > 20:
-            bar_style = "blue"
+            bar_style = _S.blue
         else:
             bar_style = _S.dim
 
@@ -427,7 +427,7 @@ def render_sessions(stats: list[SessionStats], limit: int = 20) -> None:
         f"[bold]Token Tracker[/bold]  {t('session_summary', shown=len(shown), total=len(stats))}  "
         f"Token: [{_S.token_bold}]{_fmt_tokens(total_tokens)}[/{_S.token_bold}]  "
         f"{t('cost_colon')}[{_S.cost_bold}]{_fmt_cost(total_cost)}[/{_S.cost_bold}]",
-        border_style="blue",
+        border_style=_S.blue,
         padding=(0, 1),
     ))
 

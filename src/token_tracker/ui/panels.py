@@ -42,7 +42,7 @@ def _render_header(agents: list[str], total_tokens: int, total_cost: float,
         get_console().print()
     get_console().print(Panel(
         f"[bold]Token Tracker[/bold]  {agent_text}",
-        border_style="blue",
+        border_style=_S.blue,
         padding=(0, 1),
     ))
 
