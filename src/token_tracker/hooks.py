@@ -16,6 +16,7 @@ HOOK_VERSION = "1.8"
 REPORT_HOOK_VERSION = "1.0"
 CC_REPORT_HOOK_PATH = os.path.expanduser("~/.claude/tt-report-hook.py")
 CC_COMMANDS_DIR = os.path.expanduser("~/.claude/commands")
+CODEX_REPORT_HOOK_PATH = os.path.expanduser("~/.codex/tt-report-hook.py")
 # 会话内彩色报表命令：CC 斜杠命令名 → 命令说明（生成 commands/*.md 用；matcher 用其 key）
 _CC_REPORT_CMDS = {
     "tt-daily": "tt daily 真彩色热力图（会话内直接渲染，不发模型）",
@@ -366,6 +367,71 @@ sys.exit(0)
 '''
 
 
+# 会话内彩色报表 hook（Codex / UserPromptSubmit）；占位在 _render_codex_report_hook() 注入
+CODEX_REPORT_HOOK_SCRIPT = r'''#!/usr/bin/env python3
+"""token-tracker 会话内彩色报表 hook（Codex / UserPromptSubmit）。
+输入 ttdaily、ttweekly 时拦截 → 跑 tt 子命令 → block + reason 渲染真彩色、不发模型。
+Codex 无 UserPromptExpansion，用纯文本触发词；reason 开头加 \n 让 Codex 包裹行与内容分开。
+由 `tt setup` 生成，勿手改。"""
+__version__ = "__REPORT_HOOK_VERSION__"
+import json
+import os
+import subprocess
+import sys
+
+_CMD = {"ttdaily": "daily", "ttweekly": "weekly"}
+_MARGIN = 14  # Codex reason 显示区比真实终端窄，收窄 COLUMNS 防热力图 grid 折行
+
+
+def _cols():
+    if os.name == "nt":
+        return None
+    try:
+        import fcntl
+        import struct
+        import termios
+    except ImportError:
+        return None
+    for var in ("_P9K_TTY", "_P9K_SSH_TTY", "SSH_TTY"):
+        path = os.environ.get(var)
+        if not path:
+            continue
+        try:
+            fd = os.open(path, os.O_RDONLY)
+            try:
+                cols = struct.unpack("HHHH", fcntl.ioctl(fd, termios.TIOCGWINSZ, b"\0" * 8))[1]
+            finally:
+                os.close(fd)
+            if cols > 0:
+                return cols
+        except OSError:
+            continue
+    return None
+
+
+try:
+    data = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+sub = _CMD.get((data.get("prompt") or "").strip())
+if not sub:
+    sys.exit(0)
+env = dict(os.environ)
+cols = _cols()
+if cols:
+    env["COLUMNS"] = str(max(40, cols - _MARGIN))
+try:
+    out = subprocess.run(
+        ["__TT_PYTHON__", "-m", "token_tracker.cli", sub],
+        capture_output=True, text=True, env=env, timeout=60,
+    ).stdout or ("tt " + sub + " no output")
+except Exception as e:
+    out = "tt " + sub + " failed: " + str(e)
+print(json.dumps({"decision": "block", "reason": "\n" + out}))
+sys.exit(0)
+'''
+
+
 # --- helpers ---
 
 def _render_hook_script() -> str:
@@ -442,6 +508,65 @@ def _uninstall_cc_report(settings: dict) -> None:
             settings.pop("hooks", None)
 
 
+def _render_codex_report_hook() -> str:
+    """注入版本号 + 当前解释器路径，得到要落盘的 Codex 报表 hook 脚本。"""
+    python = sys.executable or "python3"
+    return (CODEX_REPORT_HOOK_SCRIPT
+            .replace("__REPORT_HOOK_VERSION__", REPORT_HOOK_VERSION)
+            .replace("__TT_PYTHON__", python))
+
+
+def _write_codex_report_script() -> None:
+    with open(CODEX_REPORT_HOOK_PATH, "w", encoding="utf-8") as f:
+        f.write(_render_codex_report_hook())
+    if os.name != "nt":
+        os.chmod(CODEX_REPORT_HOOK_PATH,
+                 os.stat(CODEX_REPORT_HOOK_PATH).st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+
+def _installed_codex_report_version() -> str | None:
+    try:
+        with open(CODEX_REPORT_HOOK_PATH, encoding="utf-8") as f:
+            for line in f:
+                if line.startswith("__version__"):
+                    return line.split("=", 1)[1].strip().strip('"\'')
+    except OSError:
+        pass
+    return None
+
+
+# 卸载时定位 tt 追加的整段 [[hooks.UserPromptSubmit]]（按 command 含特征码 tt-report-hook）
+_CODEX_HOOK_REGEX = re.compile(
+    r'\n*\[\[hooks\.UserPromptSubmit\]\]\s*'
+    r'\[\[hooks\.UserPromptSubmit\.hooks\]\]\s*'
+    r'type = "command"\s*'
+    r'command = "[^"]*tt-report-hook[^"]*"\s*'
+    r'timeout = 60\s*'
+)
+
+
+def _install_codex_report(content: str, python: str) -> str:
+    """落盘 Codex report 脚本 + 在 config.toml 末尾追加 hook 段（幂等：已含特征码则不重复）。返回新 content。"""
+    _write_codex_report_script()
+    if "tt-report-hook" in content:
+        return content
+    cmd = f"{python} {CODEX_REPORT_HOOK_PATH}"
+    return content.rstrip() + (
+        "\n\n[[hooks.UserPromptSubmit]]\n\n"
+        "[[hooks.UserPromptSubmit.hooks]]\n"
+        'type = "command"\n'
+        f'command = "{cmd}"\n'
+        "timeout = 60\n"
+    )
+
+
+def _uninstall_codex_report(content: str) -> str:
+    """删 Codex report 脚本 + 从 content 移除 tt 追加的 hook 段（不动用户其它）。返回新 content。"""
+    if os.path.exists(CODEX_REPORT_HOOK_PATH):
+        os.remove(CODEX_REPORT_HOOK_PATH)
+    return _CODEX_HOOK_REGEX.sub("\n", content)
+
+
 def _status_line_toml(items: list[str]) -> str:
     body = ",\n".join(f'  "{item}"' for item in items)
     return f"status_line = [\n{body},\n]"
@@ -492,25 +617,28 @@ def _installed_hook_version() -> str | None:
 
 
 def needs_update() -> bool:
-    if not os.path.isdir(os.path.dirname(HOOK_SCRIPT_PATH)):
-        return False
-    if _installed_hook_version() != HOOK_VERSION:
-        return True
     # report hook 只在已安装时纳入版本判断（未装不主动装）
-    rv = _installed_report_version()
-    return rv is not None and rv != REPORT_HOOK_VERSION
+    if os.path.isdir(os.path.dirname(HOOK_SCRIPT_PATH)):
+        if _installed_hook_version() != HOOK_VERSION:
+            return True
+        rv = _installed_report_version()
+        if rv is not None and rv != REPORT_HOOK_VERSION:
+            return True
+    cv = _installed_codex_report_version()
+    return cv is not None and cv != REPORT_HOOK_VERSION
 
 
 def update_hook() -> None:
-    if not os.path.isdir(os.path.dirname(HOOK_SCRIPT_PATH)):
-        return
-    with open(HOOK_SCRIPT_PATH, "w", encoding="utf-8") as f:
-        f.write(_render_hook_script())
-    if os.name != "nt":
-        os.chmod(HOOK_SCRIPT_PATH, os.stat(HOOK_SCRIPT_PATH).st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-    # report hook：仅当用户已安装才同步重写（不主动安装）
-    if _installed_report_version() is not None:
-        _write_cc_report_script()
+    if os.path.isdir(os.path.dirname(HOOK_SCRIPT_PATH)):
+        with open(HOOK_SCRIPT_PATH, "w", encoding="utf-8") as f:
+            f.write(_render_hook_script())
+        if os.name != "nt":
+            os.chmod(HOOK_SCRIPT_PATH,
+                     os.stat(HOOK_SCRIPT_PATH).st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+        if _installed_report_version() is not None:  # 仅当已装才同步（不主动装）
+            _write_cc_report_script()
+    if _installed_codex_report_version() is not None:
+        _write_codex_report_script()
 
 
 # --- setup ---
@@ -570,26 +698,30 @@ def _setup_codex() -> None:
         return
     content, parsed = result
 
-    old = parsed.get("tui", {}).get("status_line")
-    if old == CODEX_STATUS_LINE:
-        get_console().print(f"[dim]{t('codex_already')}[/dim]")
-        return
+    python = sys.executable or "python3"
 
-    if old is not None:
-        with open(CODEX_BACKUP, "w", encoding="utf-8") as f:
-            json.dump({"status_line": old}, f)
-        content = _SL_REGEX.sub(_status_line_toml(CODEX_STATUS_LINE), content)
-    elif "[tui]" in content:
-        content = content.replace("[tui]", f"[tui]\n{_status_line_toml(CODEX_STATUS_LINE)}")
-    else:
-        content += f"\n[tui]\n{_status_line_toml(CODEX_STATUS_LINE)}\n"
+    # status_line（已是目标则跳过这部分，但仍继续装 report hook）
+    old = parsed.get("tui", {}).get("status_line")
+    if old != CODEX_STATUS_LINE:
+        if old is not None:
+            with open(CODEX_BACKUP, "w", encoding="utf-8") as f:
+                json.dump({"status_line": old}, f)
+            content = _SL_REGEX.sub(_status_line_toml(CODEX_STATUS_LINE), content)
+        elif "[tui]" in content:
+            content = content.replace("[tui]", f"[tui]\n{_status_line_toml(CODEX_STATUS_LINE)}")
+        else:
+            content += f"\n[tui]\n{_status_line_toml(CODEX_STATUS_LINE)}\n"
+
+    # report hook（末尾追加，幂等）
+    content = _install_codex_report(content, python)
 
     with open(CODEX_CONFIG, "w", encoding="utf-8") as f:
         f.write(content)
 
     get_console().print(f"[green]✓[/green] {t('codex_configured')}")
-    if old is not None:
+    if old is not None and old != CODEX_STATUS_LINE:
         get_console().print(f"[dim]{t('codex_backup', path=CODEX_BACKUP)}[/dim]")
+    get_console().print(f"[dim]{t('codex_report_hint')}[/dim]")
     get_console().print(f"[dim]{t('restart_codex')}[/dim]")
 
 
@@ -650,18 +782,18 @@ def _unsetup_codex() -> None:
         return
     content, parsed = result
 
-    if parsed.get("tui", {}).get("status_line") is None:
-        return
+    content = _uninstall_codex_report(content)  # 先独立清 report（脚本 + hook 段），不受 status_line 检查阻断
 
-    if os.path.exists(CODEX_BACKUP):
-        with open(CODEX_BACKUP, encoding="utf-8") as f:
-            old_items = json.load(f).get("status_line", [])
-        content = _SL_REGEX.sub(_status_line_toml(old_items), content)
-        os.remove(CODEX_BACKUP)
-        get_console().print(f"[green]✓[/green] {t('codex_restored')}")
-    else:
-        content = re.sub(r'status_line\s*=\s*\[.*?\]\n?', '', content, flags=re.DOTALL)
-        get_console().print(f"[green]✓[/green] {t('codex_removed')}")
+    if parsed.get("tui", {}).get("status_line") is not None:
+        if os.path.exists(CODEX_BACKUP):
+            with open(CODEX_BACKUP, encoding="utf-8") as f:
+                old_items = json.load(f).get("status_line", [])
+            content = _SL_REGEX.sub(_status_line_toml(old_items), content)
+            os.remove(CODEX_BACKUP)
+            get_console().print(f"[green]✓[/green] {t('codex_restored')}")
+        else:
+            content = re.sub(r'status_line\s*=\s*\[.*?\]\n?', '', content, flags=re.DOTALL)
+            get_console().print(f"[green]✓[/green] {t('codex_removed')}")
 
     with open(CODEX_CONFIG, "w", encoding="utf-8") as f:
         f.write(content)
