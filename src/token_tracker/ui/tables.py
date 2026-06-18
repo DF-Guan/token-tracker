@@ -226,8 +226,8 @@ def render_weekly(stats: list[WeeklyStats], agents: list[str] | None = None,
                 by_date[d.date] = by_date.get(d.date, 0) + d.total_tokens
             _render_daily_barchart(by_date)
         _render_weekly_trend(weeks)
-        _render_distribution("Project Trend", "Project", cur.projects, _project_short)
-        _render_distribution("Model Trend", "Model", cur.models, _model_short)
+        _render_distribution("Project Trend", "Project", cur.projects, _project_short, _S.pink)
+        _render_distribution("Model Trend", "Model", cur.models, _model_short, _S.blue)
 
 
 def _render_daily_barchart(by_date: dict[str, int], days_back: int = 30, height: int = 6) -> None:
@@ -241,7 +241,11 @@ def _render_daily_barchart(by_date: dict[str, int], days_back: int = 30, height:
     heights = [v / max_v * height for v in vals]
     width = len(dates) * 2 - 1  # 每天 1 字符 + 1 间隔
 
-    get_console().print(Text("[Daily Trend (last 30d)]", style=f"bold {_S.good}"))
+    title = Text()
+    title.append("[Daily Trend ", style=f"bold {_S.peach}")
+    title.append("(last 30d)", style=f"dim {_S.peach}")
+    title.append("]", style=f"bold {_S.peach}")
+    get_console().print(title)
     get_console().print()
     peak_idx = vals.index(max(vals))
     peak_label = dates[peak_idx].strftime("%m/%d")
@@ -250,12 +254,16 @@ def _render_daily_barchart(by_date: dict[str, int], days_back: int = 30, height:
     for j, ch in enumerate(peak_label):
         top[pos + j] = ch
     get_console().print(Text("  " + "".join(top), style=_S.peach))
+    top3 = set(sorted(range(len(vals)), key=lambda i: vals[i], reverse=True)[:3])
     for row in range(height, 0, -1):
-        chars: list[str] = []
-        for h in heights:
+        line = Text("  ")
+        for i, h in enumerate(heights):
             diff = h - (row - 1)
-            chars.append("█" if diff >= 1 else " " if diff <= 0 else blocks[round(diff * 8)])
-        get_console().print(Text("  " + " ".join(chars), style=_S.peach))
+            ch = "█" if diff >= 1 else " " if diff <= 0 else blocks[round(diff * 8)]
+            line.append(ch, style=_S.peach if i in top3 else f"dim {_S.peach}")
+            if i < len(heights) - 1:
+                line.append(" ")
+        get_console().print(line)
     start, end = dates[0].strftime("%m/%d"), dates[-1].strftime("%m/%d")
     gap = max(1, width - len(start) - len(end))
     get_console().print(Text("  " + start + " " * gap + end, style=_S.dim))
@@ -285,11 +293,12 @@ def _merge_weeks(stats: list[WeeklyStats]) -> list[WeeklyStats]:
 
 
 def _bar_text(ratio: float, fill_style: str, width: int = 20) -> Text:
-    """半高进度条（▄ 仅占行下半，相邻行天然空半行）：填充用 fill_style、空槽灰。"""
+    """半高进度条（▄ 仅占行下半，相邻行天然空半行）：填充用 fill_style、
+    空槽用同色 dim 版（同色深浅对比，仿 daily 方格）。"""
     filled = round(max(0.0, min(1.0, ratio)) * width)
     t = Text()
     t.append("▄" * filled, style=fill_style)
-    t.append("▄" * (width - filled), style=_S.dim)
+    t.append("▄" * (width - filled), style=f"dim {fill_style}")
     return t
 
 
@@ -351,7 +360,7 @@ def _render_weekly_trend(weeks: list[WeeklyStats], limit: int = 8) -> None:
     cur_week = weeks[-1].week
     table = Table(title=Text("[Weekly Trend]", style=f"bold {_S.good}"), title_justify="left", box=box.SIMPLE,
                   header_style="bold", padding=(0, 1), expand=False)
-    table.add_column("Week", style=_S.token, no_wrap=True)
+    table.add_column("Week", style=_S.good, no_wrap=True)
     table.add_column("Token", justify="right")
     table.add_column("", min_width=20)
     for w in reversed(recent):
@@ -359,34 +368,30 @@ def _render_weekly_trend(weeks: list[WeeklyStats], limit: int = 8) -> None:
         table.add_row(
             Text(f"{w.week_start} ~ {w.week_end}", style="bold" if is_cur else ""),
             _fmt_tokens(w.total_tokens),
-            _bar_text(w.total_tokens / max_tok, _S.good if is_cur else _S.blue),
+            _bar_text(w.total_tokens / max_tok, _S.good),
         )
     get_console().print(table)
-    get_console().print()
 
 
 def _render_distribution(title: str, name_col: str, data: dict[str, int],
-                         short_fn: Callable[[str], str]) -> None:
-    """通用分布表（Project / Model）：名称 + token + 占比 + 进度条，按 token 降序取前 8。"""
+                         short_fn: Callable[[str], str], accent: str) -> None:
+    """通用分布表（Project / Model）：标题、名称列、进度条统一用模块主色 accent，
+    按 token 降序取前 8；Token/Ratio 数值保持中性。"""
     if not data:
         return
     total = sum(data.values())
     items = sorted(data.items(), key=lambda x: x[1], reverse=True)
-    table = Table(title=Text(f"[{title}]", style=f"bold {_S.good}"), title_justify="left", box=box.SIMPLE,
+    table = Table(title=Text(f"[{title}]", style=f"bold {accent}"), title_justify="left", box=box.SIMPLE,
                   header_style="bold", padding=(0, 1), expand=False)
-    table.add_column(name_col, style=_S.cost, no_wrap=True)
+    table.add_column(name_col, style=accent, no_wrap=True)
     table.add_column("Token", justify="right")
-    table.add_column("Ratio", justify="right")
     table.add_column("", min_width=20)
+    table.add_column("Ratio", justify="right", style=f"dim {accent}")
     for name, tokens in items[:8]:
         pct = tokens / total * 100 if total else 0
-        bar_style = _S.token_bold if pct > 50 else _S.blue if pct > 20 else _S.dim
-        table.add_row(short_fn(name), _fmt_tokens(tokens), f"{pct:.1f}%",
-                      _bar_text(pct / 100, bar_style))
+        table.add_row(short_fn(name), _fmt_tokens(tokens),
+                      _bar_text(pct / 100, accent), f"{pct:.1f}%")
     get_console().print(table)
-    get_console().print()
-
-    get_console().print()
 
 
 def _render_monthly_table(stats: list[MonthlyStats], title: str | None = None) -> None:
