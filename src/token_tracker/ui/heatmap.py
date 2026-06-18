@@ -88,8 +88,6 @@ def _render_grid(tokens_by_date: dict[str, int]) -> None:
     days_since_sunday = (today.weekday() + 1) % 7  # Mon=0→1 … Sun=6→0
     this_sunday = today - timedelta(days=days_since_sunday)
 
-    # 每格 _CELL_W 显示宽（全角方块 + 间隔）。按终端宽度自适应周数：
-    # 窄终端少显示几周、不折行；宽终端最多 _WEEKS（一年）。
     weeks = _display_weeks()
     start_sunday = this_sunday - timedelta(weeks=weeks - 1)
 
@@ -111,7 +109,7 @@ def _render_grid(tokens_by_date: dict[str, int]) -> None:
                 last_end = c + 1
     get_console().print(Text("    " + "".join(header).rstrip(), style=_S.dim), soft_wrap=True)
 
-    # 7 行：星期标签 + 全角方块（■）+ 间隔
+    # 7 行：星期标签 + 方块 + 间隔
     for r in range(7):
         line = Text()
         line.append(f"{_DAY_LABELS[r]}  ", style=_S.dim)

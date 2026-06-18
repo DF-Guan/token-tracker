@@ -69,14 +69,7 @@ def _heat_thresholds(values: list[int]) -> list[float]:
 
 
 def _heat_level(tokens: float, thresholds: list[float]) -> int:
-    """按阈值把当天 token 量映射到 0-4 档（0=无数据/最浅）。"""
+    """按阈值把当天 token 量映射到 0-4 档（0=无数据/最浅）：超过 N 个阈值 → 第 N+1 档。"""
     if tokens <= 0:
         return 0
-    t1, t2, t3 = thresholds
-    if tokens <= t1:
-        return 1
-    if tokens <= t2:
-        return 2
-    if tokens <= t3:
-        return 3
-    return 4
+    return 1 + sum(tokens > th for th in thresholds)
