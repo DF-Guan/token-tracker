@@ -52,12 +52,14 @@
 - **daily / weekly 署名 footer + 缩进对齐 + `tt -v`**（2026-06-18）：四个 Trend 区块（Daily/Weekly/Project/Model Trend）+ daily 热力图整面板统一左缩进 2 格（对齐卡片内容；daily grid 宽度判定预留 2，`_display_weeks` 用 `width-6`，防折行）；weekly 底部、daily 图例 `More` 右侧（空 4 格）加 dim 署名 `tt · by stormzhang`（左对齐缩进 2）；`tt -v` 输出全名 `token-tracker <版本>` + `by stormzhang · GitHub 链接`。
 - **UI 去重重构**（2026-06-18）：提取 `brand_line` / `append_metric` 到 `format.py`，daily（heatmap.py）与 weekly（tables.py）品牌行 + 指标渲染共用、消除重复；渲染输出逐字不变。
 - **daily/weekly 稀疏 + 窄终端自适应**（2026-06-18）：① Weekly Trend 取消本周高亮、逐周统一亮绿（本周恒在最上无需另标）；② daily 概览三行指标按终端可用宽贪心折行（`emit_metrics`，窄终端不溢出卡片）；③ Daily Trend 稀疏自适应——去前导空白天（保底 7 天）+ 中间 > 5 天连续空压成 3 列「·」gap + 标题显实际跨度；④ daily 图例署名窄终端自动另起一行、对齐 Less 列、空行隔开（避免终端硬折导致折行掉色），宽终端仍接图例右侧。
+- **会话内彩色报表 hook 产品化（终端 CLI）**（2026-06-18）：`tt setup` 自动注册会话内彩色命令——CC `/tt-daily`·`/tt-weekly`（`UserPromptExpansion`）、Codex `ttdaily`·`ttweekly`（`UserPromptSubmit`），`block`+`reason` 直接渲染真彩色报表、不经模型、不污染上下文。`hooks.py` 加 `CC_REPORT_HOOK_SCRIPT`/`CODEX_REPORT_HOOK_SCRIPT` 内嵌模板（`sys.executable -m token_tracker.cli` 调用、独立 `REPORT_HOOK_VERSION`、宽度探测 -14、Windows 跳 ioctl）+ 扩展 `_setup_*`/`_unsetup_*`（特征码 `tt-report-hook` 幂等合并、不覆盖用户 hook、CC 写 commands/*.md + 合并 UserPromptExpansion 数组、Codex 末尾追加 `[[hooks.UserPromptSubmit]]` 零依赖）+ 4 个测试 + README 双语（含「仅终端」限制）。
 
 ## 待办 / 计划
 
 - **发布 `0.4.0`**：打 `v0.4.0` tag 并 push → 发 PyPI（属红线操作，待主人确认）
 - 桌面版（Tauri）规划：图表可视化、数据钻取、实时监控、多 Agent 多模型监控（仅规划，未启动）
-- **会话内彩色报表 hook 产品化**（本地已验证、待集成）：CC `UserPromptExpansion` / Codex `UserPromptSubmit` + `decision:block` + `reason` 实现「输入 `/tt-daily`（CC）/ `ttdaily`（Codex）直接渲染真彩色报表、不经模型、不污染上下文」，双端终端 CLI 实测可用（详见本地 `docs/cc-hook-tt-真彩色.md`、`docs/codex-hooks-statusline-research.md`，均 gitignore）。待办：① `tt setup` 自动配双端 hook（脚本进 `token_tracker` 包、不硬编码解释器路径、合并用户已有 hook）；② 桌面版多形态适配（GUI 不吃 ANSI，按形态出 HTML/markdown，`tt` 加 `--format`）；③ README 文档。
+- **会话内彩色报表 hook — 桌面多形态适配**（终端部分已落地，见「进行中」）：桌面 app / web GUI 不吃 ANSI（实测乱码），需按形态输出 HTML/markdown（`tt` 加 `--format`、hook 检测形态）。详见本地 `docs/cc-hook-tt-真彩色.md`。
+- **Codex 伪 statusline**（待主人 Codex 额度重置后实测）：`Stop` hook + `systemMessage` 做「回答后追加彩色 status」，验证 systemMessage 能否渲染真彩色 + 是否污染上下文。已搭 `.codex/hooks/test-statusline.py`，详见 `docs/codex-hooks-statusline-research.md`。
 - `mypy src` 有 5 个历史遗留报错（`aggregator.py` / `cli.py`）：准则是**别新增**，不顺手改无关旧报错
 
 ## 阻塞
@@ -66,6 +68,7 @@
 
 ## 最近验证
 
+- **2026-06-18**：会话内彩色报表 hook 终端产品化（CC `/tt-daily`·`/tt-weekly` + Codex `ttdaily`·`ttweekly`，`tt setup` 自动配 + `unsetup` 恢复）。临时 HOME 实跑 setup/unsetup 往返：合并不覆盖用户 hook、幂等不翻倍、卸载恢复原配置、解释器烘焙 venv python；report 脚本端 daily/weekly 渲染真彩色、非命令放行。`pytest` 56 全绿（+4）、`ruff check src tests` 全过、`mypy src` 5 历史无新增。提交 `74f6b62`/`776728d`/`9d5001b`/`d4cc4de`。
 - **2026-06-18**：daily/weekly 稀疏 + 窄终端自适应（Weekly Trend 统一亮绿、概览 `emit_metrics` 折行、Daily Trend 去前导空 + 中间 gap、图例署名窄终端换行对齐）+ UI 去重（`brand_line`/`append_metric` 提取）。`pytest` 52 全绿、`ruff` 全过、`mypy` 5 历史无新增；窄终端（COLUMNS=40/44）+ 宽终端（120/200）实跑核对，去重前后渲染逐字一致。提交 `42386cd`/`62fc087`/`9330c7c`/`fea9d8e`/`e654537`/`b87feb4`。
 - **2026-06-18（探索，本地实验）**：会话内彩色 hook 黑科技双端跑通——CC `/tt-daily`·`/tt-weekly`（UserPromptExpansion）、Codex `ttdaily`·`ttweekly`（UserPromptSubmit），`block`+`reason` 渲染真彩色、不污染上下文（核验 `hooks.md`/`context-window.md`）；桌面版 GUI hook 支持但 ANSI 显乱码（实测），列为后续 HTML/md 适配。实验在 `.claude/`·`.codex/`（gitignore），记录存 `docs/`。
 - **2026-06-18**：daily/weekly/statusline UI 收尾——Trend 进度条突出第一名、daily/weekly 署名 footer + 统一缩进 2、`Context`→`Ctx`、daily 概览删 Top Project/Longest Session、Active Hour 固定北京时区、`Max Streak`→`Current/Longest Streak`、`tt -v` 全名+作者。`uv run --extra dev pytest` 52 全绿、`ruff check src` 全过、`mypy src` 5 历史无新增；`tt daily`/`tt weekly`/`tt -v` 实跑核对，宽终端（COLUMNS=200）验证 footer/缩进对齐。提交：`0f4b2bd`/`769d514`/`a650b89`/`8cb3fdd`。
