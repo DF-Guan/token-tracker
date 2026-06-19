@@ -1,9 +1,6 @@
-import contextlib
 import os
-import shutil
 import sys
 from collections import defaultdict
-from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 from rich.text import Text
@@ -20,39 +17,27 @@ from .analyzer.aggregator import (
     aggregate_sessions,
     aggregate_weekly,
 )
-from .analyzer.blocks import analyze_blocks, calculate_p90
 from .analyzer.cost import calculate_cost
 from .hooks import is_setup, needs_update, setup, unsetup, update_hook
 from .i18n import t
 from .ui import theme, themes
-from .ui.console import capture_console, forced_color_console, get_console
+from .ui.console import forced_color_console, get_console
 from .ui.format import system_tz
 from .ui.heatmap import render_daily_heatmap
 from .ui.status import render_status
 from .ui.tables import (
-    AGENT_LABEL,
-    render_dashboard,
     render_monthly,
     render_sessions,
-    render_tab_bar,
     render_weekly,
 )
 
 AGENT_LOADERS = {"claude-code": claude, "codex": codex}
 RATE_LIMIT_LOADERS = {"claude-code": load_claude_rate_limits, "codex": codex.load_rate_limits}
 
-# dashboard 数据面板只看最近 N 小时的会话块（活跃/空闲判定）
-_RECENT_BLOCK_HOURS = 48
-
 # status 面板的时间窗口：过去 5 小时
 _STATUS_HOURS = 5
 
-# 交互式 dashboard 的终端控制转义序列
-_ALT_ENTER = "\033[?1049h\033[?7l\033[2J\033[3J\033[H\033[?25l"  # 进备用屏 + 隐光标 + 禁换行 + 清屏
-_ALT_EXIT = "\033[?7h\033[?25h\033[?1049l"  # 恢复换行 + 显光标 + 退备用屏
-_CLEAR_SCREEN = "\033[2J\033[3J\033[H"
-
-# 排序字段 → stats 属性名（单一权威表，dashboard sort cycle 也复用）。
+# 排序字段 → stats 属性名（单一权威表）。
 # "time" 的属性因命令而异（daily=date / weekly=week / sessions=start_time），不在此表，走 default_attr。
 SORT_ATTRS = {
     "tokens": "total_tokens",
@@ -135,38 +120,6 @@ def _aggregate_per_agent(agents, agg_fn):
     return stats
 
 
-def _show_agent_dashboard(agent_id: str):
-    agent_name = AGENT_LABEL.get(agent_id, agent_id)
-    data = _build_agent_data(agent_id, agent_name)
-    if not data:
-        get_console().print(f"[yellow]{t('no_token_data')}[/yellow]")
-        return
-    render_dashboard(**data)
-
-
-def _build_agent_data(agent_id: str, agent_name: str) -> dict | None:
-    entries = _load_entries(agent_id)
-    if not entries:
-        return None
-    daily = aggregate_daily(entries)
-    weekly = aggregate_weekly(entries)
-    monthly = aggregate_monthly(entries)
-    sessions = aggregate_sessions(entries)
-    cutoff = datetime.now(UTC) - timedelta(hours=_RECENT_BLOCK_HOURS)
-    recent = [e for e in entries if e.timestamp >= cutoff]
-    blocks = analyze_blocks(recent)
-    rate_limits = RATE_LIMIT_LOADERS.get(agent_id, lambda: None)()
-    p90 = None
-    has_limits = rate_limits and (rate_limits.five_hour_pct is not None or rate_limits.seven_day_pct is not None)
-    if not has_limits:
-        p90 = calculate_p90(daily)
-    return dict(
-        daily_stats=daily, weekly_stats=weekly, monthly_stats=monthly,
-        sessions=sessions, blocks=blocks, rate_limits=rate_limits,
-        p90=p90, agents=[agent_name],
-    )
-
-
 def _build_status_data(agents) -> dict | None:
     """过去 5h status 数据：合并汇总 + per-agent 汇总 + 分 agent 额度 + 合并 session（按 cost 倒序）。
 
@@ -210,191 +163,6 @@ def _current_session_agent() -> str | None:
     if os.environ.get("CLAUDE_CONFIG_DIR") or os.environ.get("CLAUDECODE"):
         return "claude-code"
     return None
-
-
-def _initial_agent_index(agents) -> int:
-    preferred = _current_session_agent()
-    if preferred:
-        for i, agent in enumerate(agents):
-            if agent.id == preferred:
-                return i
-    return 0
-
-
-def _fit_screen(text: str, height: int, scroll_offset: int) -> tuple[str, int]:
-    lines = text.splitlines()
-    if not lines:
-        return "", 0
-    max_body = max(1, height - 1)
-    max_scroll = max(0, len(lines) - max_body)
-    scroll_offset = max(0, min(scroll_offset, max_scroll))
-    visible = lines[:1] + lines[1 + scroll_offset:1 + scroll_offset + max_body - 1]
-    return "\n".join(visible), max_scroll
-
-
-def _dashboard_sort_cycle():
-    return [
-        ("time", "start_time", t("sort_time")),  # dashboard 始终排 sessions，time→start_time
-        ("tokens", SORT_ATTRS["tokens"], t("sort_token")),
-        ("cost", SORT_ATTRS["cost"], t("sort_cost")),
-        ("messages", SORT_ATTRS["messages"], t("sort_messages")),
-    ]
-
-
-@dataclass
-class _DashState:
-    current: int = 0
-    scroll_offset: int = 0
-    sort_idx: int = 0
-    sort_desc: bool = True
-    session_limit: int = 30
-
-
-def _apply_key(st: _DashState, key: str, *, num_agents: int, num_sorts: int, max_scroll: int, page: int) -> bool:
-    """按键更新 dashboard 状态；返回 False 表示退出循环。纯函数，可单测。"""
-    if key == "quit":
-        return False
-    if key == "left":
-        st.current = (st.current - 1) % num_agents
-        st.scroll_offset = 0
-    elif key == "right":
-        st.current = (st.current + 1) % num_agents
-        st.scroll_offset = 0
-    elif key == "up":
-        st.scroll_offset = max(0, st.scroll_offset - 1)
-    elif key == "down":
-        st.scroll_offset = min(max_scroll, st.scroll_offset + 1)
-    elif key == "page_up":
-        st.scroll_offset = max(0, st.scroll_offset - page)
-    elif key == "page_down":
-        st.scroll_offset = min(max_scroll, st.scroll_offset + page)
-    elif key == "sort":
-        st.sort_idx = (st.sort_idx + 1) % num_sorts
-        st.scroll_offset = 0
-    elif key == "reverse":
-        st.sort_desc = not st.sort_desc
-    elif key == "more":
-        st.session_limit += 10
-    elif key == "less":
-        st.session_limit = max(10, st.session_limit - 10)
-    return True
-
-
-@contextlib.contextmanager
-def _alt_screen():
-    """进入/退出终端备用屏（隐藏光标、禁自动换行），保证异常时也能恢复。"""
-    sys.stdout.write(_ALT_ENTER)
-    sys.stdout.flush()
-    try:
-        yield
-    finally:
-        sys.stdout.write(_ALT_EXIT)
-        sys.stdout.flush()
-
-
-def _render_dashboard_frame(agent_names, current, data, st: _DashState, sort_cycle, width, height) -> tuple[str, int]:
-    if data:
-        _, sort_attr, sort_label = sort_cycle[st.sort_idx]
-        sorted_sessions = sorted(data["sessions"], key=lambda s: getattr(s, sort_attr), reverse=st.sort_desc)
-        arrow = "↓" if st.sort_desc else "↑"
-        session_title = t("session_title", limit=st.session_limit, label=sort_label, arrow=arrow)
-    else:
-        sorted_sessions = []
-        session_title = None
-
-    with capture_console(width) as buf:
-        render_tab_bar(agent_names, current)
-        if data:
-            render_data = {**data, "sessions": sorted_sessions}
-            render_dashboard(**render_data, session_limit=st.session_limit, top_margin=False, session_title=session_title)
-        else:
-            get_console().print(f"[yellow]{t('no_data')}[/yellow]")
-
-    return _fit_screen(buf.getvalue(), height, st.scroll_offset)
-
-
-def _show_interactive_dashboard(agents):
-    agent_names = [a.name for a in agents]
-    st = _DashState(current=_initial_agent_index(agents))
-    cache: dict = {}
-    sort_cycle = _dashboard_sort_cycle()
-
-    with _alt_screen():
-        while True:
-            agent = agents[st.current]
-            if agent.id not in cache:
-                sys.stdout.write(_CLEAR_SCREEN + f"\033[2m{t('loading')}\033[0m")
-                sys.stdout.flush()
-                cache[agent.id] = _build_agent_data(agent.id, agent.name)
-
-            size = shutil.get_terminal_size((80, 24))
-            screen, max_scroll = _render_dashboard_frame(
-                agent_names, st.current, cache[agent.id], st, sort_cycle, size.columns, size.lines,
-            )
-            sys.stdout.write(_CLEAR_SCREEN + screen)
-            sys.stdout.flush()
-
-            if not _apply_key(
-                st, _read_key(),
-                num_agents=len(agents), num_sorts=len(sort_cycle),
-                max_scroll=max_scroll, page=max(1, size.lines - 3),
-            ):
-                break
-
-
-# 普通字母按键 → 动作，两个平台的 reader 共用（此前 Windows 漏了 sort/reverse/more/less）
-KEY_MAP = {
-    b"h": "left", b"l": "right", b"k": "up", b"j": "down",
-    b"b": "page_up", b"f": "page_down",
-    b"s": "sort", b"r": "reverse",
-    b"+": "more", b"=": "more", b"-": "less", b"_": "less",
-    b"q": "quit", b"Q": "quit", b"\x03": "quit",
-}
-
-# 终端方向键的 ESC 序列尾字节 → 动作
-_UNIX_ARROW = {b"D": "left", b"C": "right", b"A": "up", b"B": "down"}
-_WIN_ARROW = {b"K": "left", b"M": "right", b"H": "up", b"P": "down", b"I": "page_up", b"Q": "page_down"}
-
-
-def _read_key_unix():
-    import os as _os
-    import select
-    import termios
-    import tty
-    fd = sys.stdin.fileno()
-    old = termios.tcgetattr(fd)
-    try:
-        tty.setraw(fd)
-        ch = _os.read(fd, 1)
-        if ch == b"\x1b":
-            if not select.select([fd], [], [], 0.05)[0]:
-                return "quit"
-            ch2 = _os.read(fd, 1)
-            if ch2 == b"[":
-                ch3 = _os.read(fd, 1)
-                if ch3 in _UNIX_ARROW:
-                    return _UNIX_ARROW[ch3]
-                if ch3 in (b"5", b"6"):
-                    if select.select([fd], [], [], 0.05)[0]:
-                        _os.read(fd, 1)
-                    return "page_up" if ch3 == b"5" else "page_down"
-            return "other"
-        return KEY_MAP.get(ch, "other")
-    finally:
-        termios.tcsetattr(fd, termios.TCSADRAIN, old)
-
-
-def _read_key_win():
-    import msvcrt
-    ch = msvcrt.getch()
-    if ch in (b"\xe0", b"\x00"):
-        return _WIN_ARROW.get(msvcrt.getch(), "other")
-    if ch == b"\x1b":
-        return "quit"
-    return KEY_MAP.get(ch, "other")
-
-
-_read_key = _read_key_win if sys.platform == "win32" else _read_key_unix
 
 
 def _get_version() -> str:

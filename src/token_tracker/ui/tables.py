@@ -15,7 +15,7 @@ from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
 
-from ..adapters.types import DailyStats, MonthlyStats, P90Limits, RateLimits, SessionBlock, SessionStats, WeeklyStats
+from ..adapters.types import DailyStats, MonthlyStats, SessionStats, WeeklyStats
 from ..i18n import t
 from .console import forced_color_console, get_console
 from .format import (
@@ -34,131 +34,19 @@ from .format import (
     system_tz,
 )
 from .panels import (
-    _render_active_block,
     _render_agent_summaries,
-    _render_daily_panel,
     _render_header,
-    _render_idle_panel,
-    _render_month_overview,
-    render_tab_bar,
 )
 from .theme import _S, _token_heat_style
 
-# render_tab_bar / AGENT_LABEL 在子模块定义，这里 re-export 以保持 ui.tables 的公开入口集中
+# AGENT_LABEL 在子模块定义，这里 re-export 以保持 ui.tables 的公开入口集中
 __all__ = [
     "AGENT_LABEL",
     "render_daily",
-    "render_dashboard",
     "render_monthly",
     "render_sessions",
-    "render_tab_bar",
     "render_weekly",
 ]
-
-
-def render_dashboard(
-    daily_stats: list[DailyStats],
-    weekly_stats: list[WeeklyStats],
-    monthly_stats: list[MonthlyStats],
-    sessions: list[SessionStats],
-    blocks: list[SessionBlock],
-    rate_limits: RateLimits | None = None,
-    p90: P90Limits | None = None,
-    agents: list[str] | None = None,
-    session_limit: int = 10,
-    top_margin: bool = True,
-    session_title: str | None = None,
-) -> None:
-    if not daily_stats:
-        get_console().print(f"[{_S.warn}]{t('no_data')}[/{_S.warn}]")
-        return
-
-    total_tokens = sum(s.total_tokens for s in daily_stats)
-    total_cost = sum(s.cost_usd for s in daily_stats)
-    total_msgs = sum(s.message_count for s in daily_stats)
-    total_sessions = sum(s.session_count for s in daily_stats)
-
-    _render_header(
-        agents or ["Claude Code"],
-        total_tokens,
-        total_cost,
-        total_sessions,
-        total_msgs,
-        len(daily_stats),
-        top_margin=top_margin,
-    )
-
-    # --- 本月概览 ---
-    if monthly_stats:
-        last_month = monthly_stats[-2] if len(monthly_stats) >= 2 else None
-        _render_month_overview(monthly_stats[-1], last_month)
-
-    # --- 数据面板 ---
-    cur_week = weekly_stats[-1] if weekly_stats else None
-    last_week = weekly_stats[-2] if len(weekly_stats) >= 2 else None
-
-    has_limits = rate_limits and (rate_limits.five_hour_pct is not None or rate_limits.seven_day_pct is not None)
-    if p90 and not has_limits:
-        today = daily_stats[-1] if daily_stats else None
-        yesterday = daily_stats[-2] if len(daily_stats) >= 2 else None
-        if today:
-            _render_daily_panel(today, yesterday, p90, cur_week, last_week)
-    else:
-        active_blocks = [b for b in blocks if not b.is_gap and b.is_active]
-        finished_blocks = [b for b in blocks if not b.is_gap and not b.is_active]
-        last_block = finished_blocks[-1] if finished_blocks else None
-        if active_blocks:
-            for b in active_blocks:
-                _render_active_block(b, rate_limits, cur_week, last_block, last_week)
-        elif rate_limits:
-            _render_idle_panel(rate_limits, cur_week, last_week)
-
-    # --- 最近会话 ---
-    if sessions and session_limit > 0:
-        _render_recent_sessions(sessions[:session_limit], title=session_title)
-
-    get_console().print()
-
-
-def _render_recent_sessions(stats: list[SessionStats], title: str | None = None) -> None:
-    multi_agent = _is_multi_agent(stats)
-    mode = _width_mode()
-    table = Table(
-        title=title or t("recent_sessions"),
-        box=box.SIMPLE_HEAVY,
-        header_style="bold",
-        padding=(0, 1),
-        expand=True,
-    )
-    table.add_column(t("col_time"), style=_S.token, no_wrap=True)
-    if multi_agent:
-        table.add_column(t("col_source"), no_wrap=True)
-    table.add_column(t("col_project"), no_wrap=True, max_width=14)
-    if mode != "compact":
-        table.add_column(t("col_model"), style=_S.cost, no_wrap=True)
-    table.add_column("Input", justify="right")
-    table.add_column("Output", justify="right")
-    table.add_column(t("col_total_tokens"), justify="right", style=_S.token_bold)
-    table.add_column(t("col_cost"), justify="right", style=_S.good)
-    table.add_column(t("col_messages"), justify="right", style=_S.dim)
-
-    for s in stats:
-        row: list = [s.start_time.astimezone(system_tz()).strftime("%m-%d %H:%M")]
-        if multi_agent:
-            row.append(AGENT_SHORT.get(s.agent_id, s.agent_id))
-        row.append(_project_short(s.project))
-        if mode != "compact":
-            row.append(_model_short(s.model))
-        row += [
-            _fmt_tokens(s.input_tokens),
-            _fmt_tokens(s.output_tokens),
-            Text(_fmt_tokens(s.total_tokens), style=_S.token_bold),
-            _fmt_cost(s.cost_usd),
-            str(s.message_count),
-        ]
-        table.add_row(*row)
-
-    get_console().print(table)
 
 
 def render_daily(stats: list[DailyStats], agents: list[str] | None = None) -> None:
