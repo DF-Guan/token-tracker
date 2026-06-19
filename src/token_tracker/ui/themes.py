@@ -87,16 +87,18 @@ THEMES: dict[str, dict] = {
 THEME_NAMES = tuple(THEMES)
 
 # statusline 10 个着色 key → 9 基色槽（reset 固定为 \033[0m，单列）。
+# 这套角色映射沿用旧 mocha 状态栏观感（分支/标签粉、Tokens 桃、Model/Duration 蓝），
+# 与 CLI 报表的 _S 语义槽**不完全同源**（CLI token=sapphire 青）——按主人审美选择保留状态栏旧手感。
 _STATUSLINE_SLOTS = {
     "project": "green",
-    "branch": "mauve",
-    "label": "blue",
+    "branch": "pink",
+    "label": "pink",
     "bar_ok": "green",
     "bar_warn": "yellow",
     "bar_danger": "red",
-    "tokens": "sapphire",
-    "duration": "overlay0",
-    "model": "mauve",
+    "tokens": "peach",
+    "duration": "blue",
+    "model": "blue",
 }
 
 # default 主题的 Rich 色名 → 3-bit/兼容 ANSI 前景码，供 statusline 转换。

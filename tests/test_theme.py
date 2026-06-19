@@ -41,7 +41,7 @@ def test_statusline_ansi_truecolor():
     assert ansi["reset"] == "\033[0m"
     # truecolor 主题：着色 key 都是 38;2 序列。
     assert all("38;2" in v for k, v in ansi.items() if k != "reset")
-    assert ansi["tokens"] == "\033[38;2;116;199;236m"  # sapphire #74c7ec
+    assert ansi["tokens"] == "\033[38;2;250;179;135m"  # peach #fab387（状态栏沿用旧观感）
 
 
 def test_statusline_ansi_default_is_3bit():
