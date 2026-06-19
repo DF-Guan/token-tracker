@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -246,3 +247,24 @@ def test_statusline_tps_isolated_per_session(tmp_path):
     _run_statusline_home(script, frame("B", 502000, 5), home)          # 夹一帧 B
     out_b = _run_statusline_home(script, frame("B", 504000, 300), home)  # B：Δ2000 / out300 → 150
     assert "TPS: 150 tokens/s" in out_b
+
+
+def test_statusline_progress_bar_empty_grid_tinted(tmp_path):
+    # 进度条未填充网格按当前档位色着色；pct=0 时保持灰（裸 ░ 紧跟 reset、不着色）。
+    script = tmp_path / "tt-statusline.py"
+    script.write_text(hooks._render_hook_script(), encoding="utf-8")
+    home = tmp_path / "home"
+    (home / ".claude").mkdir(parents=True)
+
+    def bar_out(pct):
+        payload = {"session_id": "S1", "workspace": {"project_dir": str(tmp_path)},
+                   "rate_limits": {"five_hour": {"used_percentage": pct}}}
+        return _run_statusline_home(script, payload, home)
+
+    esc = re.compile(r"\x1b\[[0-9;]*m")
+
+    out0 = bar_out(0)
+    assert "░" in out0 and esc.findall(out0)[-1] + "░" in out0      # pct=0：灰格紧跟 reset、未着色
+
+    out60 = bar_out(60)
+    assert "░" in out60 and esc.findall(out60)[-1] + "░" not in out60  # pct>0：未填充格被染色、不在 reset 后

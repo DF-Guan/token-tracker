@@ -96,7 +96,11 @@ def progress_bar(value, bar_width=8):
         return empty_char * bar_width + " n/a"
     pct = max(0.0, min(100.0, float(value)))
     filled = round(pct / 100 * bar_width)
-    return f"{color_by_pct(pct)}{filled_char * filled}{C['reset']}{empty_char * (bar_width - filled)} {C['label']}{pct:.0f}%{C['reset']}"
+    empty = bar_width - filled
+    color = color_by_pct(pct)
+    # 未填充网格也染当前档位色（░ 字形天然更淡 → 同色暗格）；pct=0 时不动、保持灰
+    empty_str = f"{color}{empty_char * empty}{C['reset']}" if pct > 0 and empty else empty_char * empty
+    return f"{color}{filled_char * filled}{C['reset']}{empty_str} {C['label']}{pct:.0f}%{C['reset']}"
 
 
 def fmt_duration(seconds):
