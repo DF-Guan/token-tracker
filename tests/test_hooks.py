@@ -1,4 +1,5 @@
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -122,3 +123,54 @@ def test_statusline_shows_git_diff_stat(tmp_path):
     (repo / "b.txt").write_text("1\n2\n")
     line_dirty = _run_statusline(script_path, repo)
     assert "+2" in line_dirty and "-1" in line_dirty
+
+
+def _run_statusline_home(script_path, payload, home):
+    """隔离 HOME 下跑落盘 statusline 脚本，返回完整 stdout（不污染真实 ~/.claude）。"""
+    env = {**os.environ, "HOME": str(home), "COLORTERM": "truecolor"}
+    r = subprocess.run([sys.executable, str(script_path)], input=json.dumps(payload),
+                       text=True, capture_output=True, env=env)
+    return r.stdout
+
+
+def test_statusline_line4_tps_code_repo(tmp_path):
+    # Line 4：本轮 TPS（api_duration 差分）+ Code 行数 + Repo host。
+    script = tmp_path / "tt-statusline.py"
+    script.write_text(hooks._render_hook_script(), encoding="utf-8")
+    home = tmp_path / "home"
+    (home / ".claude").mkdir(parents=True)
+    base = {
+        "session_id": "S1",
+        "workspace": {"project_dir": str(tmp_path), "repo": {"host": "github.com"}},
+        "context_window": {"current_usage": {"output_tokens": 10}},
+        "cost": {"total_api_duration_ms": 1000, "total_lines_added": 208, "total_lines_removed": 8},
+    }
+    _run_statusline_home(script, base, home)  # 第一帧：写 tt-status.json 建立 prev
+    frame2 = {
+        "session_id": "S1",
+        "workspace": {"project_dir": str(tmp_path), "repo": {"host": "github.com"}},
+        "context_window": {"current_usage": {"output_tokens": 200}},
+        "cost": {"total_api_duration_ms": 2000, "total_lines_added": 208, "total_lines_removed": 8},
+    }
+    out = _run_statusline_home(script, frame2, home)  # 同会话 Δ1000ms / output 200 → TPS 200
+    assert "TPS: 200 tokens/s" in out  # 带单位
+    assert "Code" in out and "+208" in out and "-8" in out
+    assert "Repo: github.com" in out
+    # 第三帧空闲（Δ=0、output 小）→ 沿用上次 200，不回落到 -
+    frame3 = {**frame2, "context_window": {"current_usage": {"output_tokens": 2}}}
+    out3 = _run_statusline_home(script, frame3, home)
+    assert "TPS: 200 tokens/s" in out3
+
+
+def test_statusline_line4_tps_dash_when_no_prior_value(tmp_path):
+    # 从未有过有效值时（output 一直太小）→ TPS 显示 "-"。
+    script = tmp_path / "tt-statusline.py"
+    script.write_text(hooks._render_hook_script(), encoding="utf-8")
+    home = tmp_path / "home"
+    (home / ".claude").mkdir(parents=True)
+    base = {"session_id": "S1", "workspace": {"project_dir": str(tmp_path)},
+            "context_window": {"current_usage": {"output_tokens": 2}},
+            "cost": {"total_api_duration_ms": 5000}}
+    _run_statusline_home(script, base, home)
+    out = _run_statusline_home(script, base, home)  # Δ=0、output=2、无历史值 → -
+    assert "TPS: -" in out

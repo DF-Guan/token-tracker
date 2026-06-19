@@ -16,11 +16,11 @@ Custom StatusLine integration + CLI Dashboard — see token usage, cost, and rat
 
 ![Claude Code StatusLine](assets/screenshot-statusline-cc.png)
 
-The status line has three rows, left to right:
+The status line has four rows, left to right:
 
 | Row | Field | Description |
 |-----|-------|-------------|
-| 1 | `project(branch)` | Current project directory + Git branch, `*` indicates uncommitted changes |
+| 1 | `project(branch +12 -3)` | Current project directory + Git branch (`*` = uncommitted changes), with added/removed lines vs HEAD in parentheses |
 | 1 | `5h: ██░ 31% (1h19m)` | 5-hour sliding window quota usage, countdown to reset in parentheses |
 | 1 | `7d: ██░ 11% (5d8h)` | 7-day sliding window quota usage |
 | 1 | `1.0M Context: ██░ 20%` | Total context window size and usage percentage |
@@ -30,6 +30,9 @@ The status line has three rows, left to right:
 | 2 | `Cost: $35.51` | Estimated session cost (based on official pricing) |
 | 3 | `Model: Opus 4.6/high/nofast` | Model / thinking level / fast mode status |
 | 3 | `Duration: 1h33m` | Current session elapsed time |
+| 4 | `TPS: 60 tokens/s` | Current-turn output token generation speed (includes thinking; idle frames keep the last value) |
+| 4 | `Code +208 -8` | Lines of code written / removed by Claude this session |
+| 4 | `Repo: github.com` | Code repository host |
 
 > When terminal width is limited, the display auto-degrades: first hides reset countdowns, then simplifies progress bars to plain percentages.
 

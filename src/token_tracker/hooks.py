@@ -14,7 +14,7 @@ CLAUDE_SETTINGS = os.path.expanduser("~/.claude/settings.json")
 HOOK_SCRIPT_PATH = os.path.expanduser("~/.claude/tt-statusline.py")
 CODEX_CONFIG = os.path.expanduser("~/.codex/config.toml")
 CODEX_BACKUP = os.path.expanduser("~/.codex/tt-backup.json")
-HOOK_VERSION = "1.13"
+HOOK_VERSION = "1.15"
 REPORT_HOOK_VERSION = "1.0"
 CC_REPORT_HOOK_PATH = os.path.expanduser("~/.claude/tt-report-hook.py")
 CC_COMMANDS_DIR = os.path.expanduser("~/.claude/commands")
@@ -171,7 +171,32 @@ def save_data(data, now):
                 pass
 
 
-def render(data, now):
+def _read_prev(session_id):
+    """save_data 覆盖前读旧帧的 (api_duration_ms, last_tps)，仅同会话有效。"""
+    if not session_id:
+        return None, None
+    try:
+        with open(STATUS_FILE, encoding="utf-8") as f:
+            old = json.load(f)
+    except Exception:
+        return None, None
+    if old.get("session_id") != session_id:
+        return None, None
+    return (old.get("cost") or {}).get("total_api_duration_ms"), old.get("_last_tps")
+
+
+def _compute_tps(data, prev_api_ms, prev_tps):
+    """本轮 TPS = 本轮 output / Δapi_duration；中间帧（output/Δ 太小）沿用上次值，避免频繁回落 -。"""
+    cur_api_ms = (data.get("cost") or {}).get("total_api_duration_ms")
+    out = ((data.get("context_window") or {}).get("current_usage") or {}).get("output_tokens", 0)
+    if prev_api_ms is not None and cur_api_ms is not None:
+        delta_ms = cur_api_ms - prev_api_ms
+        if delta_ms >= 500 and out >= 20:
+            return out / (delta_ms / 1000)
+    return prev_tps
+
+
+def render(data, now, tps=None):
     W = get_width()
     ctx = data.get("context_window") or {}
     bar_w = 8 if W >= 100 else 6 if W >= 60 else 4
@@ -287,7 +312,32 @@ def render(data, now):
     if vlen(" | ".join(line3)) > W and duration_part:
         line3 = [p for p in line3 if p != duration_part]
 
-    output = [" | ".join(line) for line in (line1, line2, line3) if line]
+    # --- Line 4: 本轮 TPS | Code 行数 | Repo host ---
+    line4 = []
+
+    # 本轮 TPS（main 里算好传入，带单位让含义自明）；无有效值显示 -
+    tps_str = f"{tps:.0f} tokens/s" if tps else "-"
+    line4.append(f"{C['tokens']}TPS: {tps_str}{C['reset']}")
+
+    # Code: 本会话 Claude 写/删的代码行数（与第 1 行 git diff 语义不同）
+    lines_added = cost.get("total_lines_added", 0)
+    lines_removed = cost.get("total_lines_removed", 0)
+    if lines_added or lines_removed:
+        line4.append(
+            f"{C['label']}Code{C['reset']} "
+            f"{C['added']}+{lines_added}{C['reset']} {C['deleted']}-{lines_removed}{C['reset']}"
+        )
+
+    # Repo host
+    repo_host = ((data.get("workspace") or {}).get("repo") or {}).get("host", "")
+    if repo_host:
+        line4.append(f"{C['model']}Repo: {repo_host}{C['reset']}")
+
+    # 窄终端：宽度不够从尾部逐段去（先 Repo、再 Code，保留 TPS）
+    while len(line4) > 1 and vlen(" | ".join(line4)) > W:
+        line4.pop()
+
+    output = [" | ".join(line) for line in (line1, line2, line3, line4) if line]
     if output:
         print("\n".join(output))
         sys.stdout.flush()
@@ -303,8 +353,11 @@ def main():
         return
 
     now = datetime.now(timezone.utc)
+    prev_api_ms, prev_tps = _read_prev(data.get("session_id"))  # 覆盖前读旧帧
+    tps = _compute_tps(data, prev_api_ms, prev_tps)
+    data["_last_tps"] = tps  # 存进本帧，供下一帧无有效值时沿用（常驻显示）
     save_data(data, now)
-    render(data, now)
+    render(data, now, tps)
 
 
 if __name__ == "__main__":
