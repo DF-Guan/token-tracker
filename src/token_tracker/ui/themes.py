@@ -1,8 +1,8 @@
-"""统一主题源：CLI 报表（`_S` 17 语义槽）与 statusline（10 个着色 key）共用一套配色。
+"""统一主题源：CLI 报表（`_S` 17 语义槽）与 statusline（12 个着色 key）共用一套配色。
 
 每个主题只定义 **9 个基色**（沿用 Catppuccin 的槽位命名）+ 是否浅色 + 5 档热力渐变；
 - 17 个 CLI 语义槽由 `derive_slots()` 统一派生（`token=sapphire`、`cost=yellow`…）；
-- statusline 的 10 个 key 由 `_STATUSLINE_SLOTS` 映射到这 9 槽的子集。
+- statusline 的 12 个 key 由 `_STATUSLINE_SLOTS` 映射到这 9 槽的子集。
 
 颜色取值：Catppuccin（mocha/latte/frappe/macchiato）用官方 hex；Nord / Dracula 按色相
 就近映射到这 9 槽。truecolor 终端用精确 hex，不支持 truecolor 的降级到 **256 色近似**
@@ -83,6 +83,8 @@ THEME_NAMES = tuple(THEMES)
 _STATUSLINE_SLOTS = {
     "project": "green",
     "branch": "red",
+    "added": "green",
+    "deleted": "red",
     "label": "pink",
     "bar_ok": "green",
     "bar_warn": "yellow",

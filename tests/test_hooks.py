@@ -1,4 +1,27 @@
+import json
+import shutil
+import subprocess
+import sys
+
+import pytest
+
 from token_tracker import hooks
+
+
+def _git(repo, *args):
+    subprocess.run(["git", *args], cwd=repo, check=True,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def _run_statusline(script_path, project_dir):
+    data = {
+        "workspace": {"project_dir": str(project_dir)},
+        "context_window": {"used_percentage": 30, "context_window_size": 200000,
+                           "total_input_tokens": 100, "total_output_tokens": 50},
+    }
+    r = subprocess.run([sys.executable, str(script_path)], input=json.dumps(data),
+                       text=True, capture_output=True)
+    return r.stdout.splitlines()[0] if r.stdout.strip() else ""
 
 
 def test_rendered_hook_script_has_single_version_source():
@@ -72,3 +95,30 @@ def test_codex_report_install_uninstall_roundtrip(tmp_path, monkeypatch):
     assert hooks._install_codex_report(installed, "python3") == installed  # 幂等
     removed = hooks._uninstall_codex_report(installed)
     assert "tt-report-hook" not in removed and 'command = "mine"' in removed
+
+
+@pytest.mark.skipif(not shutil.which("git"), reason="需要 git")
+def test_statusline_shows_git_diff_stat(tmp_path):
+    # statusline 第一行在分支括号内显示相对 HEAD 的未提交增删（+N 绿 / -N 红），0 改动则隐藏。
+    script_path = tmp_path / "tt-statusline.py"
+    script_path.write_text(hooks._render_hook_script(), encoding="utf-8")
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init")
+    _git(repo, "config", "user.email", "t@t")
+    _git(repo, "config", "user.name", "t")
+    (repo / "a.txt").write_text("1\n2\n3\n")
+    (repo / "b.txt").write_text("1\n2\n3\n")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-m", "init")
+
+    # 干净工作区 → 括号里只有分支、无 +/-
+    line_clean = _run_statusline(script_path, repo)
+    assert "[repo]" in line_clean
+    assert "+" not in line_clean and "-" not in line_clean
+
+    # a.txt 追加 2 行（+2）、b.txt 删 1 行（-1），未暂存 → 相对 HEAD 共 +2 -1
+    (repo / "a.txt").write_text("1\n2\n3\n4\n5\n")
+    (repo / "b.txt").write_text("1\n2\n")
+    line_dirty = _run_statusline(script_path, repo)
+    assert "+2" in line_dirty and "-1" in line_dirty

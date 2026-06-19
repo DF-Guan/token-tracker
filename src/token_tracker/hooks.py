@@ -14,7 +14,7 @@ CLAUDE_SETTINGS = os.path.expanduser("~/.claude/settings.json")
 HOOK_SCRIPT_PATH = os.path.expanduser("~/.claude/tt-statusline.py")
 CODEX_CONFIG = os.path.expanduser("~/.codex/config.toml")
 CODEX_BACKUP = os.path.expanduser("~/.codex/tt-backup.json")
-HOOK_VERSION = "1.12"
+HOOK_VERSION = "1.13"
 REPORT_HOOK_VERSION = "1.0"
 CC_REPORT_HOOK_PATH = os.path.expanduser("~/.claude/tt-report-hook.py")
 CC_COMMANDS_DIR = os.path.expanduser("~/.claude/commands")
@@ -133,6 +133,28 @@ def git_branch(cwd):
     return branch
 
 
+def git_diff_stat(cwd):
+    """相对 HEAD 的未提交增删行数（暂存+未暂存，不含未跟踪文件）。失败/无 commit 返回 (0, 0)。"""
+    try:
+        out = subprocess.check_output(
+            ["git", "diff", "HEAD", "--numstat"], cwd=cwd,
+            stderr=subprocess.DEVNULL, text=True, timeout=2,
+        )
+    except Exception:
+        return 0, 0
+    added = deleted = 0
+    for line in out.splitlines():
+        parts = line.split("\t")
+        if len(parts) < 2:
+            continue
+        a, d = parts[0], parts[1]
+        if a.isdigit():
+            added += int(a)
+        if d.isdigit():
+            deleted += int(d)
+    return added, deleted
+
+
 def save_data(data, now):
     data["_received_at"] = now.isoformat()
     tmp = None
@@ -162,7 +184,13 @@ def render(data, now):
         name = os.path.basename(project)
         branch = git_branch(project)
         if branch:
-            line1.append(f"{C['project']}[{name}]{C['reset']}({C['branch']}{branch}{C['reset']})")
+            inner = f"{C['branch']}{branch}{C['reset']}"
+            added, deleted = git_diff_stat(project)
+            if added:
+                inner += f" {C['added']}+{added}{C['reset']}"
+            if deleted:
+                inner += f" {C['deleted']}-{deleted}{C['reset']}"
+            line1.append(f"{C['project']}[{name}]{C['reset']}({inner})")
         else:
             line1.append(f"{C['project']}[{name}]{C['reset']}")
 
