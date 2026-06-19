@@ -57,7 +57,8 @@
   - **阶段 1 ✅ 地基（不接线）**（2026-06-18）：新增 `ui/themes.py`（7 主题 × 9 基色 + 5 档热力 + `is_light`；mocha/latte 迁现值、frappe/macchiato 官方 hex、Nord/Dracula 按色相就近映射 9 槽、default 用 3-bit 兼容色名；`derive_slots` 9→17 语义槽、`_STATUSLINE_SLOTS` 10 key 子集、`theme_to_statusline_ansi` hex→truecolor/default→3-bit）+ `config.py`（`~/.config/token-tracker/theme.json` 读写 + `resolve_theme` 优先级链 `TT_THEME`>配置>`COLORFGBG`>mocha、兼容旧 light/dark）+ `tests/test_theme.py` 12 用例。官方 hex 逐字段核对（catppuccin/palette、nordtheme、dracula README）。
   - **阶段 2 ✅ `_S` 运行时化（接线 CLI）**（2026-06-18）：`ui/theme.py` 删旧 `_MOCHA`/`_LATTE`/`_is_light_theme`/`_HEAT_*`，`_S` 改成 `_SProxy` 运行时代理（`__getattr__` 取当前激活主题的 17 槽，60+ 处 `_S.token` 调用零改、KeyError→AttributeError）；加 `get_active_theme(_name)`/`set_active_theme`/`preview_theme`（上下文管理器）/`heat_greens()`（取代模块级 `HEAT_GREENS`）；`heatmap.py` 引用随之改。CLI 报表配色现在走 `config.resolve_theme()`，`TT_THEME=dracula/nord/...` 即时生效。新增 5 用例（代理跟随/未知属性/preview 还原/heat 跟随）。
   - **阶段 3 ✅ statusline 同源烘焙**（2026-06-18）：`hooks.py` 把 statusline 脚本里写死的 `THEME="mocha"`/256-color `THEMES` 换成占位符 `__STATUSLINE_THEME_COLORS__`（当前主题 truecolor）+ `__STATUSLINE_DEFAULT_COLORS__`（3-bit 兜底）；`_render_hook_script` 注入 `themes.theme_to_statusline_ansi(config.resolve_theme())`；脚本内 `C = THEME_COLORS if _supports_color() else DEFAULT_COLORS`。`HOOK_VERSION` 1.8→1.9（老用户 pip 升级后自动重烘焙）。statusline 配色就此与 CLI 同源（mocha 旧 256 色 → 统一 truecolor，预期变化）。
-  - 阶段 4-7 待做：`tt theme set/show/list` → 预览 → 交互向导 → 测试/i18n/文档收尾。
+  - **阶段 4-5 ✅ `tt theme` 命令 + 预览**（2026-06-18）：`cli.py` 加 `theme` 子命令（自管、不触发 auto-update/agent 检测）——`show`（当前主题 + 来源 env/config/auto）、`list`（7 主题 × 8 色块 + ● 当前标记）、`set <name>`（`config.save_theme` + `set_active_theme` + 已配则 `update_hook` 重烘焙 statusline + env 覆盖警告）、`preview <name>`（`preview_theme` 渲染 CLI 语义色/三段进度条/热力阶 + statusline 示例行）、`tt theme <name>` 简写 = set。i18n 加 10 条文案、`available_cmds` 加 theme。+5 测试。
+  - 阶段 6-7 待做：交互向导（首次运行 tty）→ 测试/i18n/文档收尾。
 
 ## 待办 / 计划
 
@@ -73,6 +74,7 @@
 
 ## 最近验证
 
+- **2026-06-18**：统一多主题系统 阶段 4-5（`tt theme` 命令 + 预览）。`cli.py` 加 `theme show/list/set/preview` + 简写。`pytest` 全绿（+5）、`ruff` 全过、`mypy src` 5 历史无新增；实跑：`list` 列 7 主题 + ● 当前、`show` 显示来源、`preview dracula` 注入 5 段 dracula truecolor、`set nord` 隔离 HOME 写入 `{"theme":"nord"}` 不污染主人配置。
 - **2026-06-18**：统一多主题系统 阶段 3（statusline 同源烘焙）。`hooks.py` 占位符注入主题色 + `HOOK_VERSION` 1.8→1.9。`pytest` 全绿（+1 烘焙测试）、`ruff` 全过、`mypy src` 5 历史无新增；实跑落盘脚本喂真实 JSON：mocha/dracula 各注入 truecolor 正常运行、老终端（TERM=dumb 无 COLORTERM）走 default 3-bit 兜底（0 段 truecolor）。
 - **2026-06-18**：统一多主题系统 阶段 2（`_S` 运行时化、接线 CLI）。`theme.py` 改 `_SProxy` 代理 + `preview_theme`/`set_active_theme`/`heat_greens`，`heatmap.py` 随改。`pytest` 全绿（test_theme.py 16 用例）、`ruff` 全过、`mypy src` 5 历史无新增；实跑核对：mocha 默认渲染正常、`TT_THEME=dracula/latte/nord` 切换即时生效（daily 热力图色随主题变）、daily/weekly/monthly/sessions 四报表无 Traceback、`_S` 全部 16 处属性用法 ⊆ 17 槽（无漏槽）。
 - **2026-06-18**：统一多主题系统 阶段 1（地基）。新增 `ui/themes.py` + `config.py` + `tests/test_theme.py`，不接线。`uv run --extra dev pytest` 全绿（test_theme.py 12 用例 + 历史无回归）、`ruff check src tests` 全过、`mypy src` 5 历史无新增。frappe/macchiato/nord/dracula 官方 hex 经 WebFetch 逐字段核对。

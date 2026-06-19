@@ -11,7 +11,7 @@ _STRINGS = {
         "detected": "检测到: {agents}",
         "agent_not_found": "未检测到 {name}",
         "unknown_cmd": "未知命令: {cmd}",
-        "available_cmds": "可用命令: dashboard, daily, weekly, monthly, sessions, claude, codex, setup, unsetup, --version",
+        "available_cmds": "可用命令: dashboard, daily, weekly, monthly, sessions, claude, codex, theme, setup, unsetup, --version",
         "sort_time": "时间",
         "sort_token": "Token",
         "sort_cost": "等效成本",
@@ -69,6 +69,17 @@ _STRINGS = {
         # --- heatmap.py ---
         "heat_less": "少",
         "heat_more": "多",
+        # --- theme (cli.py) ---
+        "theme_current": "当前主题: {name}{src}",
+        "theme_src_env": "（来自环境变量 TT_THEME）",
+        "theme_src_config": "（来自配置文件）",
+        "theme_src_auto": "（自动选择）",
+        "theme_unknown": "未知主题: {name}",
+        "theme_options": "可选主题: {names}",
+        "theme_set_ok": "已切换到主题 {name}",
+        "theme_set_statusline": "状态栏已重新生成，重启会话后生效",
+        "theme_env_override": "注意：环境变量 TT_THEME 已设置，会覆盖此次切换",
+        "theme_usage": "用法: tt theme [show | list | set <主题名> | preview <主题名>]",
         # --- hooks.py ---
         "no_agent_install": "未检测到 Claude Code 或 Codex，请先安装其中之一",
         "first_setup": "首次使用，正在配置状态栏...",
@@ -102,7 +113,7 @@ _STRINGS = {
         "detected": "Detected: {agents}",
         "agent_not_found": "{name} not detected",
         "unknown_cmd": "Unknown command: {cmd}",
-        "available_cmds": "Available commands: dashboard, daily, weekly, monthly, sessions, claude, codex, setup, unsetup, --version",
+        "available_cmds": "Available commands: dashboard, daily, weekly, monthly, sessions, claude, codex, theme, setup, unsetup, --version",
         "sort_time": "Time",
         "sort_token": "Token",
         "sort_cost": "Cost",
@@ -160,6 +171,17 @@ _STRINGS = {
         # --- heatmap.py ---
         "heat_less": "Less",
         "heat_more": "More",
+        # --- theme (cli.py) ---
+        "theme_current": "Current theme: {name}{src}",
+        "theme_src_env": " (from env TT_THEME)",
+        "theme_src_config": " (from config file)",
+        "theme_src_auto": " (auto-selected)",
+        "theme_unknown": "Unknown theme: {name}",
+        "theme_options": "Available themes: {names}",
+        "theme_set_ok": "Switched to theme {name}",
+        "theme_set_statusline": "Status line regenerated, restart session to take effect",
+        "theme_env_override": "Note: env TT_THEME is set and overrides this change",
+        "theme_usage": "Usage: tt theme [show | list | set <name> | preview <name>]",
         # --- hooks.py ---
         "no_agent_install": "Claude Code or Codex not detected, please install one first",
         "first_setup": "First run, configuring status bar...",

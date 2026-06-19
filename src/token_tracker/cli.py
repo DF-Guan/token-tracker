@@ -6,6 +6,9 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta, timezone
 
+from rich.text import Text
+
+from . import config
 from .adapters import claude, codex
 from .adapters.rate_limits import load_rate_limits as load_claude_rate_limits
 from .adapters.registry import detect_agents
@@ -13,7 +16,8 @@ from .analyzer.aggregator import aggregate_daily, aggregate_monthly, aggregate_s
 from .analyzer.blocks import analyze_blocks, calculate_p90
 from .hooks import is_setup, needs_update, setup, unsetup, update_hook
 from .i18n import t
-from .ui.console import capture_console, get_console
+from .ui import theme, themes
+from .ui.console import capture_console, forced_color_console, get_console
 from .ui.heatmap import render_daily_heatmap
 from .ui.tables import (
     AGENT_LABEL,
@@ -350,6 +354,105 @@ def _get_version() -> str:
     return version("token-tracker")
 
 
+# --- theme 命令 ---
+
+def _theme_source() -> str:
+    if os.environ.get("TT_THEME", "").strip():
+        return t("theme_src_env")
+    if config.load_theme_config().get("theme"):
+        return t("theme_src_config")
+    return t("theme_src_auto")
+
+
+def _theme_show() -> None:
+    get_console().print(t("theme_current", name=config.resolve_theme(), src=_theme_source()))
+
+
+def _theme_list() -> None:
+    current = config.resolve_theme()
+    slots = ("green", "yellow", "peach", "red", "blue", "sapphire", "mauve", "pink")
+    with forced_color_console():
+        console = get_console()
+        for name in themes.THEME_NAMES:
+            base = themes.get_theme(name)["base"]
+            marker = "●" if name == current else " "
+            line = Text(f"  {marker} {name:<11}", style="bold" if name == current else "")
+            for slot in slots:
+                line.append("■ ", style=base[slot])
+            console.print(line)
+
+
+def _render_theme_sample(name: str) -> None:
+    """渲染某主题配色示例（CLI 语义色 + 进度条 + 热力阶 + statusline 行），preview 与向导复用。"""
+    with forced_color_console(), theme.preview_theme(name):
+        console = get_console()
+        text = Text("  ")
+        text.append("Tokens 1.2M  ", style=theme._S.token)
+        text.append("Cost $3.45  ", style=theme._S.cost)
+        text.append("good  ", style=theme._S.good)
+        text.append("warn  ", style=theme._S.warn)
+        text.append("bad", style=theme._S.bad)
+        console.print(text)
+        bar = Text("  ")
+        bar.append("██████", style=theme._S.bar_low)
+        bar.append("█████", style=theme._S.bar_mid)
+        bar.append("███", style=theme._S.bar_high)
+        bar.append("  80%", style=theme._S.dim)
+        console.print(bar)
+        heat = Text("  ")
+        for c in theme.heat_greens():
+            heat.append("■ ", style=c)
+        console.print(heat)
+    sl = themes.theme_to_statusline_ansi(name)
+    print(
+        f"  {sl['project']}[project]{sl['reset']}({sl['branch']}main{sl['reset']})  "
+        f"{sl['bar_ok']}██░{sl['reset']}  {sl['tokens']}Tokens 1.2M{sl['reset']}  "
+        f"{sl['model']}Opus 4.8{sl['reset']}"
+    )
+
+
+def _theme_set(name: str) -> None:
+    console = get_console()
+    if name not in themes.THEMES:
+        console.print(f"[red]{t('theme_unknown', name=name)}[/red]")
+        console.print(f"[dim]{t('theme_options', names=', '.join(themes.THEME_NAMES))}[/dim]")
+        sys.exit(1)
+    config.save_theme(name)
+    theme.set_active_theme(name)
+    console.print(t("theme_set_ok", name=name))
+    if is_setup():
+        update_hook()
+        console.print(f"[dim]{t('theme_set_statusline')}[/dim]")
+    if config.resolve_theme() != name:
+        console.print(f"[yellow]{t('theme_env_override')}[/yellow]")
+
+
+def _theme_preview(name: str) -> None:
+    console = get_console()
+    if name not in themes.THEMES:
+        console.print(f"[red]{t('theme_unknown', name=name)}[/red]")
+        console.print(f"[dim]{t('theme_options', names=', '.join(themes.THEME_NAMES))}[/dim]")
+        sys.exit(1)
+    console.print(f"[bold]{name}[/bold]")
+    _render_theme_sample(name)
+
+
+def cmd_theme(args: list[str]) -> None:
+    sub = args[0] if args else "show"
+    if sub == "show":
+        _theme_show()
+    elif sub == "list":
+        _theme_list()
+    elif sub == "set" and len(args) >= 2:
+        _theme_set(args[1])
+    elif sub == "preview" and len(args) >= 2:
+        _theme_preview(args[1])
+    elif sub in themes.THEMES:
+        _theme_set(sub)
+    else:
+        get_console().print(f"[dim]{t('theme_usage')}[/dim]")
+
+
 def main():
     args = sys.argv[1:]
     command = args[0] if args else "dashboard"
@@ -358,6 +461,10 @@ def main():
     if command in ("--version", "-v", "-V"):
         print(f"token-tracker {_get_version()}")
         print("by stormzhang · https://github.com/stormzhang/token-tracker")
+        return
+
+    if command == "theme":
+        cmd_theme(args[1:])
         return
 
     # 已配置过的情况下，任意命令都顺带同步状态栏脚本（setup/unsetup 自行处理）

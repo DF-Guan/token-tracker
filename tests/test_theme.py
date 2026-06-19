@@ -1,4 +1,6 @@
-from token_tracker import config
+import pytest
+
+from token_tracker import cli, config
 from token_tracker.ui import theme, themes
 
 
@@ -131,3 +133,41 @@ def test_heat_greens_follows_theme(monkeypatch):
     assert theme.heat_greens() == ["#313244", "#475951", "#628168", "#7da87f", "#a6e3a1"]
     theme.set_active_theme("default")
     assert theme.heat_greens()[0] == "bright_black"
+
+
+def test_theme_set_writes_config(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "CONFIG_DIR", str(tmp_path))
+    monkeypatch.setattr(config, "CONFIG_PATH", str(tmp_path / "theme.json"))
+    monkeypatch.setattr(cli, "is_setup", lambda: False)  # 不触发 update_hook
+    monkeypatch.delenv("TT_THEME", raising=False)
+    monkeypatch.setattr(theme, "_ACTIVE_NAME", None)
+    cli.cmd_theme(["set", "nord"])
+    assert config.load_theme_config()["theme"] == "nord"
+    assert theme.get_active_theme_name() == "nord"
+
+
+def test_theme_set_unknown_exits(monkeypatch):
+    monkeypatch.setattr(cli, "is_setup", lambda: False)
+    with pytest.raises(SystemExit):
+        cli.cmd_theme(["set", "bogus"])
+
+
+def test_cmd_theme_show_and_list_run(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(config, "CONFIG_PATH", str(tmp_path / "theme.json"))
+    monkeypatch.delenv("TT_THEME", raising=False)
+    monkeypatch.delenv("COLORFGBG", raising=False)
+    cli.cmd_theme([])  # show
+    cli.cmd_theme(["list"])  # list 列出所有主题名
+    out = capsys.readouterr().out
+    assert "mocha" in out and "dracula" in out
+
+
+def test_cmd_theme_shorthand_set(tmp_path, monkeypatch):
+    # `tt theme frappe` 简写 = set frappe
+    monkeypatch.setattr(config, "CONFIG_DIR", str(tmp_path))
+    monkeypatch.setattr(config, "CONFIG_PATH", str(tmp_path / "theme.json"))
+    monkeypatch.setattr(cli, "is_setup", lambda: False)
+    monkeypatch.delenv("TT_THEME", raising=False)
+    monkeypatch.setattr(theme, "_ACTIVE_NAME", None)
+    cli.cmd_theme(["frappe"])
+    assert config.load_theme_config()["theme"] == "frappe"
