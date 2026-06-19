@@ -37,7 +37,7 @@ def render_status(summary, per_agent, rate_limits, sessions, agents) -> None:
     with forced_color_console():
         _render_summary(summary, agents)
         if rate_limits:
-            _render_limits(rate_limits)
+            _render_limits(rate_limits, per_agent)
         else:
             _render_agent_stats(per_agent)
         if sessions:
@@ -70,23 +70,37 @@ def _render_summary(summary, agents: list[str]) -> None:
     get_console().print()
 
 
-def _render_limits(rate_limits: dict) -> None:
-    """订阅额度（weekly trend 样式横条）：每 agent 的 5h/7d，进度条按用量百分比着色。"""
-    table = Table(title=Text("[Rate Limits]", style=f"bold {_S.good}"), title_justify="left",
-                  box=box.SIMPLE, header_style="bold", padding=(0, 1), expand=False, border_style=_S.good)
-    table.add_column("Window", style=_S.good, no_wrap=True)
-    table.add_column("Used", justify="right")
-    table.add_column("", min_width=20)
-    table.add_column("Resets", justify="right", style=_S.dim)
-    for agent_id, rl in rate_limits.items():
-        short = AGENT_SHORT.get(agent_id, agent_id)
+def _render_limits(rate_limits: dict, per_agent: dict) -> None:
+    """订阅额度：每 agent 一段——头行（过去 5h Tokens / Cost / Model）+ 5h/7d 进度条。"""
+    blocks: list = [Text("[Rate Limits]", style=f"bold {_S.good}")]
+    for i, (agent_id, rl) in enumerate(rate_limits.items()):
+        if i:  # agent 块之间空一行，避免贴太紧
+            blocks.append(Text(""))
+        head = Text("  ")
+        head.append(AGENT_LABEL.get(agent_id, agent_id), style=f"bold {_S.good}")
+        st = per_agent.get(agent_id)
+        head.append("    Tokens: ", style=_S.dim)
+        head.append(_fmt_tokens(st.total_tokens if st else 0), style=_S.token_bold)
+        head.append("  Cost: ", style=_S.dim)
+        head.append(_fmt_cost(st.cost_usd if st else 0.0), style=_S.good)
+        if rl.model:
+            head.append("  Model: ", style=_S.dim)
+            head.append(_model_short(rl.model.split(" (")[0]), style=_S.cost)  # CC 名带 (1M context)，去括号
+        blocks.append(head)
+
+        table = Table(box=box.SIMPLE, show_header=False, show_edge=False, padding=(0, 1), expand=False)
+        table.add_column("", style=_S.good, no_wrap=True)
+        table.add_column("", justify="right")
+        table.add_column("", min_width=20)
+        table.add_column("", justify="right", style=_S.dim)
         for label, pct, resets in (("5h", rl.five_hour_pct, rl.five_hour_resets_at),
                                    ("7d", rl.seven_day_pct, rl.seven_day_resets_at)):
             if pct is None:
                 continue
-            reset_str = datetime.fromtimestamp(resets, tz=system_tz()).strftime("%H:%M") if resets else ""
-            table.add_row(f"{short} {label}", f"{pct:.0f}%", _bar_text(pct / 100, _pct_style(pct)), reset_str)
-    get_console().print(Padding(table, (0, 0, 0, 2), expand=False))
+            reset_str = f"reset at {datetime.fromtimestamp(resets, tz=system_tz()).strftime('%H:%M')}" if resets else ""
+            table.add_row(f"  {label}", f"{pct:.0f}%", _bar_text(pct / 100, _pct_style(pct)), reset_str)
+        blocks.append(table)
+    get_console().print(Padding(Group(*blocks), (0, 0, 0, 2), expand=False))
     get_console().print()
 
 

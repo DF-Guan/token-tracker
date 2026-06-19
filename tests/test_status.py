@@ -82,14 +82,20 @@ def test_render_status_with_limits(monkeypatch):
         _session("s1", "claude-code", "claude-opus-4-8", now, 65, 500, 2.0, 3),
         _session("s2", "codex", "gpt-5", now - timedelta(hours=1), 20, 500, 0.5, 2),
     ]
-    rl = {"claude-code": RateLimits(five_hour_pct=38.0, seven_day_pct=51.0)}
+    rl = {"claude-code": RateLimits(five_hour_pct=38.0, seven_day_pct=51.0,
+                                    model="Opus 4.8 (1M context)")}
+    per_agent = {"claude-code": StatusSummary(total_tokens=2_000_000, cost_usd=12.5)}
 
     with capture_console(160) as buf:
-        render_status(summary, {}, rl, sessions, ["Claude Code", "Codex"])
+        render_status(summary, per_agent, rl, sessions, ["Claude Code", "Codex"])
     out = buf.getvalue()
 
     assert "Last 5 hours" in out               # 头图
-    assert "Rate Limits" in out and "CC 5h" in out   # 额度段（weekly 样式）
+    # 额度段：agent 头行 Tokens / Cost / Model + 5h/7d 进度条
+    assert "Rate Limits" in out and "5h" in out and "7d" in out
+    assert "Tokens:" in out and "2.0M" in out  # 过去 5h tokens
+    assert "Cost:" in out and "$12" in out     # 过去 5h cost
+    assert "Model:" in out and "Opus 4.8" in out  # model（去掉 (1M context) 后缀）
     assert "CC" in out and "Codex" in out      # session source 列
     assert "1h05m" in out                      # Duration（65min）
 
