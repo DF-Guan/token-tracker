@@ -225,3 +225,24 @@ def test_statusline_tps_keeps_last_value_when_zero(tmp_path):
     out3 = _run_statusline_home(script, frame(111000, 20), home)
     assert "TPS: 200 tokens/s" in out3
     assert "TPS: 0 tokens/s" not in out3
+
+
+def test_statusline_tps_isolated_per_session(tmp_path):
+    # 多会话共享 tt-status.json：TPS 差分按 session_id 隔离，别的会话覆盖文件也不把本会话清成 "-"。
+    script = tmp_path / "tt-statusline.py"
+    script.write_text(hooks._render_hook_script(), encoding="utf-8")
+    home = tmp_path / "home"
+    (home / ".claude").mkdir(parents=True)
+
+    def frame(sid, api, out):
+        return {"session_id": sid, "workspace": {"project_dir": str(tmp_path)},
+                "context_window": {"current_usage": {"output_tokens": out}},
+                "cost": {"total_api_duration_ms": api}}
+
+    _run_statusline_home(script, frame("A", 1000, 5), home)            # A 建 prev_api
+    _run_statusline_home(script, frame("B", 500000, 5), home)          # B 覆盖文件、建自己 prev
+    out_a = _run_statusline_home(script, frame("A", 2000, 200), home)  # A：Δ1000 / out200 → 200
+    assert "TPS: 200 tokens/s" in out_a                                # 没被 B 的覆盖清成 "-"
+    _run_statusline_home(script, frame("B", 502000, 5), home)          # 夹一帧 B
+    out_b = _run_statusline_home(script, frame("B", 504000, 300), home)  # B：Δ2000 / out300 → 150
+    assert "TPS: 150 tokens/s" in out_b

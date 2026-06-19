@@ -14,7 +14,7 @@ CLAUDE_SETTINGS = os.path.expanduser("~/.claude/settings.json")
 HOOK_SCRIPT_PATH = os.path.expanduser("~/.claude/tt-statusline.py")
 CODEX_CONFIG = os.path.expanduser("~/.codex/config.toml")
 CODEX_BACKUP = os.path.expanduser("~/.codex/tt-backup.json")
-HOOK_VERSION = "1.17"
+HOOK_VERSION = "1.18"
 REPORT_HOOK_VERSION = "1.0"
 CC_REPORT_HOOK_PATH = os.path.expanduser("~/.claude/tt-report-hook.py")
 CC_COMMANDS_DIR = os.path.expanduser("~/.claude/commands")
@@ -172,17 +172,25 @@ def save_data(data, now):
 
 
 def _read_prev(session_id):
-    """save_data 覆盖前读旧帧的 (api_duration_ms, last_tps)，仅同会话有效。"""
-    if not session_id:
-        return None, None
+    """读旧 tt-status.json：本会话 (api_duration_ms, last_tps) + 全量 _tps_state（供合并写回）。
+
+    tt-status.json 是多会话共享单文件、会被其它会话覆盖；TPS 差分按 session_id 存进
+    _tps_state dict、各会话互不干扰。返回 state 让本帧把自己的状态并回去、不丢别的会话。
+    """
     try:
         with open(STATUS_FILE, encoding="utf-8") as f:
             old = json.load(f)
     except Exception:
-        return None, None
-    if old.get("session_id") != session_id:
-        return None, None
-    return (old.get("cost") or {}).get("total_api_duration_ms"), old.get("_last_tps")
+        return None, None, {}
+    state = old.get("_tps_state")
+    if not isinstance(state, dict):
+        state = {}
+    if session_id and session_id in state:
+        s = state.get(session_id) or {}
+        return s.get("api"), s.get("tps"), state
+    if session_id and old.get("session_id") == session_id:  # 兼容升级前的旧单会话帧
+        return (old.get("cost") or {}).get("total_api_duration_ms"), old.get("_last_tps"), state
+    return None, None, state
 
 
 def _compute_tps(data, prev_api_ms, prev_tps):
@@ -368,9 +376,15 @@ def main():
         return
 
     now = datetime.now(timezone.utc)
-    prev_api_ms, prev_tps = _read_prev(data.get("session_id"))  # 覆盖前读旧帧
+    session_id = data.get("session_id") or ""
+    prev_api_ms, prev_tps, state = _read_prev(session_id)  # 覆盖前读旧帧（按会话）
     tps = _compute_tps(data, prev_api_ms, prev_tps)
-    data["_last_tps"] = tps  # 存进本帧，供下一帧无有效值时沿用（常驻显示）
+    if session_id:  # 本会话 TPS 状态并回 _tps_state（多会话共享文件互不清零；LRU 限 20 防膨胀）
+        state.pop(session_id, None)
+        state[session_id] = {"api": (data.get("cost") or {}).get("total_api_duration_ms"), "tps": tps}
+        for k in list(state)[:-20]:
+            del state[k]
+        data["_tps_state"] = state
     save_data(data, now)
     render(data, now, tps)
 
