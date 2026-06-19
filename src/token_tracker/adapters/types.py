@@ -95,6 +95,8 @@ class SessionStats:
     cost_usd: float = 0.0
     message_count: int = 0
     agent_id: str = ""
+    # 会话内各 model 的 output_tokens（按生成量降序），渲染时取前若干个展示
+    models: dict[str, int] = field(default_factory=dict)
 
 
 @dataclass

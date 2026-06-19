@@ -180,7 +180,8 @@ def _render_sessions(sessions) -> None:
             _fmt_duration(s.duration_minutes),
         ]
         if mode != "compact":
-            row.append(_model_short(s.model))
+            names = list(s.models) or [s.model]
+            row.append(", ".join(_model_short(n) for n in names[:2]))
         row.append(AGENT_SHORT.get(s.agent_id, s.agent_id))
         table.add_row(*row)
     get_console().print(Padding(table, (0, 0, 0, 2), expand=False))

@@ -9,7 +9,8 @@ from token_tracker.analyzer.aggregator import (
 )
 
 
-def entry(ts, session_id, *, tokens=100, cost=0.5, msgs=1, model="claude-opus-4-6", project="proj"):
+def entry(ts, session_id, *, tokens=100, out=0, cache_read=0, cost=0.5, msgs=1,
+          model="claude-opus-4-6", project="proj"):
     # cost_usd is set explicitly so calculate_cost() short-circuits and never
     # touches the pricing network/cache — keeps these tests hermetic.
     return UsageEntry(
@@ -19,9 +20,9 @@ def entry(ts, session_id, *, tokens=100, cost=0.5, msgs=1, model="claude-opus-4-
         request_id=f"r-{ts.isoformat()}-{session_id}",
         model=model,
         input_tokens=tokens,
-        output_tokens=0,
+        output_tokens=out,
         cache_creation_tokens=0,
-        cache_read_tokens=0,
+        cache_read_tokens=cache_read,
         cost_usd=cost,
         project=project,
         agent_id="claude",
@@ -68,21 +69,36 @@ def test_aggregate_weekly_groups_by_iso_week():
     assert first.total_tokens == 200
 
 
-def test_aggregate_sessions_computes_duration_and_primary_model():
+def test_aggregate_sessions_primary_model_by_output_not_cache():
+    # 代表模型按 output（真实生成量）选，不被 cache_read 撑高 total 的后台小模型带偏。
     t0 = datetime(2026, 1, 1, 10, 0, tzinfo=UTC)
     t1 = datetime(2026, 1, 1, 10, 30, tzinfo=UTC)
     sessions = aggregate_sessions([
-        entry(t0, "s1", tokens=100, cost=0.5, model="claude-opus-4-6"),
-        entry(t1, "s1", tokens=300, cost=1.5, model="claude-sonnet-4-6"),
+        # opus 真正生成（output 高）；haiku 几乎没生成，只读了海量上下文（cache_read 撑高 total）
+        entry(t0, "s1", out=500, cost=0.5, model="claude-opus-4-8"),
+        entry(t1, "s1", out=5, cache_read=1_000_000, cost=1.5, model="claude-haiku-4-5"),
     ])
     assert len(sessions) == 1
     s = sessions[0]
     assert s.session_id == "s1"
     assert s.duration_minutes == 30.0
-    assert s.total_tokens == 400
     assert s.cost_usd == 2.0
-    # primary model = the one with the most tokens (sonnet 300 > opus 100)
-    assert s.model == "claude-sonnet-4-6"
+    # 按 total 会误选 haiku（cache_read 巨大）；按 output 正确选 opus
+    assert s.model == "claude-opus-4-8"
+    # models 按 output 降序，供「最多展示两个」用
+    assert list(s.models) == ["claude-opus-4-8", "claude-haiku-4-5"]
+
+
+def test_aggregate_sessions_models_ordered_by_output_for_display():
+    # 三个 model 时 models 仍按 output 降序，渲染层取前两个展示
+    t0 = datetime(2026, 1, 1, 10, 0, tzinfo=UTC)
+    sessions = aggregate_sessions([
+        entry(t0, "s1", out=10, model="claude-haiku-4-5"),
+        entry(t0, "s1", out=900, model="claude-opus-4-8"),
+        entry(t0, "s1", out=300, model="claude-sonnet-4-6"),
+    ])
+    s = sessions[0]
+    assert list(s.models) == ["claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5"]
 
 
 def test_aggregate_fills_projects_by_token():

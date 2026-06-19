@@ -91,10 +91,15 @@ def aggregate_sessions(entries: list[UsageEntry]) -> list[SessionStats]:
         last = session_entries[-1]
         duration = (last.timestamp - first.timestamp).total_seconds() / 60
 
-        models: dict[str, int] = defaultdict(int)
+        # 代表模型按 output_tokens（真实生成量）选，output 持平时用 total 兜底；
+        # 不用 total 直接选，避免后台小模型（如 Haiku）读了大量上下文、cache_read 撑高 total 被误判为主力。
+        out_by_model: dict[str, int] = defaultdict(int)
+        tot_by_model: dict[str, int] = defaultdict(int)
         for e in session_entries:
-            models[e.model] += e.total_tokens
-        primary_model = max(models, key=models.get) if models else "unknown"
+            out_by_model[e.model] += e.output_tokens
+            tot_by_model[e.model] += e.total_tokens
+        ranked = sorted(out_by_model, key=lambda m: (out_by_model[m], tot_by_model[m]), reverse=True)
+        primary_model = ranked[0] if ranked else "unknown"
 
         s = SessionStats(
             session_id=session_id,
@@ -103,6 +108,7 @@ def aggregate_sessions(entries: list[UsageEntry]) -> list[SessionStats]:
             start_time=first.timestamp,
             end_time=last.timestamp,
             duration_minutes=round(duration, 1),
+            models={m: out_by_model[m] for m in ranked},
         )
         for e in session_entries:
             add_token_fields(s, e, calculate_cost(e))
