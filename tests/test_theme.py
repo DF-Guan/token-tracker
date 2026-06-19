@@ -1,0 +1,98 @@
+from token_tracker import config
+from token_tracker.ui import themes
+
+
+def test_all_themes_have_complete_base_and_heat():
+    # 每个主题必须齐 9 基色 + is_light bool + 5 档热力。
+    for name in themes.THEME_NAMES:
+        spec = themes.get_theme(name)
+        assert set(spec["base"]) == set(themes.BASE_SLOTS), name
+        assert isinstance(spec["is_light"], bool), name
+        heat = themes.heat_colors(name)
+        assert len(heat) == 5, name
+
+
+def test_heat_interpolation_endpoints():
+    # 插值主题（无显式 heat）：首档=cell，末档=green。
+    spec = themes.get_theme("frappe")
+    heat = themes.heat_colors("frappe")
+    assert heat[0] == spec["cell"]
+    assert heat[-1] == spec["base"]["green"]
+
+
+def test_mocha_heat_unchanged():
+    # mocha 热力显式硬编码，须与历史像素一致（daily 热力图不回归）。
+    assert themes.heat_colors("mocha") == ["#313244", "#475951", "#628168", "#7da87f", "#a6e3a1"]
+
+
+def test_derive_slots_maps_semantics():
+    slots = themes.derive_slots(themes.get_theme("mocha")["base"])
+    assert slots["token"] == "#74c7ec"  # sapphire
+    assert slots["cost"] == "#f9e2af"  # yellow
+    assert slots["accent"] == "bold #a6e3a1"  # bold green
+    assert slots["dim"] == "#6c7086"  # overlay0
+
+
+def test_statusline_ansi_truecolor():
+    ansi = themes.theme_to_statusline_ansi("mocha")
+    assert set(ansi) == set(themes._STATUSLINE_SLOTS) | {"reset"}
+    assert ansi["reset"] == "\033[0m"
+    # truecolor 主题：着色 key 都是 38;2 序列。
+    assert all("38;2" in v for k, v in ansi.items() if k != "reset")
+    assert ansi["tokens"] == "\033[38;2;116;199;236m"  # sapphire #74c7ec
+
+
+def test_statusline_ansi_default_is_3bit():
+    ansi = themes.theme_to_statusline_ansi("default")
+    assert ansi["bar_ok"] == "\033[32m"  # green
+    assert ansi["bar_danger"] == "\033[31m"  # red
+    assert "38;2" not in "".join(ansi.values())
+
+
+def test_get_theme_unknown_falls_back_to_mocha():
+    assert themes.get_theme("nope") is themes.THEMES["mocha"]
+
+
+def test_resolve_env_alias_and_name(monkeypatch):
+    monkeypatch.setattr(config, "load_theme_config", lambda: {})
+    monkeypatch.delenv("COLORFGBG", raising=False)
+    monkeypatch.setenv("TT_THEME", "light")
+    assert config.resolve_theme() == "latte"
+    monkeypatch.setenv("TT_THEME", "dark")
+    assert config.resolve_theme() == "mocha"
+    monkeypatch.setenv("TT_THEME", "nord")
+    assert config.resolve_theme() == "nord"
+
+
+def test_resolve_auto_uses_colorfgbg(monkeypatch):
+    monkeypatch.setattr(config, "load_theme_config", lambda: {})
+    monkeypatch.setenv("TT_THEME", "auto")
+    monkeypatch.setenv("COLORFGBG", "0;15")
+    assert config.resolve_theme() == "latte"
+    monkeypatch.setenv("COLORFGBG", "15;0")
+    assert config.resolve_theme() == "mocha"
+
+
+def test_resolve_priority_env_over_config(monkeypatch):
+    # env 显式主题应盖过配置文件。
+    monkeypatch.setattr(config, "load_theme_config", lambda: {"theme": "dracula"})
+    monkeypatch.delenv("COLORFGBG", raising=False)
+    monkeypatch.setenv("TT_THEME", "nord")
+    assert config.resolve_theme() == "nord"
+    # env 未知值时落到配置文件。
+    monkeypatch.setenv("TT_THEME", "bogus")
+    assert config.resolve_theme() == "dracula"
+
+
+def test_resolve_config_when_env_absent(monkeypatch):
+    monkeypatch.setattr(config, "load_theme_config", lambda: {"theme": "frappe"})
+    monkeypatch.delenv("TT_THEME", raising=False)
+    monkeypatch.delenv("COLORFGBG", raising=False)
+    assert config.resolve_theme() == "frappe"
+
+
+def test_save_load_roundtrip(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "CONFIG_DIR", str(tmp_path / "cfg"))
+    monkeypatch.setattr(config, "CONFIG_PATH", str(tmp_path / "cfg" / "theme.json"))
+    config.save_theme("nord")
+    assert config.load_theme_config()["theme"] == "nord"

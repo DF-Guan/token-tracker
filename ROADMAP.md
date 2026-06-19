@@ -53,6 +53,9 @@
 - **UI 去重重构**（2026-06-18）：提取 `brand_line` / `append_metric` 到 `format.py`，daily（heatmap.py）与 weekly（tables.py）品牌行 + 指标渲染共用、消除重复；渲染输出逐字不变。
 - **daily/weekly 稀疏 + 窄终端自适应**（2026-06-18）：① Weekly Trend 取消本周高亮、逐周统一亮绿（本周恒在最上无需另标）；② daily 概览三行指标按终端可用宽贪心折行（`emit_metrics`，窄终端不溢出卡片）；③ Daily Trend 稀疏自适应——去前导空白天（保底 7 天）+ 中间 > 5 天连续空压成 3 列「·」gap + 标题显实际跨度；④ daily 图例署名窄终端自动另起一行、对齐 Less 列、空行隔开（避免终端硬折导致折行掉色），宽终端仍接图例右侧。
 - **会话内彩色报表 hook 产品化（终端 CLI）**（2026-06-18）：`tt setup` 自动注册会话内彩色命令——CC `/tt-daily`·`/tt-weekly`（`UserPromptExpansion`）、Codex `ttdaily`·`ttweekly`（`UserPromptSubmit`），`block`+`reason` 直接渲染真彩色报表、不经模型、不污染上下文。`hooks.py` 加 `CC_REPORT_HOOK_SCRIPT`/`CODEX_REPORT_HOOK_SCRIPT` 内嵌模板（`sys.executable -m token_tracker.cli` 调用、独立 `REPORT_HOOK_VERSION`、宽度探测 -14、Windows 跳 ioctl）+ 扩展 `_setup_*`/`_unsetup_*`（特征码 `tt-report-hook` 幂等合并、不覆盖用户 hook、CC 写 commands/*.md + 合并 UserPromptExpansion 数组、Codex 末尾追加 `[[hooks.UserPromptSubmit]]` 零依赖）+ 4 个测试 + README 双语（含「仅终端」限制）。
+- **统一多主题系统**（进行中，分 7 阶段，方案见 `~/.claude/plans/modular-chasing-pine.md`）：把现在割裂的两套配色（CLI `ui/theme.py` Catppuccin Mocha/Latte vs statusline `hooks.py` 内嵌 256-color + 写死 mocha）统一成一套主题源，主题集扩到 Catppuccin 全家（Mocha/Latte/Frappe/Macchiato）+ Nord + Dracula + default，支持预览、`tt theme` 切换、首次运行交互向导。
+  - **阶段 1 ✅ 地基（不接线）**（2026-06-18）：新增 `ui/themes.py`（7 主题 × 9 基色 + 5 档热力 + `is_light`；mocha/latte 迁现值、frappe/macchiato 官方 hex、Nord/Dracula 按色相就近映射 9 槽、default 用 3-bit 兼容色名；`derive_slots` 9→17 语义槽、`_STATUSLINE_SLOTS` 10 key 子集、`theme_to_statusline_ansi` hex→truecolor/default→3-bit）+ `config.py`（`~/.config/token-tracker/theme.json` 读写 + `resolve_theme` 优先级链 `TT_THEME`>配置>`COLORFGBG`>mocha、兼容旧 light/dark）+ `tests/test_theme.py` 12 用例。官方 hex 逐字段核对（catppuccin/palette、nordtheme、dracula README）。
+  - 阶段 2-7 待做：`_S` 运行时化（代理 + `preview_theme`）→ statusline 同源烘焙 → `tt theme set/show/list` → 预览 → 交互向导 → 测试/i18n/文档收尾。
 
 ## 待办 / 计划
 
@@ -68,6 +71,7 @@
 
 ## 最近验证
 
+- **2026-06-18**：统一多主题系统 阶段 1（地基）。新增 `ui/themes.py` + `config.py` + `tests/test_theme.py`，不接线。`uv run --extra dev pytest` 全绿（test_theme.py 12 用例 + 历史无回归）、`ruff check src tests` 全过、`mypy src` 5 历史无新增。frappe/macchiato/nord/dracula 官方 hex 经 WebFetch 逐字段核对。
 - **2026-06-18**：会话内彩色报表 hook 终端产品化（CC `/tt-daily`·`/tt-weekly` + Codex `ttdaily`·`ttweekly`，`tt setup` 自动配 + `unsetup` 恢复）。临时 HOME 实跑 setup/unsetup 往返：合并不覆盖用户 hook、幂等不翻倍、卸载恢复原配置、解释器烘焙 venv python；report 脚本端 daily/weekly 渲染真彩色、非命令放行。`pytest` 56 全绿（+4）、`ruff check src tests` 全过、`mypy src` 5 历史无新增。提交 `74f6b62`/`776728d`/`9d5001b`/`d4cc4de`。
 - **2026-06-18**：daily/weekly 稀疏 + 窄终端自适应（Weekly Trend 统一亮绿、概览 `emit_metrics` 折行、Daily Trend 去前导空 + 中间 gap、图例署名窄终端换行对齐）+ UI 去重（`brand_line`/`append_metric` 提取）。`pytest` 52 全绿、`ruff` 全过、`mypy` 5 历史无新增；窄终端（COLUMNS=40/44）+ 宽终端（120/200）实跑核对，去重前后渲染逐字一致。提交 `42386cd`/`62fc087`/`9330c7c`/`fea9d8e`/`e654537`/`b87feb4`。
 - **2026-06-18（探索，本地实验）**：会话内彩色 hook 黑科技双端跑通——CC `/tt-daily`·`/tt-weekly`（UserPromptExpansion）、Codex `ttdaily`·`ttweekly`（UserPromptSubmit），`block`+`reason` 渲染真彩色、不污染上下文（核验 `hooks.md`/`context-window.md`）；桌面版 GUI hook 支持但 ANSI 显乱码（实测），列为后续 HTML/md 适配。实验在 `.claude/`·`.codex/`（gitignore），记录存 `docs/`。
