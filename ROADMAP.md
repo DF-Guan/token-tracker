@@ -75,6 +75,7 @@
 
 ## 最近验证
 
+- **2026-06-19**：移除 `tt claude` / `tt codex` 两个独立子命令（交互式 dashboard 方向键已能切 agent，独立命令冗余）。`cli.py` 删 `AGENT_ALIASES` + `tt claude/codex` 处理块 + dashboard 的 `agent_filter` 分支；`i18n.py` 删 `agent_not_found` 文案、`available_cmds` 去 claude/codex（zh+en）；README 双语用法表删两行；CLAUDE.md 命令行同步。`tt claude` 现回退到「未知命令」并列可用命令、不崩溃。`pytest` 80 全绿、`ruff check src tests` 全过；实跑 `tt claude`（未知命令）、`tt`（默认 dashboard）正常。
 - **2026-06-19**：statusline 颜色分层重构——默认 truecolor、不支持则降当前主题 **256 色近似**、不再适配 8 色；删 `default` 主题（THEMES 6 个真彩主题）；判断改只认 `COLORTERM=truecolor/24bit`，顺手修 macOS Terminal.app 被误发 truecolor 的坑（它无 COLORTERM、`xterm-256color` → 走 256）。`themes.py` 加 `_hex_to_256` 近似算法（mocha green #a6e3a1 → 索引 151，与旧手调值一致）+ `theme_to_statusline_ansi(depth)`；`HOOK_VERSION` 1.11→1.12。`pytest` 80 全绿、`ruff` 全过、`mypy` 5 历史无新增；实跑落盘脚本：truecolor 终端发 38;2、`xterm-256color` 无 COLORTERM 发 38;5 且 0 残留 truecolor。依据：termstandard/colors 终端清单（WebFetch 核对）。
 - **2026-06-19**：按主人反馈把 statusline mocha 配色调回旧观感——`_STATUSLINE_SLOTS` 改（分支 `red` 玫红对齐旧 211、标签 `pink`、Tokens `peach`、Model/Duration `blue`），`HOOK_VERSION` 1.9→1.11 触发自动重烘焙；状态栏 token 色与 CLI 报表（sapphire 青）不再同源（主人审美选择）。注：旧 branch `38;5;211`（#ff87af）实为玫红 ≈ mocha red `#f38ba8`、非 pink，首次误映射 pink 已修正。`pytest` 79 全绿、`ruff` 全过；已 `update_hook()` 重烘焙本地脚本核对：红色 + 桃色就位、版本 1.11。
 - **2026-06-18**：统一多主题系统 阶段 7（文档收尾）+ 全工程收口（7 阶段完成）。README.md / README_EN.md（功能列表 + 使用表 + 「配色主题」节）、CLAUDE.md（「主题系统约定」节 + 结构表 + 命令行）同步。最终 `uv run --extra dev pytest` **79 全绿**（test_theme.py 22）、`ruff check src tests` 全过、`mypy src` 5 历史无新增。

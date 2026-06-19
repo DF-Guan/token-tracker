@@ -28,7 +28,6 @@ from .ui.tables import (
     render_weekly,
 )
 
-AGENT_ALIASES = {"claude": "claude-code", "codex": "codex"}
 AGENT_LOADERS = {"claude-code": claude, "codex": codex}
 RATE_LIMIT_LOADERS = {"claude-code": load_claude_rate_limits, "codex": codex.load_rate_limits}
 
@@ -507,24 +506,8 @@ def main():
         else:
             setup(auto=True)
 
-    # tt claude / tt codex
-    if command in AGENT_ALIASES:
-        agent_id = AGENT_ALIASES[command]
-        if agent_id not in agent_ids:
-            get_console().print(f"[red]{t('agent_not_found', name=command)}[/red]")
-            sys.exit(1)
-        _show_agent_dashboard(agent_id)
-        return
-
     if command == "dashboard":
-        agent_filter = args[1] if len(args) > 1 and args[1] in AGENT_ALIASES else None
-        if agent_filter:
-            agent_id = AGENT_ALIASES[agent_filter]
-            if agent_id not in agent_ids:
-                get_console().print(f"[red]{t('agent_not_found', name=agent_filter)}[/red]")
-                sys.exit(1)
-            _show_agent_dashboard(agent_id)
-        elif len(agents) > 1 and sys.stdin.isatty():
+        if len(agents) > 1 and sys.stdin.isatty():
             _show_interactive_dashboard(agents)
         else:
             _show_agent_dashboard(agents[0].id)

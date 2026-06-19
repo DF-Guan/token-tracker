@@ -84,8 +84,6 @@ pip install --force-reinstall token-tracker && tt setup
 ```bash
 tt setup          # initialize and configure Claude Code + Codex status_line
 tt                # interactive dashboard (arrow keys to switch agents)
-tt claude         # Claude Code only
-tt codex          # Codex only
 tt daily          # last-12-months token contribution heatmap (GitHub-style) + yearly analysis card
 tt weekly         # weekly report: this-week card + daily-trend bars + weekly / project / model trends
 tt monthly        # monthly summary (per-agent grouping)

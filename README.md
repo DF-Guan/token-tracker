@@ -84,8 +84,6 @@ pip install --force-reinstall token-tracker && tt setup
 ```bash
 tt setup          # 初始化配置 Claude Code + Codex status_line
 tt                # 交互式 Dashboard（方向键切换 Agent）
-tt claude         # 仅展示 Claude Code
-tt codex          # 仅展示 Codex
 tt daily          # 过去一年 token 贡献热力图（GitHub 风格）+ 年度分析卡片
 tt weekly         # 周报：本周分析卡片 + 每日趋势柱状图 + 周 / 项目 / 模型趋势
 tt monthly        # 按月汇总（多 Agent 分组展示）
