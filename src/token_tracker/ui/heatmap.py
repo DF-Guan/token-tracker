@@ -19,7 +19,7 @@ from ..adapters.types import DailyStats
 from ..i18n import t
 from .console import forced_color_console, get_console
 from .format import _fmt_cost, _fmt_tokens, _model_short, brand_line, emit_metrics
-from .theme import _S, HEAT_GREENS, _heat_level, _heat_thresholds
+from .theme import _S, _heat_level, _heat_thresholds, heat_greens
 
 _WEEKS = 53
 _CELL_W = 2  # 每格显示宽：方块(1) + 间隔(1)；■ 在多数终端按 1 列渲染
@@ -161,6 +161,7 @@ def _render_grid(tokens_by_date: dict[str, int]) -> None:
     get_console().print(Text("      " + "".join(header).rstrip(), style=_S.dim), soft_wrap=True)
 
     # 7 行：星期标签 + 方块 + 间隔
+    hg = heat_greens()
     for r in range(7):
         line = Text("  ")
         line.append(f"{_DAY_LABELS[r]}  ", style=_S.dim)
@@ -170,7 +171,7 @@ def _render_grid(tokens_by_date: dict[str, int]) -> None:
                 line.append(" " * _CELL_W)  # 未来日期占位（保持列对齐）
                 continue
             level = _heat_level(tokens_by_date.get(d.isoformat(), 0), thresholds)
-            line.append("■", style=HEAT_GREENS[level])
+            line.append("■", style=hg[level])
             line.append(" ")  # 格子间隔
         get_console().print(line, soft_wrap=True)
 
@@ -179,7 +180,7 @@ def _render_legend() -> None:
     get_console().print()
     line = Text()
     line.append(f"      {t('heat_less')} ", style=_S.dim)
-    for color in HEAT_GREENS:
+    for color in heat_greens():
         line.append("■", style=color)
         line.append(" ")
     line.append(t("heat_more"), style=_S.dim)

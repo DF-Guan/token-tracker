@@ -1,5 +1,5 @@
 from token_tracker import config
-from token_tracker.ui import themes
+from token_tracker.ui import theme, themes
 
 
 def test_all_themes_have_complete_base_and_heat():
@@ -96,3 +96,38 @@ def test_save_load_roundtrip(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "CONFIG_PATH", str(tmp_path / "cfg" / "theme.json"))
     config.save_theme("nord")
     assert config.load_theme_config()["theme"] == "nord"
+
+
+def test_s_proxy_follows_active_theme(monkeypatch):
+    monkeypatch.setattr(theme, "_ACTIVE_NAME", None)
+    theme.set_active_theme("mocha")
+    assert theme._S.token == "#74c7ec"  # mocha sapphire
+    assert theme._S.accent == "bold #a6e3a1"  # bold green
+    theme.set_active_theme("dracula")
+    assert theme._S.token == "#8be9fd"  # dracula cyan→sapphire
+
+
+def test_s_proxy_unknown_attr_raises(monkeypatch):
+    monkeypatch.setattr(theme, "_ACTIVE_NAME", "mocha")
+    try:
+        _ = theme._S.nope
+        raise AssertionError("expected AttributeError")
+    except AttributeError:
+        pass
+
+
+def test_preview_theme_restores(monkeypatch):
+    monkeypatch.setattr(theme, "_ACTIVE_NAME", "mocha")
+    before = theme._S.token
+    with theme.preview_theme("nord"):
+        assert theme._S.token == "#88c0d0"  # nord frost cyan→sapphire
+        assert theme.get_active_theme_name() == "nord"
+    assert theme._S.token == before
+    assert theme.get_active_theme_name() == "mocha"
+
+
+def test_heat_greens_follows_theme(monkeypatch):
+    monkeypatch.setattr(theme, "_ACTIVE_NAME", "mocha")
+    assert theme.heat_greens() == ["#313244", "#475951", "#628168", "#7da87f", "#a6e3a1"]
+    theme.set_active_theme("default")
+    assert theme.heat_greens()[0] == "bright_black"
