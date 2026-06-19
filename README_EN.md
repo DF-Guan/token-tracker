@@ -63,7 +63,7 @@ The status line has three rows, left to right:
 - **Cost analysis** — per-session, daily, weekly, monthly cost breakdown with per-agent grouping
 - **Pricing resolution** — litellm live pricing with built-in official-price fallback; new models in a known family are priced automatically (incl. Claude Fable 5 / Opus 4.8), and unknown models trigger an explicit warning instead of silently counting as $0
 - **Session insights** — project, model, duration, message count per session
-- **Catppuccin theme** — unified Catppuccin colors across the CLI; Mocha on dark terminals, Latte on light, auto-selected (override with `TT_THEME`)
+- **Unified multi-theme** — 7 themes (Catppuccin Mocha/Latte/Frappe/Macchiato + Nord + Dracula + default) shared across CLI reports and the status line; switch/preview with `tt theme`, auto-pick Catppuccin by terminal light/dark, first-run wizard guides selection (override with `TT_THEME`)
 - **Zero config** — auto-detects installed agents, reads local data directly
 - **Privacy first** — all data stays local, no collection or upload of any user information, lightweight and worry-free
 
@@ -90,6 +90,7 @@ tt daily          # last-12-months token contribution heatmap (GitHub-style) + y
 tt weekly         # weekly report: this-week card + daily-trend bars + weekly / project / model trends
 tt monthly        # monthly summary (per-agent grouping)
 tt sessions       # last 20 session details
+tt theme          # view / switch color theme (show / list / set / preview)
 tt unsetup        # uninstall and restore previous config
 ```
 
@@ -105,6 +106,27 @@ tt unsetup        # uninstall and restore previous config
 How it works: a Claude Code `UserPromptExpansion` / Codex `UserPromptSubmit` hook intercepts the command, runs the matching `tt` subcommand, and echoes the colored output back directly — never sent to the model. `tt unsetup` removes them.
 
 > ⚠️ **Terminal CLI only**: the desktop app / web versions are GUIs and don't render terminal ANSI, so these commands show up garbled / as plain text there. On desktop, use plain `tt daily` instead.
+
+### Color Themes
+
+7 built-in themes, **shared** across CLI reports and the status line (switching changes both):
+
+| Theme | Notes |
+|-------|-------|
+| `mocha` / `latte` / `frappe` / `macchiato` | Full Catppuccin (mocha/latte auto-picked by dark/light terminal) |
+| `nord` | Nord |
+| `dracula` | Dracula |
+| `default` | 3-bit fallback for terminals without truecolor |
+
+```bash
+tt theme               # show current theme and its source
+tt theme list          # list all themes with color swatches
+tt theme preview nord  # preview a theme (CLI sample + status line sample)
+tt theme set nord      # switch theme (persist + re-bake status line)
+```
+
+- **First run** (in a terminal, not inside an AI session) opens an interactive wizard to pick a theme; CI / scripts / in-session runs skip it silently and use the default.
+- Choice persists to `~/.config/token-tracker/theme.json` ; the `TT_THEME=<name>` env var has the highest priority and can override temporarily.
 
 ### Report Sorting
 
