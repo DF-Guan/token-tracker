@@ -155,11 +155,41 @@ def test_statusline_line4_tps_code_repo(tmp_path):
     out = _run_statusline_home(script, frame2, home)  # 同会话 Δ1000ms / output 200 → TPS 200
     assert "TPS: 200 tokens/s" in out  # 带单位
     assert "Code" in out and "+208" in out and "-8" in out
-    assert "Repo: github.com" in out
+    assert "Remote: github" in out and "github.com" not in out  # .com 被去除
     # 第三帧空闲（Δ=0、output 小）→ 沿用上次 200，不回落到 -
     frame3 = {**frame2, "context_window": {"current_usage": {"output_tokens": 2}}}
     out3 = _run_statusline_home(script, frame3, home)
     assert "TPS: 200 tokens/s" in out3
+
+
+def test_statusline_total_tokens(tmp_path):
+    # Total：从 transcript 解析会话累计 in+out+cache（去重、跳非 assistant），第 1 行显示总和。
+    script = tmp_path / "tt-statusline.py"
+    script.write_text(hooks._render_hook_script(), encoding="utf-8")
+    home = tmp_path / "home"
+    (home / ".claude").mkdir(parents=True)
+    tx = tmp_path / "tx.jsonl"
+    rows = [
+        {"type": "assistant", "requestId": "r1", "message": {"id": "m1", "usage": {
+            "input_tokens": 100, "output_tokens": 2000,
+            "cache_creation_input_tokens": 500, "cache_read_input_tokens": 3000}}},
+        {"type": "assistant", "requestId": "r1", "message": {"id": "m1", "usage": {  # 重复 → 去重
+            "input_tokens": 100, "output_tokens": 2000,
+            "cache_creation_input_tokens": 500, "cache_read_input_tokens": 3000}}},
+        {"type": "assistant", "requestId": "r2", "message": {"id": "m2", "usage": {
+            "input_tokens": 50, "output_tokens": 1000,
+            "cache_creation_input_tokens": 0, "cache_read_input_tokens": 4000}}},
+        {"type": "user", "message": {}},  # 非 assistant 跳过
+    ]
+    tx.write_text("\n".join(json.dumps(r) for r in rows), encoding="utf-8")
+    payload = {"session_id": "S1", "transcript_path": str(tx),
+               "workspace": {"project_dir": str(tmp_path)},
+               "context_window": {"current_usage": {"output_tokens": 1}},
+               "cost": {"total_api_duration_ms": 1000}}
+    out = _run_statusline_home(script, payload, home)
+    # in=150, out=3000, cache=(500+3000)+(0+4000)=7500；Total=in+out+cache=10650→11k
+    assert "Total: 11k" in out
+    assert "Cache" not in out  # Cache 单列已删除
 
 
 def test_statusline_line4_tps_dash_when_no_prior_value(tmp_path):

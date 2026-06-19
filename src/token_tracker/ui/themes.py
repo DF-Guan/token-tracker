@@ -77,9 +77,10 @@ THEMES: dict[str, dict] = {
 # 展示顺序（tt theme list / 向导）。
 THEME_NAMES = tuple(THEMES)
 
-# statusline 10 个着色 key → 9 基色槽（reset 固定为 \033[0m，单列）。
+# statusline 12 个着色 key → 9 基色槽（reset 固定为 \033[0m，单列）。
 # 这套角色映射沿用旧 mocha 状态栏观感（分支红/玫红、标签粉、Tokens 桃、Model/Duration 蓝），
 # 与 CLI 报表的 _S 语义槽**不完全同源**（CLI token=sapphire 青）——按主人审美选择保留状态栏旧手感。
+# total=red 红：第 1 行消耗/产出指标（Total/Cost/Code 标签）用它。
 _STATUSLINE_SLOTS = {
     "project": "green",
     "branch": "red",
@@ -90,6 +91,7 @@ _STATUSLINE_SLOTS = {
     "bar_warn": "yellow",
     "bar_danger": "red",
     "tokens": "peach",
+    "total": "red",
     "duration": "blue",
     "model": "blue",
 }

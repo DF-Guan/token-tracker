@@ -20,21 +20,20 @@ The status line has four rows, left to right:
 
 | Row | Field | Description |
 |-----|-------|-------------|
-| 1 | `project(branch +12 -3)` | Current project directory + Git branch (`*` = uncommitted changes), with added/removed lines vs HEAD in parentheses |
-| 1 | `5h: ██░ 31% (1h19m)` | 5-hour sliding window quota usage, countdown to reset in parentheses |
-| 1 | `7d: ██░ 11% (5d8h)` | 7-day sliding window quota usage |
-| 1 | `1.0M Context: ██░ 20%` | Total context window size and usage percentage |
-| 2 | `Tokens: in 155k, out 128k` | Cumulative input/output tokens for the current session |
-| 2 | `(Turn: in 1, out 15)` | Token usage for the current conversation turn |
-| 2 | `Cached: 204k` | Prompt cache hit tokens for the current turn |
-| 2 | `Cost: $35.51` | Estimated session cost (based on official pricing) |
-| 3 | `Model: Opus 4.6/high/nofast` | Model / thinking level / fast mode status |
-| 3 | `Duration: 1h33m` | Current session elapsed time |
-| 4 | `TPS: 60 tokens/s` | Current-turn output token generation speed (includes thinking; idle frames keep the last value) |
-| 4 | `Code +208 -8` | Lines of code written / removed by Claude this session |
-| 4 | `Repo: github.com` | Code repository host |
+| 1 | `[project](branch +12 -3)` | Project name (bold) + Git branch (`*` = uncommitted), with added/removed lines vs HEAD in parentheses |
+| 1 | `Total: 1.2M` | Cumulative tokens consumed this session (input+output+cache, parsed from transcript) |
+| 1 | `Cost: $35.51` | Session cost (from Claude Code itself, official billing, accurate) |
+| 1 | `Code: +208 -8` | Lines of code written / removed by Claude this session (`+` green `-` red, same as git diff) |
+| 2 | `Limit: 5h: ██░ 31% (1h19m)` | 5-hour sliding window quota (subscription only; reset countdown in parens) |
+| 2 | `7d: ██░ 11% (5d8h)` | 7-day sliding window quota |
+| 2 | `1.0M Ctx: ██░ 20%` | Total context window size and usage percentage |
+| 3 | `Tokens: in 392k, out 937, cache 388k` | **Current context window** token breakdown (note: not session cumulative; changes on compact) |
+| 3 | `Out TPS: 60 tokens/s` | Current-turn output token generation speed (includes thinking; idle frames keep last value) |
+| 4 | `Model: Opus 4.8/xhigh/nofast` | Model / reasoning level / fast mode status |
+| 4 | `Duration: 1h33m` | Current session elapsed time |
+| 4 | `Remote: github` | Code repository host (top-level domain stripped) |
 
-> When terminal width is limited, the display auto-degrades: first hides reset countdowns, then simplifies progress bars to plain percentages.
+> When terminal width is limited, the display auto-degrades: first hides reset countdowns, then simplifies progress bars to plain percentages. **API mode** has no subscription quota, so row 2 shows only Ctx.
 
 **Codex**: Custom StatusLine rendering is not yet supported by Codex, so the official default style is reused. `tt setup` only writes the field configuration.
 

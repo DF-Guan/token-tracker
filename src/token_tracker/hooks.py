@@ -14,7 +14,7 @@ CLAUDE_SETTINGS = os.path.expanduser("~/.claude/settings.json")
 HOOK_SCRIPT_PATH = os.path.expanduser("~/.claude/tt-statusline.py")
 CODEX_CONFIG = os.path.expanduser("~/.codex/config.toml")
 CODEX_BACKUP = os.path.expanduser("~/.codex/tt-backup.json")
-HOOK_VERSION = "1.15"
+HOOK_VERSION = "1.16"
 REPORT_HOOK_VERSION = "1.0"
 CC_REPORT_HOOK_PATH = os.path.expanduser("~/.claude/tt-report-hook.py")
 CC_COMMANDS_DIR = os.path.expanduser("~/.claude/commands")
@@ -196,12 +196,42 @@ def _compute_tps(data, prev_api_ms, prev_tps):
     return prev_tps
 
 
+def _read_transcript_totals(path):
+    """解析会话 transcript 的累计 (input, output, cache) token，按 message_id:requestId 去重。
+
+    数据来自 CC 源文件（stdin 的 transcript_path），约 1.8MB / 800 行长会话解析约 6ms；失败返回 (0,0,0)。
+    """
+    inp = out = cache = 0
+    seen = set()
+    try:
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                try:
+                    x = json.loads(line)
+                except Exception:
+                    continue
+                if x.get("type") != "assistant":
+                    continue
+                k = f"{x.get('message', {}).get('id')}:{x.get('requestId')}"
+                if k in seen:
+                    continue
+                seen.add(k)
+                u = x.get("message", {}).get("usage", {})
+                inp += u.get("input_tokens", 0)
+                out += u.get("output_tokens", 0)
+                cache += u.get("cache_creation_input_tokens", 0) + u.get("cache_read_input_tokens", 0)
+    except Exception:
+        return 0, 0, 0
+    return inp, out, cache
+
+
 def render(data, now, tps=None):
     W = get_width()
     ctx = data.get("context_window") or {}
+    cost = data.get("cost") or {}
     bar_w = 8 if W >= 100 else 6 if W >= 60 else 4
 
-    # --- Line 1: Project | 5h | 7d | CTX ---
+    # --- Line 1: Project | Total | Cost | Code（项目名原色，消耗/产出指标统一青色）---
     line1 = []
 
     project = (data.get("workspace") or {}).get("project_dir", "")
@@ -215,10 +245,36 @@ def render(data, now, tps=None):
                 inner += f" {C['added']}+{added}{C['reset']}"
             if deleted:
                 inner += f" {C['deleted']}-{deleted}{C['reset']}"
-            line1.append(f"{C['project']}[{name}]{C['reset']}({inner})")
+            line1.append(f"\033[1m{C['project']}[{name}]{C['reset']}({inner})")
         else:
-            line1.append(f"{C['project']}[{name}]{C['reset']}")
+            line1.append(f"\033[1m{C['project']}[{name}]{C['reset']}")
 
+    # Total：会话累计（解析 transcript，CC 源数据，长会话约 6ms）；Total = in+out+cache
+    tpath = data.get("transcript_path")
+    if tpath:
+        tin, tout, tcache = _read_transcript_totals(tpath)
+        if tin or tout or tcache:
+            line1.append(f"{C['total']}Total: {fmt_tokens(tin + tout + tcache)}{C['reset']}")
+
+    # Cost（CC 自带累计，准确）
+    usd = cost.get("total_cost_usd")
+    if usd is not None:
+        line1.append(f"{C['total']}Cost: ${usd:.2f}{C['reset']}")
+
+    # Code：本会话 Claude 写/删的代码行数（标签青色，+/- 与 L1 git 变动同样的绿/红）
+    lines_added = cost.get("total_lines_added", 0)
+    lines_removed = cost.get("total_lines_removed", 0)
+    if lines_added or lines_removed:
+        line1.append(
+            f"{C['total']}Code:{C['reset']} "
+            f"{C['added']}+{lines_added}{C['reset']} {C['deleted']}-{lines_removed}{C['reset']}"
+        )
+
+    # 窄终端：宽度不够从尾部逐段去（保留项目名）
+    while len(line1) > 1 and vlen(" | ".join(line1)) > W:
+        line1.pop()
+
+    # --- Line 2: Limit: 5h | 7d | Ctx ---
     rl = data.get("rate_limits") or {}
     rl_parts = []
     for key, label in [("five_hour", "5h"), ("seven_day", "7d")]:
@@ -236,7 +292,6 @@ def render(data, now, tps=None):
                 f"{C['label']}{label}:{C['reset']}{progress_bar(pct, bar_w)}",
                 f"{C['label']}{label}:{pct:.0f}%{C['reset']}",
             ))
-
     ctx_parts = []
     if ctx.get("used_percentage") is not None:
         size = ctx.get("context_window_size", 0)
@@ -244,53 +299,36 @@ def render(data, now, tps=None):
             f"{C['label']}{fmt_tokens(size)} Ctx:{C['reset']}{progress_bar(ctx['used_percentage'], bar_w)}",
             f"{C['label']}{fmt_tokens(size)} Ctx:{ctx['used_percentage']:.0f}%{C['reset']}",
         ]
-
-    # 尝试完整版（带进度条+reset time）
-    full = line1 + [p[0] for p in rl_parts] + (ctx_parts[:1] if ctx_parts else [])
-    candidate = " | ".join(full)
-    if vlen(candidate) <= W:
-        line1 = full
-    else:
-        # 去掉 reset time
-        no_reset = line1 + [p[1] for p in rl_parts] + (ctx_parts[:1] if ctx_parts else [])
-        candidate = " | ".join(no_reset)
-        if vlen(candidate) <= W:
-            line1 = no_reset
-        else:
-            # 去掉进度条，只留百分比
-            minimal = line1 + [p[2] for p in rl_parts] + (ctx_parts[1:2] if ctx_parts else [])
-            line1 = minimal
-
-    # --- Line 2: Tokens + Cache + Cost ---
     line2 = []
+    if rl_parts or ctx_parts:
+        for idx in (0, 1, 2):
+            rl_seg = [p[idx] for p in rl_parts]
+            ctx_seg = (ctx_parts[:1] if idx < 2 else ctx_parts[1:2]) if ctx_parts else []
+            segs = rl_seg + ctx_seg
+            if rl_seg:
+                segs[0] = f"{C['label']}Limit:{C['reset']} {segs[0]}"
+            if idx == 2 or vlen(" | ".join(segs)) <= W:
+                line2 = segs
+                break
 
+    # --- Line 3: Tokens（上下文窗口 in/out/cache 构成，非会话累计）| TPS ---
+    line3 = []
     total_in = ctx.get("total_input_tokens", 0)
     total_out = ctx.get("total_output_tokens", 0)
-    curr_usage = (ctx.get("current_usage") or {})
-    turn_in_total = curr_usage.get("input_tokens", 0) + curr_usage.get("cache_creation_input_tokens", 0)
-    turn_out = curr_usage.get("output_tokens", 0)
-    turn_str = f" \033[2m{C['tokens']}(本轮: in {fmt_tokens(turn_in_total)}, out {fmt_tokens(turn_out)}){C['reset']}"
+    cache_read = (ctx.get("current_usage") or {}).get("cache_read_input_tokens", 0)
     if total_in or total_out:
-        tok_full = f"{C['tokens']}Tokens: in {fmt_tokens(total_in)}, out {fmt_tokens(total_out)}{turn_str}"
-        tok_short = f"{C['tokens']}Tokens: in {fmt_tokens(total_in)}, out {fmt_tokens(total_out)}{C['reset']}"
-        line2.append(tok_full)
-    cache_read = curr_usage.get("cache_read_input_tokens", 0)
-    if cache_read > 0:
-        line2.append(f"{C['tokens']}Cached: {fmt_tokens(cache_read)}{C['reset']}")
+        tok = f"{C['tokens']}Tokens: in {fmt_tokens(total_in)}, out {fmt_tokens(total_out)}"
+        if cache_read:
+            tok += f", cache {fmt_tokens(cache_read)}"
+        line3.append(tok + C['reset'])
+    # 本轮 TPS（main 里算好传入，带单位）；颜色与 L3 Tokens 一致（tokens 桃色）
+    tps_str = f"{tps:.0f} tokens/s" if tps else "-"
+    line3.append(f"{C['tokens']}Out TPS: {tps_str}{C['reset']}")
+    while len(line3) > 1 and vlen(" | ".join(line3)) > W:
+        line3.pop()
 
-    cost = data.get("cost") or {}
-    usd = cost.get("total_cost_usd")
-    if usd is not None:
-        line2.append(f"{C['tokens']}Cost: ${usd:.2f}{C['reset']}")
-
-    # 宽度不够时隐藏本轮数据
-    if vlen(" | ".join(line2)) > W and (total_in or total_out):
-        line2[0] = tok_short
-        if vlen(" | ".join(line2)) > W:
-            line2 = line2[1:]
-
-    # --- Line 3: Model | Duration ---
-    line3 = []
+    # --- Line 4: Model | Duration | Remote ---
+    line4 = []
 
     model_name = (data.get("model") or {}).get("display_name", "")
     if model_name:
@@ -298,42 +336,17 @@ def render(data, now, tps=None):
         effort = (data.get("effort") or {}).get("level", "")
         if effort:
             model_name += f"/{effort}"
-        fast = data.get("fast_mode")
-        model_name += f"/{'fast' if fast else 'nofast'}"
-        line3.append(f"{C['model']}Model: {model_name}{C['reset']}")
+        model_name += f"/{'fast' if data.get('fast_mode') else 'nofast'}"
+        line4.append(f"{C['model']}Model: {model_name}{C['reset']}")
 
     duration_ms = cost.get("total_duration_ms")
-    duration_part = ""
     if duration_ms and duration_ms > 0:
-        duration_part = f"{C['duration']}Duration: {fmt_duration(duration_ms / 1000)}{C['reset']}"
-        line3.append(duration_part)
+        line4.append(f"{C['duration']}Duration: {fmt_duration(duration_ms / 1000)}{C['reset']}")
 
-    # 宽度不够时隐藏会话时长
-    if vlen(" | ".join(line3)) > W and duration_part:
-        line3 = [p for p in line3 if p != duration_part]
-
-    # --- Line 4: 本轮 TPS | Code 行数 | Repo host ---
-    line4 = []
-
-    # 本轮 TPS（main 里算好传入，带单位让含义自明）；无有效值显示 -
-    tps_str = f"{tps:.0f} tokens/s" if tps else "-"
-    line4.append(f"{C['tokens']}TPS: {tps_str}{C['reset']}")
-
-    # Code: 本会话 Claude 写/删的代码行数（与第 1 行 git diff 语义不同）
-    lines_added = cost.get("total_lines_added", 0)
-    lines_removed = cost.get("total_lines_removed", 0)
-    if lines_added or lines_removed:
-        line4.append(
-            f"{C['label']}Code{C['reset']} "
-            f"{C['added']}+{lines_added}{C['reset']} {C['deleted']}-{lines_removed}{C['reset']}"
-        )
-
-    # Repo host
     repo_host = ((data.get("workspace") or {}).get("repo") or {}).get("host", "")
     if repo_host:
-        line4.append(f"{C['model']}Repo: {repo_host}{C['reset']}")
+        line4.append(f"{C['model']}Remote: {repo_host.rsplit('.', 1)[0]}{C['reset']}")
 
-    # 窄终端：宽度不够从尾部逐段去（先 Repo、再 Code，保留 TPS）
     while len(line4) > 1 and vlen(" | ".join(line4)) > W:
         line4.pop()
 
