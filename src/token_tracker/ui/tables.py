@@ -15,14 +15,13 @@ from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
 
-from ..adapters.types import DailyStats, MonthlyStats, SessionStats, WeeklyStats
+from ..adapters.types import DailyStats, MonthlyStats, WeeklyStats
 from ..i18n import t
 from .console import forced_color_console, get_console
 from .format import (
     AGENT_LABEL,
     AGENT_SHORT,
     _fmt_cost,
-    _fmt_duration,
     _fmt_tokens,
     _group_by_agent,
     _is_multi_agent,
@@ -31,7 +30,6 @@ from .format import (
     _width_mode,
     append_metric,
     brand_line,
-    system_tz,
 )
 from .panels import (
     _render_agent_summaries,
@@ -44,7 +42,6 @@ __all__ = [
     "AGENT_LABEL",
     "render_daily",
     "render_monthly",
-    "render_sessions",
     "render_weekly",
 ]
 
@@ -434,60 +431,3 @@ def _render_model_breakdown(stats: list[MonthlyStats]) -> None:
         )
 
     get_console().print(table)
-
-
-def render_sessions(stats: list[SessionStats], limit: int = 20) -> None:
-    if not stats:
-        get_console().print(f"[{_S.warn}]{t('no_data')}[/{_S.warn}]")
-        return
-
-    multi_agent = _is_multi_agent(stats)
-    shown = stats[:limit]
-    total_tokens = sum(s.total_tokens for s in shown)
-    total_cost = sum(s.cost_usd for s in shown)
-
-    get_console().print()
-    get_console().print(Panel(
-        f"[bold]Token Tracker[/bold]  {t('session_summary', shown=len(shown), total=len(stats))}  "
-        f"Token: [{_S.token_bold}]{_fmt_tokens(total_tokens)}[/{_S.token_bold}]  "
-        f"{t('cost_colon')}[{_S.cost_bold}]{_fmt_cost(total_cost)}[/{_S.cost_bold}]",
-        border_style=_S.blue,
-        padding=(0, 1),
-    ))
-
-    mode = _width_mode()
-    table = Table(box=box.SIMPLE_HEAVY, header_style="bold", padding=(0, 1))
-    table.add_column(t("col_time"), style=_S.token, no_wrap=True)
-    if multi_agent:
-        table.add_column(t("col_source"), no_wrap=True)
-    table.add_column(t("col_project"), no_wrap=True, max_width=14)
-    if mode != "compact":
-        table.add_column(t("col_model"), style=_S.cost, no_wrap=True)
-        table.add_column(t("col_duration"), justify="right")
-    if mode == "wide":
-        table.add_column("Input", justify="right")
-        table.add_column("Output", justify="right")
-    table.add_column(t("col_total_tokens"), justify="right", style="bold")
-    table.add_column(t("col_cost"), justify="right", style=_S.good)
-    table.add_column(t("col_messages"), justify="right", style=_S.dim)
-
-    max_tokens = max(s.total_tokens for s in shown) if shown else 1
-
-    for s in shown:
-        row: list = [s.start_time.astimezone(system_tz()).strftime("%m-%d %H:%M")]
-        if multi_agent:
-            row.append(AGENT_SHORT.get(s.agent_id, s.agent_id))
-        row.append(_project_short(s.project))
-        if mode != "compact":
-            row += [_model_short(s.model), _fmt_duration(s.duration_minutes)]
-        if mode == "wide":
-            row += [_fmt_tokens(s.input_tokens), _fmt_tokens(s.output_tokens)]
-        row += [
-            Text(_fmt_tokens(s.total_tokens), style=_token_heat_style(s.total_tokens / max_tokens)),
-            _fmt_cost(s.cost_usd),
-            str(s.message_count),
-        ]
-        table.add_row(*row)
-
-    get_console().print(table)
-    get_console().print()

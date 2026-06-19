@@ -45,15 +45,36 @@ def render_status(summary, per_agent, rate_limits, sessions, agents) -> None:
         get_console().print()
 
 
-def _render_summary(summary, agents: list[str]) -> None:
-    """头图品牌面板：仿 daily `_render_summary`，数据是过去 5h 多 agent 合并汇总。"""
-    now = datetime.now(system_tz())  # 系统真实时区（绕过 CLI 的 TZ）
-    start = now - timedelta(hours=5)
+def render_sessions_view(summary, sessions, agents) -> None:
+    """tt sessions：复用 status 的头图概览 + session 列表两段（无额度段）；
+    顶部统计与副标题均以展示出的 session 为主。"""
+    with forced_color_console():
+        subtitle = None
+        if sessions:
+            times = [s.start_time.astimezone(system_tz()) for s in sessions]
+            subtitle = (f"{min(times).strftime('%m-%d %H:%M')} ~ {max(times).strftime('%m-%d %H:%M')}"
+                        f"  ·  {len(sessions)} sessions")
+        _render_summary(summary, agents, title="Recent sessions", subtitle=subtitle)
+        if sessions:
+            _render_sessions(sessions)
+            get_console().print(Padding(Text(t("sessions_tips"), style=_S.dim), (0, 0, 0, 3)))
+        get_console().print()
+
+
+def _render_summary(summary, agents: list[str], title: str = "Last 5 hours",
+                    subtitle: str | None = None) -> None:
+    """头图品牌面板：仿 daily `_render_summary`。title/subtitle 可定制
+    （status=过去 5h 时间窗；sessions=最近 N 条的时间跨度）。"""
     brand = brand_line(agents)
     avail = max(40, get_console().width - 6)
     body = Text()
-    body.append("Last 5 hours", style=f"bold {_S.good}")
-    body.append(f"  {start.strftime('%H:%M')} ~ {now.strftime('%H:%M')}", style=f"dim {_S.good}")
+    body.append(title, style=f"bold {_S.good}")
+    if subtitle is None:  # 默认 status 的过去 5h 时间窗（系统真实时区，绕过 CLI 的 TZ）
+        now = datetime.now(system_tz())
+        start = now - timedelta(hours=5)
+        subtitle = f"{start.strftime('%H:%M')} ~ {now.strftime('%H:%M')}"
+    if subtitle:
+        body.append(f"  {subtitle}", style=f"dim {_S.good}")
     body.append("\n")
     metrics = [
         ("Tokens", _fmt_tokens(summary.total_tokens)),
@@ -124,32 +145,42 @@ def _render_agent_stats(per_agent: dict) -> None:
 
 
 def _render_sessions(sessions) -> None:
-    """合并 session 列表：强制 Agent 列、加 Duration / Total tokens；按 cost 倒序、前三名 cost 高亮。"""
+    """合并 session 列表：按 cost 倒序；Time 蓝 / Project 绿 / Tokens 橙 / Cost 黄；
+    Tokens·Cost 各自前三（第一红、二三粉）；列序 Time·Project·Tokens·Cost·Msgs·Duration·Model·Agent。"""
     mode = _width_mode()
-    table = Table(title=t("recent_sessions"), box=box.SIMPLE_HEAVY, header_style="bold",
-                  padding=(0, 1), expand=False)
-    table.add_column(t("col_time"), style=_S.token, no_wrap=True)
-    table.add_column(t("col_agent"), no_wrap=True)
-    table.add_column(t("col_project"), no_wrap=True, max_width=14)
-    if mode != "compact":
-        table.add_column(t("col_model"), style=_S.cost, no_wrap=True)
+    table = Table(title=f"{t('recent_sessions')} ({len(sessions)})", box=box.SIMPLE_HEAVY,
+                  header_style="bold", padding=(0, 1), expand=False)
+    table.add_column(t("col_time"), style=_S.blue, no_wrap=True)
+    table.add_column(t("col_project"), style=_S.good, no_wrap=True, max_width=14)
+    table.add_column(t("col_total_tokens"), justify="right", style=_S.peach)
+    table.add_column(t("col_cost"), justify="right", style=_S.warn)
+    table.add_column(t("col_messages"), justify="right")
     table.add_column(t("col_duration"), justify="right")
-    table.add_column(t("col_total_tokens"), justify="right", style=_S.token_bold)
-    table.add_column(t("col_cost"), justify="right", style=_S.good)
-    table.add_column(t("col_messages"), justify="right", style=_S.dim)
-    # cost 前三名用不同色突出（top1 红 / top2 橙 / top3 黄）
-    top_styles = (f"bold {_S.bad}", f"bold {_S.peach}", f"bold {_S.warn}")
+    if mode != "compact":
+        table.add_column(t("col_model"), no_wrap=True)
+    table.add_column(t("col_agent"), no_wrap=True)
+    # Tokens / Cost 各自前三名突出：第一红、第二三粉（各按本列值排、不依赖行序）
+    top_styles = (f"bold {_S.bad}", f"bold {_S.pink}", f"bold {_S.pink}")
+
+    def _top3(key):
+        ranked = sorted(range(len(sessions)), key=lambda i: key(sessions[i]), reverse=True)[:3]
+        return {i: r for r, i in enumerate(ranked)}
+
+    tok_top, cost_top = _top3(lambda s: s.total_tokens), _top3(lambda s: s.cost_usd)
     for idx, s in enumerate(sessions):
-        row: list = [s.start_time.astimezone(system_tz()).strftime("%m-%d %H:%M"),
-                     AGENT_SHORT.get(s.agent_id, s.agent_id), _project_short(s.project)]
-        if mode != "compact":
-            row.append(_model_short(s.model))
-        cost_cell = Text(_fmt_cost(s.cost_usd), style=top_styles[idx]) if idx < 3 else _fmt_cost(s.cost_usd)
-        row += [
-            _fmt_duration(s.duration_minutes),
-            Text(_fmt_tokens(s.total_tokens), style=_S.token_bold),
+        tok, cost = _fmt_tokens(s.total_tokens), _fmt_cost(s.cost_usd)
+        tok_cell = Text(tok, style=top_styles[tok_top[idx]]) if idx in tok_top else tok
+        cost_cell = Text(cost, style=top_styles[cost_top[idx]]) if idx in cost_top else cost
+        row: list = [
+            s.start_time.astimezone(system_tz()).strftime("%m-%d %H:%M"),
+            _project_short(s.project),
+            tok_cell,
             cost_cell,
             str(s.message_count),
+            _fmt_duration(s.duration_minutes),
         ]
+        if mode != "compact":
+            row.append(_model_short(s.model))
+        row.append(AGENT_SHORT.get(s.agent_id, s.agent_id))
         table.add_row(*row)
     get_console().print(Padding(table, (0, 0, 0, 2), expand=False))

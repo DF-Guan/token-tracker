@@ -9,7 +9,7 @@ from rich.text import Text
 from .console import get_console
 from .theme import _S
 
-AGENT_SHORT = {"claude-code": "CC", "codex": "Codex"}
+AGENT_SHORT = {"claude-code": "Claude", "codex": "Codex"}
 AGENT_LABEL = {"claude-code": "Claude Code", "codex": "Codex"}
 
 MODEL_SHORT = {

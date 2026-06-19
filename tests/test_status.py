@@ -96,7 +96,7 @@ def test_render_status_with_limits(monkeypatch):
     assert "Tokens:" in out and "2.0M" in out  # 过去 5h tokens
     assert "Cost:" in out and "$12" in out     # 过去 5h cost
     assert "Model:" in out and "Opus 4.8" in out  # model（去掉 (1M context) 后缀）
-    assert "CC" in out and "Codex" in out      # session source 列
+    assert "Claude" in out and "Codex" in out  # session Agent 列（短名 Claude / Codex）
     assert "1h05m" in out                      # Duration（65min）
 
 

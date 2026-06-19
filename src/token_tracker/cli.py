@@ -24,10 +24,9 @@ from .ui import theme, themes
 from .ui.console import forced_color_console, get_console
 from .ui.format import system_tz
 from .ui.heatmap import render_daily_heatmap
-from .ui.status import render_status
+from .ui.status import render_sessions_view, render_status
 from .ui.tables import (
     render_monthly,
-    render_sessions,
     render_weekly,
 )
 
@@ -56,7 +55,9 @@ _REPORT_COMMANDS = {
     "daily": (aggregate_daily, render_daily_heatmap, "date", "total_tokens", True),
     "weekly": (aggregate_weekly, render_weekly, "week", "week", True),
     "monthly": (aggregate_monthly, render_monthly, "month", "month", False),
-    "sessions": (aggregate_sessions, render_sessions, "start_time", "start_time", True),
+    # sessions 走专门分支调 render_sessions_view（顶部+底部仿 status、无额度段）；render_fn 槽
+    # 用 render_monthly 占位（仅为保持表项 callable、不经通用 render_fn 调用）；默认按 cost 倒序
+    "sessions": (aggregate_sessions, render_monthly, "start_time", "cost_usd", True),
 }
 
 
@@ -154,6 +155,22 @@ def _build_status_data(agents) -> dict | None:
     sessions.sort(key=lambda s: s.cost_usd, reverse=True)
     return dict(summary=summary, per_agent=per_agent, rate_limits=rate_limits,
                 sessions=sessions, agents=[a.name for a in agents])
+
+
+def _summary_from_sessions(sessions) -> StatusSummary:
+    """tt sessions 顶部汇总：以展示出的 session 为口径累加（非全量、非时间窗）。"""
+    sm = StatusSummary()
+    for s in sessions:
+        sm.input_tokens += s.input_tokens
+        sm.output_tokens += s.output_tokens
+        sm.cache_creation_tokens += s.cache_creation_tokens
+        sm.cache_read_tokens += s.cache_read_tokens
+        sm.total_tokens += s.total_tokens
+        sm.cost_usd += s.cost_usd
+        sm.message_count += s.message_count
+        sm.models[s.model] = sm.models.get(s.model, 0) + s.total_tokens
+    sm.session_count = len(sessions)
+    return sm
 
 
 def _current_session_agent() -> str | None:
@@ -313,7 +330,7 @@ def main():
 
     agent_ids = {a.id for a in agents}
 
-    if command not in ("status", "dashboard", "daily", "weekly"):
+    if command not in ("status", "dashboard", "daily", "weekly", "sessions"):
         get_console().print(f"[dim]{t('detected', agents=', '.join(a.name + ' ✓' for a in agents))}[/dim]")
 
     if not is_setup():
@@ -353,7 +370,10 @@ def main():
     _apply_sort(stats, sort_key, sort_desc, default_attr, default_reverse)
 
     if command == "sessions":
-        render_fn(stats, _parse_limit(rest_args, default=20))
+        # 过滤掉 <5min 的短会话，再按 cost 倒序取前 20（不足 20 则显示全部）
+        kept = [s for s in stats if s.duration_minutes >= 5]
+        shown = kept[:_parse_limit(rest_args, default=20)]
+        render_sessions_view(_summary_from_sessions(shown), shown, agent_names)
     elif command == "weekly":
         render_weekly(stats, agents=agent_names, daily=_aggregate_per_agent(report_agents, aggregate_daily))
     elif command == "daily":
