@@ -5,14 +5,16 @@ import stat
 import sys
 import tomllib
 
+from . import config
 from .i18n import t
+from .ui import themes
 from .ui.console import get_console
 
 CLAUDE_SETTINGS = os.path.expanduser("~/.claude/settings.json")
 HOOK_SCRIPT_PATH = os.path.expanduser("~/.claude/tt-statusline.py")
 CODEX_CONFIG = os.path.expanduser("~/.codex/config.toml")
 CODEX_BACKUP = os.path.expanduser("~/.codex/tt-backup.json")
-HOOK_VERSION = "1.8"
+HOOK_VERSION = "1.9"
 REPORT_HOOK_VERSION = "1.0"
 CC_REPORT_HOOK_PATH = os.path.expanduser("~/.claude/tt-report-hook.py")
 CC_COMMANDS_DIR = os.path.expanduser("~/.claude/commands")
@@ -44,35 +46,16 @@ from datetime import datetime, timezone
 
 STATUS_FILE = os.path.expanduser("~/.claude/tt-status.json")
 ANSI_RE = re.compile(r'\033\[[0-9;]*m')
-THEME = "mocha"
-THEMES = {
-    "default": {
-        "project": "\033[32m", "branch": "\033[35m", "label": "\033[34m",
-        "bar_ok": "\033[32m", "bar_warn": "\033[33m", "bar_danger": "\033[31m",
-        "tokens": "\033[33m", "duration": "\033[2;35m", "model": "\033[2;35m",
-        "reset": "\033[0m",
-    },
-    "mocha": {
-        "project": "\033[38;5;151m", "branch": "\033[38;5;211m", "label": "\033[38;5;218m",
-        "bar_ok": "\033[38;5;151m", "bar_warn": "\033[38;5;229m", "bar_danger": "\033[38;5;217m",
-        "tokens": "\033[38;5;223m", "duration": "\033[38;5;111m", "model": "\033[38;5;111m",
-        "reset": "\033[0m",
-    },
-    "dracula": {
-        "project": "\033[38;5;84m", "branch": "\033[38;5;75m", "label": "\033[38;5;212m",
-        "bar_ok": "\033[38;5;151m", "bar_warn": "\033[38;5;229m", "bar_danger": "\033[38;5;217m",
-        "tokens": "\033[38;5;215m", "duration": "\033[38;5;117m", "model": "\033[38;5;117m",
-        "reset": "\033[0m",
-    },
-}
-def _supports_256color():
+# 配色在 tt setup / update_hook 烘焙时由 themes.theme_to_statusline_ansi(当前主题) 注入：
+# THEME_COLORS 为当前主题 truecolor，DEFAULT_COLORS 为 3-bit 兜底（不支持 truecolor/256 的老终端）。
+THEME_COLORS = __STATUSLINE_THEME_COLORS__
+DEFAULT_COLORS = __STATUSLINE_DEFAULT_COLORS__
+def _supports_color():
     if os.environ.get("COLORTERM", "") in ("truecolor", "24bit"):
         return True
-    if "256color" in os.environ.get("TERM", ""):
-        return True
-    return False
+    return "256color" in os.environ.get("TERM", "")
 
-C = THEMES.get(THEME, THEMES["default"]) if _supports_256color() or THEME == "default" else THEMES["default"]
+C = THEME_COLORS if _supports_color() else DEFAULT_COLORS
 
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -435,8 +418,14 @@ sys.exit(0)
 # --- helpers ---
 
 def _render_hook_script() -> str:
-    """把 HOOK_VERSION 注入占位符，得到要落盘的状态栏脚本（唯一版本来源）。"""
-    return HOOK_SCRIPT.replace("__HOOK_VERSION__", HOOK_VERSION)
+    """把 HOOK_VERSION + 当前主题配色注入占位符，得到要落盘的状态栏脚本（唯一版本来源）。"""
+    name = config.resolve_theme()
+    return (
+        HOOK_SCRIPT
+        .replace("__HOOK_VERSION__", HOOK_VERSION)
+        .replace("__STATUSLINE_THEME_COLORS__", repr(themes.theme_to_statusline_ansi(name)))
+        .replace("__STATUSLINE_DEFAULT_COLORS__", repr(themes.theme_to_statusline_ansi("default")))
+    )
 
 
 def _render_cc_report_hook() -> str:

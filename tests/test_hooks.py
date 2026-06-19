@@ -18,6 +18,18 @@ def test_installed_version_parser_roundtrips(tmp_path, monkeypatch):
     assert hooks._installed_hook_version() == hooks.HOOK_VERSION
 
 
+def test_statusline_script_bakes_theme_colors(monkeypatch):
+    # statusline 脚本在烘焙时注入当前主题 truecolor + default 3-bit 兜底；占位符不残留、语法正确。
+    monkeypatch.setenv("TT_THEME", "dracula")
+    monkeypatch.delenv("COLORFGBG", raising=False)
+    rendered = hooks._render_hook_script()
+    assert "__STATUSLINE_THEME_COLORS__" not in rendered
+    assert "__STATUSLINE_DEFAULT_COLORS__" not in rendered
+    assert "38;2;80;250;123" in rendered  # dracula green（truecolor）注入
+    assert "[32m" in rendered  # default 3-bit green 兜底注入
+    compile(rendered, "<statusline>", "exec")  # 注入后语法正确
+
+
 def test_report_hooks_render_inject_version_and_python():
     # CC / Codex 报表 hook 模板：版本号 + 解释器都注入、占位符不残留、用 -m 调 tt。
     for render in (hooks._render_cc_report_hook, hooks._render_codex_report_hook):
