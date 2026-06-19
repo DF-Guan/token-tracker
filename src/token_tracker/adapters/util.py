@@ -29,11 +29,23 @@ def iter_jsonl_dicts(path: Path | str) -> Iterator[dict]:
 
 
 def project_from_cwd(cwd: str) -> str:
-    """从工作目录路径取项目名（去掉 home 前缀后的最后一段）。"""
+    """项目名：优先取所属 git 仓库根的目录名（逐级向上找 .git，纯文件系统、不依赖 git 二进制）；
+    非仓库 / 仓库根也删了 → 回退去 home 前缀后的最后一段。
+
+    解决「在项目子目录里跑 agent 被识别成子目录名」（如 infohunter/official → official）：
+    从 cwd 一路 dirname 向上，第一个含 .git 的目录就是项目根。.git 是仓库元数据目录/文件，
+    判断它存在只读文件系统，与 git 是否安装无关；子目录已删也能向上命中仓库根。
+    """
     home = os.path.expanduser("~")
-    if cwd.startswith(home):
-        rel = cwd[len(home):].strip(os.sep)
-    else:
-        rel = cwd.strip(os.sep)
+    d = cwd
+    while d and d not in (os.sep, home):
+        if os.path.exists(os.path.join(d, ".git")):
+            return os.path.basename(d)
+        parent = os.path.dirname(d)
+        if parent == d:  # 触顶，防死循环
+            break
+        d = parent
+    # fallback：去 home 前缀后的最后一段
+    rel = cwd[len(home):].strip(os.sep) if cwd.startswith(home) else cwd.strip(os.sep)
     parts = rel.split(os.sep)
     return parts[-1] if parts and parts[-1] else rel or "unknown"

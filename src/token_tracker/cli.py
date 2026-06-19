@@ -33,9 +33,6 @@ from .ui.tables import (
 AGENT_LOADERS = {"claude-code": claude, "codex": codex}
 RATE_LIMIT_LOADERS = {"claude-code": load_claude_rate_limits, "codex": codex.load_rate_limits}
 
-# status 面板的时间窗口：过去 5 小时
-_STATUS_HOURS = 5
-
 # 排序字段 → stats 属性名（单一权威表）。
 # "time" 的属性因命令而异（daily=date / weekly=week / sessions=start_time），不在此表，走 default_attr。
 SORT_ATTRS = {
@@ -122,16 +119,19 @@ def _aggregate_per_agent(agents, agg_fn):
 
 
 def _build_status_data(agents) -> dict | None:
-    """过去 5h status 数据：合并汇总 + per-agent 汇总 + 分 agent 额度 + 合并 session（按 cost 倒序）。
-
-    session 列表过滤掉 5min 以下的短会话；Sessions 计数也只算够时长的会话。
+    """当天 status 数据（系统时区今天 00:00 起）：合并汇总 + per-agent 汇总 + 分 agent 额度
+    + 合并 session（按 cost 倒序）。session 列表过滤掉 5min 以下的短会话。
     """
+    tz = system_tz()
+    today = datetime.now(tz).date()
     summary = StatusSummary()
     per_agent: dict = {}
     sessions = []
     rate_limits: dict = {}
     for a in agents:
-        entries = _load_entries(a.id, hours_back=_STATUS_HOURS)
+        # 当天 entries：load 过去 25h（覆盖当天最长 + 时区缓冲）后按系统时区今天过滤
+        entries = [e for e in _load_entries(a.id, hours_back=25)
+                   if e.timestamp.astimezone(tz).date() == today]
         a_sum = StatusSummary()
         for e in entries:
             cost = calculate_cost(e)

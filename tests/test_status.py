@@ -90,11 +90,11 @@ def test_render_status_with_limits(monkeypatch):
         render_status(summary, per_agent, rl, sessions, ["Claude Code", "Codex"])
     out = buf.getvalue()
 
-    assert "Last 5 hours" in out               # 头图
+    assert "Today" in out                      # 头图
     # 额度段：agent 头行 Tokens / Cost / Model + 5h/7d 进度条
     assert "Rate Limits" in out and "5h" in out and "7d" in out
-    assert "Tokens:" in out and "2.0M" in out  # 过去 5h tokens
-    assert "Cost:" in out and "$12" in out     # 过去 5h cost
+    assert "Tokens:" in out and "2.0M" in out  # 当天 tokens
+    assert "Cost:" in out and "$12" in out     # 当天 cost
     assert "Model:" in out and "Opus 4.8" in out  # model（去掉 (1M context) 后缀）
     assert "Claude" in out and "Codex" in out  # session Agent 列（短名 Claude / Codex）
     assert "1h05m" in out                      # Duration（65min）
@@ -115,7 +115,7 @@ def test_render_status_no_limits_shows_agent_stats(monkeypatch):
         render_status(summary, per_agent, {}, sessions, ["Claude Code", "Codex"])
     out = buf.getvalue()
 
-    assert "Last 5h by Agent" in out           # 无额度 → per-agent 统计段
+    assert "Today by Agent" in out             # 无额度 → per-agent 统计段
     assert "Claude Code" in out and "Codex" in out
     assert "Rate Limits" not in out            # 不显示额度段
 

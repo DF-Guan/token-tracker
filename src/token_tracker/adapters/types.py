@@ -151,7 +151,7 @@ class SessionBlock:
 
 @dataclass
 class StatusSummary:
-    """tt status 头图面板：过去 5h 多 agent 合并的消耗汇总（add_token_fields 累加用）。"""
+    """tt status 头图面板：当天多 agent 合并的消耗汇总（add_token_fields 累加用）。"""
     input_tokens: int = 0
     output_tokens: int = 0
     cache_creation_tokens: int = 0

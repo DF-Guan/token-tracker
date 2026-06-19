@@ -1,9 +1,9 @@
-"""tt status 面板：过去 5h 合并概览 + 额度/per-agent 统计 + 合并 session 列表。
+"""tt status 面板：当天合并概览 + 额度/per-agent 统计 + 合并 session 列表。
 
 配色跟随当前主题（`_S` 运行时代理）；头图仿 daily 品牌面板，额度条仿 weekly trend 样式。
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from rich import box
 from rich.console import Group
@@ -35,7 +35,8 @@ from .theme import _S, _pct_style
 def render_status(summary, per_agent, rate_limits, sessions, agents) -> None:
     """三段：合并头图概览；有订阅额度→额度条，否则→per-agent 统计；合并 session 列表。"""
     with forced_color_console():
-        _render_summary(summary, agents)
+        _render_summary(summary, agents, title="Today",
+                        subtitle=datetime.now(system_tz()).strftime("%m-%d %H:%M"))
         if rate_limits:
             _render_limits(rate_limits, per_agent)
         else:
@@ -61,18 +62,13 @@ def render_sessions_view(summary, sessions, agents) -> None:
         get_console().print()
 
 
-def _render_summary(summary, agents: list[str], title: str = "Last 5 hours",
-                    subtitle: str | None = None) -> None:
-    """头图品牌面板：仿 daily `_render_summary`。title/subtitle 可定制
-    （status=过去 5h 时间窗；sessions=最近 N 条的时间跨度）。"""
+def _render_summary(summary, agents: list[str], title: str, subtitle: str | None = None) -> None:
+    """头图品牌面板：仿 daily `_render_summary`。title/subtitle 由调用方给
+    （status=Today + 日期；sessions=Recent sessions + 时间跨度）。"""
     brand = brand_line(agents)
     avail = max(40, get_console().width - 6)
     body = Text()
     body.append(title, style=f"bold {_S.good}")
-    if subtitle is None:  # 默认 status 的过去 5h 时间窗（系统真实时区，绕过 CLI 的 TZ）
-        now = datetime.now(system_tz())
-        start = now - timedelta(hours=5)
-        subtitle = f"{start.strftime('%H:%M')} ~ {now.strftime('%H:%M')}"
     if subtitle:
         body.append(f"  {subtitle}", style=f"dim {_S.good}")
     body.append("\n")
@@ -92,7 +88,7 @@ def _render_summary(summary, agents: list[str], title: str = "Last 5 hours",
 
 
 def _render_limits(rate_limits: dict, per_agent: dict) -> None:
-    """订阅额度：每 agent 一段——头行（过去 5h Tokens / Cost / Model）+ 5h/7d 进度条。"""
+    """订阅额度：每 agent 一段——头行（当天 Tokens / Cost / Model）+ 5h/7d 进度条。"""
     blocks: list = [Text("[Rate Limits]", style=f"bold {_S.good}")]
     for i, (agent_id, rl) in enumerate(rate_limits.items()):
         if i:  # agent 块之间空一行，避免贴太紧
@@ -126,11 +122,11 @@ def _render_limits(rate_limits: dict, per_agent: dict) -> None:
 
 
 def _render_agent_stats(per_agent: dict) -> None:
-    """都没订阅额度时（API 模式等）：每个 agent 过去 5h 的 token/cost/sessions/messages。"""
+    """都没订阅额度时（API 模式等）：每个 agent 当天的 token/cost/sessions/messages。"""
     rows = [(aid, s) for aid, s in per_agent.items() if s.total_tokens or s.message_count]
     if not rows:
         return
-    table = Table(title=Text("[Last 5h by Agent]", style=f"bold {_S.peach}"), title_justify="left",
+    table = Table(title=Text("[Today by Agent]", style=f"bold {_S.peach}"), title_justify="left",
                   box=box.SIMPLE, header_style="bold", padding=(0, 1), expand=False, border_style=_S.peach)
     table.add_column("Agent", style=_S.peach, no_wrap=True)
     table.add_column("Tokens", justify="right", style=_S.token_bold)
