@@ -23,10 +23,10 @@ def test_statusline_script_bakes_theme_colors(monkeypatch):
     monkeypatch.setenv("TT_THEME", "dracula")
     monkeypatch.delenv("COLORFGBG", raising=False)
     rendered = hooks._render_hook_script()
-    assert "__STATUSLINE_THEME_COLORS__" not in rendered
-    assert "__STATUSLINE_DEFAULT_COLORS__" not in rendered
+    assert "__STATUSLINE_TRUECOLOR__" not in rendered
+    assert "__STATUSLINE_COLOR256__" not in rendered
     assert "38;2;80;250;123" in rendered  # dracula green（truecolor）注入
-    assert "[32m" in rendered  # default 3-bit green 兜底注入
+    assert "38;5;" in rendered  # 256 色兜底注入
     compile(rendered, "<statusline>", "exec")  # 注入后语法正确
 
 

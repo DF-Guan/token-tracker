@@ -5,7 +5,8 @@
 - statusline 的 10 个 key 由 `_STATUSLINE_SLOTS` 映射到这 9 槽的子集。
 
 颜色取值：Catppuccin（mocha/latte/frappe/macchiato）用官方 hex；Nord / Dracula 按色相
-就近映射到这 9 槽；`default` 用 3-bit 兼容色名兜底不支持 truecolor 的老终端。
+就近映射到这 9 槽。truecolor 终端用精确 hex，不支持 truecolor 的降级到 **256 色近似**
+（`theme_to_statusline_ansi(depth='256')`），不再适配 8 色终端。
 官方来源：catppuccin/palette、nordtheme.com、dracula-theme（均逐字段核对）。
 """
 
@@ -17,7 +18,7 @@ _HEAT_RATIOS = (0.0, 0.2, 0.42, 0.65, 1.0)
 
 # 每主题：is_light + 9 基色 base + cell（贡献图 level0 底色，通常 surface0）。
 # mocha/latte 额外带显式 heat（手调现值，保持 daily 热力图像素级不回归）；
-# 其余主题的 heat 由 cell→green 按 _HEAT_RATIOS 运行时插值。default 显式给 Rich 色名 heat。
+# 其余主题的 heat 由 cell→green 按 _HEAT_RATIOS 运行时插值。
 THEMES: dict[str, dict] = {
     "mocha": {
         "is_light": False,
@@ -71,16 +72,6 @@ THEMES: dict[str, dict] = {
         },
         "cell": "#44475a",
     },
-    # default：3-bit 兼容色名，兜底不支持 truecolor 的老终端（Rich 与 statusline 都能识别）。
-    "default": {
-        "is_light": False,
-        "base": {
-            "overlay0": "bright_black", "green": "green", "yellow": "yellow", "peach": "yellow",
-            "red": "red", "blue": "blue", "sapphire": "cyan", "mauve": "magenta", "pink": "magenta",
-        },
-        "cell": "bright_black",
-        "heat": ["bright_black", "green", "green", "bright_green", "bright_green"],
-    },
 }
 
 # 展示顺序（tt theme list / 向导）。
@@ -100,13 +91,6 @@ _STATUSLINE_SLOTS = {
     "duration": "blue",
     "model": "blue",
 }
-
-# default 主题的 Rich 色名 → 3-bit/兼容 ANSI 前景码，供 statusline 转换。
-_NAME_TO_FG = {
-    "green": "32", "yellow": "33", "red": "31", "blue": "34",
-    "cyan": "36", "magenta": "35", "bright_black": "90", "bright_green": "92",
-}
-
 
 def get_theme(name: str) -> dict:
     """取主题 spec，未知名兜底 mocha。"""
@@ -153,16 +137,37 @@ def derive_slots(base: dict) -> dict:
 
 
 def _color_to_ansi(value: str) -> str:
-    """颜色值 → statusline ANSI 前景序列。#hex→truecolor(38;2)，Rich 色名→3-bit。"""
-    if value.startswith("#"):
-        r, g, b = (int(value[i:i + 2], 16) for i in (1, 3, 5))
-        return f"\033[38;2;{r};{g};{b}m"
-    return f"\033[{_NAME_TO_FG.get(value, '0')}m"
+    """#hex → statusline truecolor 前景序列（38;2;R;G;B）。"""
+    r, g, b = (int(value[i:i + 2], 16) for i in (1, 3, 5))
+    return f"\033[38;2;{r};{g};{b}m"
 
 
-def theme_to_statusline_ansi(name: str) -> dict:
-    """把主题转成 statusline 用的 ANSI dict（9 着色 key + reset）。"""
+def _hex_to_256(value: str) -> int:
+    """#hex → 最接近的 xterm-256 调色板索引（16-255），供不支持 truecolor 的终端降级。"""
+    r, g, b = (int(value[i:i + 2], 16) for i in (1, 3, 5))
+    if r == g == b:  # 灰阶走 232-255 渐变档
+        if r < 8:
+            return 16
+        if r > 248:
+            return 231
+        return 232 + (r - 8) * 24 // 247
+    levels = (0, 95, 135, 175, 215, 255)  # 6×6×6 颜色立方各档实际亮度
+
+    def nearest(v: int) -> int:
+        return min(range(6), key=lambda i: abs(levels[i] - v))
+
+    return 16 + 36 * nearest(r) + 6 * nearest(g) + nearest(b)
+
+
+def _color_to_ansi256(value: str) -> str:
+    """#hex → statusline 256 色前景序列（38;5;N，最近调色板色）。"""
+    return f"\033[38;5;{_hex_to_256(value)}m"
+
+
+def theme_to_statusline_ansi(name: str, depth: str = "truecolor") -> dict:
+    """主题 → statusline ANSI dict（9 着色 key + reset）。depth='truecolor'(38;2) 或 '256'(38;5 近似)。"""
     base = get_theme(name)["base"]
-    out = {key: _color_to_ansi(base[slot]) for key, slot in _STATUSLINE_SLOTS.items()}
+    conv = _color_to_ansi if depth == "truecolor" else _color_to_ansi256
+    out = {key: conv(base[slot]) for key, slot in _STATUSLINE_SLOTS.items()}
     out["reset"] = "\033[0m"
     return out

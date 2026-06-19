@@ -75,6 +75,7 @@
 
 ## 最近验证
 
+- **2026-06-19**：statusline 颜色分层重构——默认 truecolor、不支持则降当前主题 **256 色近似**、不再适配 8 色；删 `default` 主题（THEMES 6 个真彩主题）；判断改只认 `COLORTERM=truecolor/24bit`，顺手修 macOS Terminal.app 被误发 truecolor 的坑（它无 COLORTERM、`xterm-256color` → 走 256）。`themes.py` 加 `_hex_to_256` 近似算法（mocha green #a6e3a1 → 索引 151，与旧手调值一致）+ `theme_to_statusline_ansi(depth)`；`HOOK_VERSION` 1.11→1.12。`pytest` 80 全绿、`ruff` 全过、`mypy` 5 历史无新增；实跑落盘脚本：truecolor 终端发 38;2、`xterm-256color` 无 COLORTERM 发 38;5 且 0 残留 truecolor。依据：termstandard/colors 终端清单（WebFetch 核对）。
 - **2026-06-19**：按主人反馈把 statusline mocha 配色调回旧观感——`_STATUSLINE_SLOTS` 改（分支 `red` 玫红对齐旧 211、标签 `pink`、Tokens `peach`、Model/Duration `blue`），`HOOK_VERSION` 1.9→1.11 触发自动重烘焙；状态栏 token 色与 CLI 报表（sapphire 青）不再同源（主人审美选择）。注：旧 branch `38;5;211`（#ff87af）实为玫红 ≈ mocha red `#f38ba8`、非 pink，首次误映射 pink 已修正。`pytest` 79 全绿、`ruff` 全过；已 `update_hook()` 重烘焙本地脚本核对：红色 + 桃色就位、版本 1.11。
 - **2026-06-18**：统一多主题系统 阶段 7（文档收尾）+ 全工程收口（7 阶段完成）。README.md / README_EN.md（功能列表 + 使用表 + 「配色主题」节）、CLAUDE.md（「主题系统约定」节 + 结构表 + 命令行）同步。最终 `uv run --extra dev pytest` **79 全绿**（test_theme.py 22）、`ruff check src tests` 全过、`mypy src` 5 历史无新增。
 - **2026-06-18**：统一多主题系统 阶段 6（交互向导）。新增 `wizard.py` + cli 首次运行 `_should_run_wizard()` 判定。`pytest` 全绿（+2）、`ruff` 全过、`mypy src` 5 历史无新增；实跑：`import wizard` 无循环、`tt daily` 回归正常、判定三态单测覆盖（非 tty/会话内降级）。

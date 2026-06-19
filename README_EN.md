@@ -63,7 +63,7 @@ The status line has three rows, left to right:
 - **Cost analysis** — per-session, daily, weekly, monthly cost breakdown with per-agent grouping
 - **Pricing resolution** — litellm live pricing with built-in official-price fallback; new models in a known family are priced automatically (incl. Claude Fable 5 / Opus 4.8), and unknown models trigger an explicit warning instead of silently counting as $0
 - **Session insights** — project, model, duration, message count per session
-- **Unified multi-theme** — 7 themes (Catppuccin Mocha/Latte/Frappe/Macchiato + Nord + Dracula + default) shared across CLI reports and the status line; switch/preview with `tt theme`, auto-pick Catppuccin by terminal light/dark, first-run wizard guides selection (override with `TT_THEME`)
+- **Unified multi-theme** — 6 themes (Catppuccin Mocha/Latte/Frappe/Macchiato + Nord + Dracula) shared across CLI reports and the status line; switch/preview with `tt theme`, auto-pick Catppuccin by terminal light/dark, first-run wizard guides selection (override with `TT_THEME`); falls back to 256-color approximation when the terminal lacks truecolor
 - **Zero config** — auto-detects installed agents, reads local data directly
 - **Privacy first** — all data stays local, no collection or upload of any user information, lightweight and worry-free
 
@@ -109,14 +109,13 @@ How it works: a Claude Code `UserPromptExpansion` / Codex `UserPromptSubmit` hoo
 
 ### Color Themes
 
-7 built-in themes, **shared** across CLI reports and the status line (switching changes both):
+6 built-in themes, **shared** across CLI reports and the status line (switching changes both):
 
 | Theme | Notes |
 |-------|-------|
 | `mocha` / `latte` / `frappe` / `macchiato` | Full Catppuccin (mocha/latte auto-picked by dark/light terminal) |
 | `nord` | Nord |
 | `dracula` | Dracula |
-| `default` | 3-bit fallback for terminals without truecolor |
 
 ```bash
 tt theme               # show current theme and its source
@@ -127,6 +126,7 @@ tt theme set nord      # switch theme (persist + re-bake status line)
 
 - **First run** (in a terminal, not inside an AI session) opens an interactive wizard to pick a theme; CI / scripts / in-session runs skip it silently and use the default.
 - Choice persists to `~/.config/token-tracker/theme.json` ; the `TT_THEME=<name>` env var has the highest priority and can override temporarily.
+- Truecolor terminals get exact colors; terminals without truecolor (e.g. macOS Terminal.app) fall back to a **256-color approximation** of the current theme; 8-color terminals are no longer targeted.
 
 ### Report Sorting
 

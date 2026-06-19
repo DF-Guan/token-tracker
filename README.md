@@ -63,7 +63,7 @@
 - **成本分析** — 按会话、日、周、月维度的等效成本统计，多 Agent 按来源分组展示
 - **定价识别** — litellm 在线定价 + 内置官方价双层兜底；同系列新模型自动套用本档定价（含 Claude Fable 5 / Opus 4.8），全新系列缺价时明确提示，不静默按 $0 统计
 - **会话洞察** — 项目、模型、时长、消息数一览
-- **多主题统一配色** — 7 套主题（Catppuccin Mocha/Latte/Frappe/Macchiato + Nord + Dracula + default），CLI 报表与状态栏**同源**；`tt theme` 一键切换 / 预览，暗 / 亮终端自动选 Catppuccin，首次运行交互向导引导选择，`TT_THEME` 可覆盖
+- **多主题统一配色** — 6 套主题（Catppuccin Mocha/Latte/Frappe/Macchiato + Nord + Dracula），CLI 报表与状态栏**同源**；`tt theme` 一键切换 / 预览，暗 / 亮终端自动选 Catppuccin，首次运行交互向导引导选择，`TT_THEME` 可覆盖；终端不支持 truecolor 时自动降级到 256 色近似
 - **零配置** — 自动检测已安装的 Agent，直接读取本地数据
 - **隐私安全** — 数据纯本地存储，不采集、不上传任何用户信息，极轻量无后顾之忧
 
@@ -109,14 +109,13 @@ tt unsetup        # 卸载并恢复安装前的配置
 
 ### 配色主题
 
-内置 7 套主题，CLI 报表与状态栏**统一同源**（切主题两边一起变）：
+内置 6 套主题，CLI 报表与状态栏**统一同源**（切主题两边一起变）：
 
 | 主题 | 说明 |
 |------|------|
 | `mocha` / `latte` / `frappe` / `macchiato` | Catppuccin 全家（暗 / 亮终端自动选 mocha / latte） |
 | `nord` | Nord |
 | `dracula` | Dracula |
-| `default` | 3-bit 兜底，给不支持 truecolor 的老终端 |
 
 ```bash
 tt theme               # 显示当前主题及来源
@@ -127,6 +126,7 @@ tt theme set nord      # 切换主题（持久化 + 重烘焙状态栏）
 
 - **首次运行**（终端内、非 AI 会话）会进入交互向导引导选主题；CI / 脚本 / 会话内自动跳过、静默用默认。
 - 切换持久化到 `~/.config/token-tracker/theme.json` ；环境变量 `TT_THEME=<主题名>` 优先级最高、可临时覆盖。
+- 终端支持 truecolor 用精确配色；不支持的（如 macOS 自带 Terminal.app）自动降级到当前主题的 **256 色近似**，8 色老终端不再适配。
 
 ### 报告排序
 

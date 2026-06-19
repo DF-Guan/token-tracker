@@ -44,11 +44,19 @@ def test_statusline_ansi_truecolor():
     assert ansi["tokens"] == "\033[38;2;250;179;135m"  # peach #fab387（状态栏沿用旧观感）
 
 
-def test_statusline_ansi_default_is_3bit():
-    ansi = themes.theme_to_statusline_ansi("default")
-    assert ansi["bar_ok"] == "\033[32m"  # green
-    assert ansi["bar_danger"] == "\033[31m"  # red
+def test_statusline_ansi_256_approximation():
+    ansi = themes.theme_to_statusline_ansi("mocha", "256")
+    assert set(ansi) == set(themes._STATUSLINE_SLOTS) | {"reset"}
+    # 256 模式：着色 key 都是 38;5;N，无 truecolor 序列。
+    assert all("38;5;" in v for k, v in ansi.items() if k != "reset")
     assert "38;2" not in "".join(ansi.values())
+
+
+def test_hex_to_256_known_values():
+    # mocha green #a6e3a1 → 256 索引 151（与旧手调 statusline 值一致，验证近似算法）。
+    assert themes._hex_to_256("#a6e3a1") == 151
+    assert themes._hex_to_256("#000000") == 16
+    assert themes._hex_to_256("#ffffff") == 231
 
 
 def test_get_theme_unknown_falls_back_to_mocha():
@@ -131,8 +139,8 @@ def test_preview_theme_restores(monkeypatch):
 def test_heat_greens_follows_theme(monkeypatch):
     monkeypatch.setattr(theme, "_ACTIVE_NAME", "mocha")
     assert theme.heat_greens() == ["#313244", "#475951", "#628168", "#7da87f", "#a6e3a1"]
-    theme.set_active_theme("default")
-    assert theme.heat_greens()[0] == "bright_black"
+    theme.set_active_theme("latte")
+    assert theme.heat_greens() == ["#ccd0da", "#bbd9b8", "#98c990", "#75b868", "#40a02b"]
 
 
 def test_theme_set_writes_config(tmp_path, monkeypatch):

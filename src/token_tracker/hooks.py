@@ -14,7 +14,7 @@ CLAUDE_SETTINGS = os.path.expanduser("~/.claude/settings.json")
 HOOK_SCRIPT_PATH = os.path.expanduser("~/.claude/tt-statusline.py")
 CODEX_CONFIG = os.path.expanduser("~/.codex/config.toml")
 CODEX_BACKUP = os.path.expanduser("~/.codex/tt-backup.json")
-HOOK_VERSION = "1.11"
+HOOK_VERSION = "1.12"
 REPORT_HOOK_VERSION = "1.0"
 CC_REPORT_HOOK_PATH = os.path.expanduser("~/.claude/tt-report-hook.py")
 CC_COMMANDS_DIR = os.path.expanduser("~/.claude/commands")
@@ -47,15 +47,14 @@ from datetime import datetime, timezone
 STATUS_FILE = os.path.expanduser("~/.claude/tt-status.json")
 ANSI_RE = re.compile(r'\033\[[0-9;]*m')
 # 配色在 tt setup / update_hook 烘焙时由 themes.theme_to_statusline_ansi(当前主题) 注入：
-# THEME_COLORS 为当前主题 truecolor，DEFAULT_COLORS 为 3-bit 兜底（不支持 truecolor/256 的老终端）。
-THEME_COLORS = __STATUSLINE_THEME_COLORS__
-DEFAULT_COLORS = __STATUSLINE_DEFAULT_COLORS__
-def _supports_color():
-    if os.environ.get("COLORTERM", "") in ("truecolor", "24bit"):
-        return True
-    return "256color" in os.environ.get("TERM", "")
+# THEME_COLORS 为当前主题 truecolor，THEME_COLORS_256 为同主题的 256 色近似（兜底不支持
+# truecolor 的终端，如 macOS Terminal.app）。只认 COLORTERM=truecolor/24bit 走真彩，否则降 256。
+THEME_COLORS = __STATUSLINE_TRUECOLOR__
+THEME_COLORS_256 = __STATUSLINE_COLOR256__
+def _supports_truecolor():
+    return os.environ.get("COLORTERM", "") in ("truecolor", "24bit")
 
-C = THEME_COLORS if _supports_color() else DEFAULT_COLORS
+C = THEME_COLORS if _supports_truecolor() else THEME_COLORS_256
 
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -418,13 +417,13 @@ sys.exit(0)
 # --- helpers ---
 
 def _render_hook_script() -> str:
-    """把 HOOK_VERSION + 当前主题配色注入占位符，得到要落盘的状态栏脚本（唯一版本来源）。"""
+    """把 HOOK_VERSION + 当前主题 truecolor / 256 两套配色注入占位符，得到要落盘的状态栏脚本。"""
     name = config.resolve_theme()
     return (
         HOOK_SCRIPT
         .replace("__HOOK_VERSION__", HOOK_VERSION)
-        .replace("__STATUSLINE_THEME_COLORS__", repr(themes.theme_to_statusline_ansi(name)))
-        .replace("__STATUSLINE_DEFAULT_COLORS__", repr(themes.theme_to_statusline_ansi("default")))
+        .replace("__STATUSLINE_TRUECOLOR__", repr(themes.theme_to_statusline_ansi(name)))
+        .replace("__STATUSLINE_COLOR256__", repr(themes.theme_to_statusline_ansi(name, "256")))
     )
 
 
