@@ -354,6 +354,17 @@ def _get_version() -> str:
     return version("token-tracker")
 
 
+# --- 首次运行交互向导判定 ---
+
+def _is_tty() -> bool:
+    return sys.stdin.isatty() and sys.stdout.isatty()
+
+
+def _should_run_wizard() -> bool:
+    """首次运行是否进交互向导：必须双 tty 且不在 AI 会话内（否则降级静默 setup）。"""
+    return _is_tty() and not _current_session_agent()
+
+
 # --- theme 命令 ---
 
 def _theme_source() -> str:
@@ -490,7 +501,11 @@ def main():
         get_console().print(f"[dim]{t('detected', agents=', '.join(a.name + ' ✓' for a in agents))}[/dim]")
 
     if not is_setup():
-        setup(auto=True)
+        if _should_run_wizard():
+            from .wizard import run_wizard
+            run_wizard()
+        else:
+            setup(auto=True)
 
     # tt claude / tt codex
     if command in AGENT_ALIASES:

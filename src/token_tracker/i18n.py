@@ -80,6 +80,12 @@ _STRINGS = {
         "theme_set_statusline": "状态栏已重新生成，重启会话后生效",
         "theme_env_override": "注意：环境变量 TT_THEME 已设置，会覆盖此次切换",
         "theme_usage": "用法: tt theme [show | list | set <主题名> | preview <主题名>]",
+        # --- wizard (wizard.py) ---
+        "wizard_welcome": "欢迎使用 token-tracker！",
+        "wizard_intro": "首次运行，先快速配置（之后可用 tt theme / tt setup 调整）",
+        "wizard_pick_theme": "可选配色主题（CLI 报表 + 状态栏统一）：",
+        "wizard_theme_prompt": "选择主题",
+        "wizard_done": "配置完成！",
         # --- hooks.py ---
         "no_agent_install": "未检测到 Claude Code 或 Codex，请先安装其中之一",
         "first_setup": "首次使用，正在配置状态栏...",
@@ -182,6 +188,12 @@ _STRINGS = {
         "theme_set_statusline": "Status line regenerated, restart session to take effect",
         "theme_env_override": "Note: env TT_THEME is set and overrides this change",
         "theme_usage": "Usage: tt theme [show | list | set <name> | preview <name>]",
+        # --- wizard (wizard.py) ---
+        "wizard_welcome": "Welcome to token-tracker!",
+        "wizard_intro": "First run — a quick setup (adjust later with tt theme / tt setup)",
+        "wizard_pick_theme": "Available themes (unified across CLI reports + status line):",
+        "wizard_theme_prompt": "Pick a theme",
+        "wizard_done": "Setup complete!",
         # --- hooks.py ---
         "no_agent_install": "Claude Code or Codex not detected, please install one first",
         "first_setup": "First run, configuring status bar...",

@@ -171,3 +171,27 @@ def test_cmd_theme_shorthand_set(tmp_path, monkeypatch):
     monkeypatch.setattr(theme, "_ACTIVE_NAME", None)
     cli.cmd_theme(["frappe"])
     assert config.load_theme_config()["theme"] == "frappe"
+
+
+def test_should_run_wizard(monkeypatch):
+    # 双 tty + 非会话内 → 进向导；非 tty 或会话内 → 降级（plan 风险重点）。
+    monkeypatch.setattr(cli, "_is_tty", lambda: True)
+    monkeypatch.setattr(cli, "_current_session_agent", lambda: None)
+    assert cli._should_run_wizard() is True
+    monkeypatch.setattr(cli, "_is_tty", lambda: False)
+    assert cli._should_run_wizard() is False
+    monkeypatch.setattr(cli, "_is_tty", lambda: True)
+    monkeypatch.setattr(cli, "_current_session_agent", lambda: "claude-code")
+    assert cli._should_run_wizard() is False
+
+
+def test_run_wizard_saves_theme(tmp_path, monkeypatch):
+    from token_tracker import wizard
+    monkeypatch.setattr(config, "CONFIG_DIR", str(tmp_path))
+    monkeypatch.setattr(config, "CONFIG_PATH", str(tmp_path / "theme.json"))
+    monkeypatch.setattr("rich.prompt.Prompt.ask", lambda *a, **k: "nord")
+    monkeypatch.setattr(wizard, "setup", lambda: None)  # 不真落地配置
+    monkeypatch.delenv("TT_THEME", raising=False)
+    monkeypatch.setattr(theme, "_ACTIVE_NAME", None)
+    wizard.run_wizard()
+    assert config.load_theme_config()["theme"] == "nord"
