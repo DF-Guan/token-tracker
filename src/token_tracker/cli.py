@@ -4,7 +4,7 @@ import shutil
 import sys
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from rich.text import Text
 
@@ -12,13 +12,23 @@ from . import config
 from .adapters import claude, codex
 from .adapters.rate_limits import load_rate_limits as load_claude_rate_limits
 from .adapters.registry import detect_agents
-from .analyzer.aggregator import aggregate_daily, aggregate_monthly, aggregate_sessions, aggregate_weekly
+from .adapters.types import StatusSummary
+from .analyzer.aggregator import (
+    add_token_fields,
+    aggregate_daily,
+    aggregate_monthly,
+    aggregate_sessions,
+    aggregate_weekly,
+)
 from .analyzer.blocks import analyze_blocks, calculate_p90
+from .analyzer.cost import calculate_cost
 from .hooks import is_setup, needs_update, setup, unsetup, update_hook
 from .i18n import t
 from .ui import theme, themes
 from .ui.console import capture_console, forced_color_console, get_console
+from .ui.format import system_tz
 from .ui.heatmap import render_daily_heatmap
+from .ui.status import render_status
 from .ui.tables import (
     AGENT_LABEL,
     render_dashboard,
@@ -33,6 +43,9 @@ RATE_LIMIT_LOADERS = {"claude-code": load_claude_rate_limits, "codex": codex.loa
 
 # dashboard 数据面板只看最近 N 小时的会话块（活跃/空闲判定）
 _RECENT_BLOCK_HOURS = 48
+
+# status 面板的时间窗口：过去 5 小时
+_STATUS_HOURS = 5
 
 # 交互式 dashboard 的终端控制转义序列
 _ALT_ENTER = "\033[?1049h\033[?7l\033[2J\033[3J\033[H\033[?25l"  # 进备用屏 + 隐光标 + 禁换行 + 清屏
@@ -152,6 +165,42 @@ def _build_agent_data(agent_id: str, agent_name: str) -> dict | None:
         sessions=sessions, blocks=blocks, rate_limits=rate_limits,
         p90=p90, agents=[agent_name],
     )
+
+
+def _build_status_data(agents) -> dict | None:
+    """过去 5h status 数据：合并汇总 + per-agent 汇总 + 分 agent 额度 + 合并 session（按 cost 倒序）。
+
+    session 列表过滤掉 5min 以下的短会话；Sessions 计数也只算够时长的会话。
+    """
+    summary = StatusSummary()
+    per_agent: dict = {}
+    sessions = []
+    rate_limits: dict = {}
+    for a in agents:
+        entries = _load_entries(a.id, hours_back=_STATUS_HOURS)
+        a_sum = StatusSummary()
+        for e in entries:
+            cost = calculate_cost(e)
+            add_token_fields(summary, e, cost)
+            add_token_fields(a_sum, e, cost)
+            summary.message_count += e.message_count
+            a_sum.message_count += e.message_count
+            summary.models[e.model] = summary.models.get(e.model, 0) + e.total_tokens
+        a_sessions = [s for s in aggregate_sessions(entries) if s.duration_minutes >= 5]
+        for s in a_sessions:
+            s.agent_id = a.id
+        a_sum.session_count = len(a_sessions)
+        per_agent[a.id] = a_sum
+        sessions.extend(a_sessions)
+        rl = RATE_LIMIT_LOADERS.get(a.id, lambda: None)()
+        if rl and (rl.five_hour_pct is not None or rl.seven_day_pct is not None):
+            rate_limits[a.id] = rl
+    if not sessions and summary.total_tokens == 0:
+        return None
+    summary.session_count = len(sessions)
+    sessions.sort(key=lambda s: s.cost_usd, reverse=True)
+    return dict(summary=summary, per_agent=per_agent, rate_limits=rate_limits,
+                sessions=sessions, agents=[a.name for a in agents])
 
 
 def _current_session_agent() -> str | None:
@@ -465,7 +514,7 @@ def cmd_theme(args: list[str]) -> None:
 
 def main():
     args = sys.argv[1:]
-    command = args[0] if args else "dashboard"
+    command = args[0] if args else "status"
 
     # 版本查询不该触发任何文件读写，放在 auto-update 之前短路返回
     if command in ("--version", "-v", "-V"):
@@ -496,7 +545,7 @@ def main():
 
     agent_ids = {a.id for a in agents}
 
-    if command not in ("dashboard", "daily", "weekly"):
+    if command not in ("status", "dashboard", "daily", "weekly"):
         get_console().print(f"[dim]{t('detected', agents=', '.join(a.name + ' ✓' for a in agents))}[/dim]")
 
     if not is_setup():
@@ -506,11 +555,12 @@ def main():
         else:
             setup(auto=True)
 
-    if command == "dashboard":
-        if len(agents) > 1 and sys.stdin.isatty():
-            _show_interactive_dashboard(agents)
-        else:
-            _show_agent_dashboard(agents[0].id)
+    if command in ("status", "dashboard"):
+        data = _build_status_data(agents)
+        if not data:
+            get_console().print(f"[yellow]{t('no_token_data')}[/yellow]")
+            return
+        render_status(**data)
         return
 
     rest_args, sort_key, sort_desc = _parse_sort_args(args[1:])
@@ -542,11 +592,11 @@ def main():
         d_entries = [e for a in report_agents for e in _load_entries(a.id)]
         # 最活跃时段：过去一个月按小时聚合 token（24 小时分布），渲染层据此求活跃区间
         month_ago = (datetime.now(UTC) - timedelta(days=30)).date()
-        beijing = timezone(timedelta(hours=8))  # Active Hour 固定北京时区（UTC+8）
+        tz = system_tz()  # Active Hour 按系统时区（绕过 CLI 的 TZ）
         hourly: dict[int, int] = defaultdict(int)
         for e in d_entries:
             if e.timestamp.date() >= month_ago:
-                hourly[e.timestamp.astimezone(beijing).hour] += e.total_tokens
+                hourly[e.timestamp.astimezone(tz).hour] += e.total_tokens
         render_daily_heatmap(stats, agents=agent_names, hourly=dict(hourly))
     else:
         render_fn(stats, agents=agent_names)

@@ -6,7 +6,7 @@ from rich.text import Text
 
 from ..adapters.types import WeeklyStats
 from ..i18n import t
-from .format import _fmt_cost, _fmt_tokens
+from .format import _fmt_cost, _fmt_tokens, system_tz
 from .theme import _S
 
 
@@ -34,7 +34,7 @@ def _render_rate_bar(lines: Text, label: str, pct: float,
                      date_fmt: str = "%H:%M") -> None:
     reset_suffix = ""
     if resets_at:
-        reset_dt = datetime.fromtimestamp(resets_at, tz=UTC)
+        reset_dt = datetime.fromtimestamp(resets_at, tz=system_tz())
         reset_suffix = f"  {t('reset_at', time=reset_dt.strftime(date_fmt))}"
     _append_bar(lines, f"  {label}    ", pct, bar_width, reset_suffix)
 

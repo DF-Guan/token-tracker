@@ -145,3 +145,17 @@ class SessionBlock:
     is_active: bool = False
     burn_rate: float = 0.0
     is_gap: bool = False
+
+
+@dataclass
+class StatusSummary:
+    """tt status 头图面板：过去 5h 多 agent 合并的消耗汇总（add_token_fields 累加用）。"""
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_creation_tokens: int = 0
+    cache_read_tokens: int = 0
+    total_tokens: int = 0
+    cost_usd: float = 0.0
+    message_count: int = 0
+    session_count: int = 0
+    models: dict[str, int] = field(default_factory=dict)

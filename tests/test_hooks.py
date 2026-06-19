@@ -204,3 +204,24 @@ def test_statusline_line4_tps_dash_when_no_prior_value(tmp_path):
     _run_statusline_home(script, base, home)
     out = _run_statusline_home(script, base, home)  # Δ=0、output=2、无历史值 → -
     assert "TPS: -" in out
+
+
+def test_statusline_tps_keeps_last_value_when_zero(tmp_path):
+    # 算出会显示成 0 的（output 小 / Δ 很大）→ 不刷新，保持上次有效值。
+    script = tmp_path / "tt-statusline.py"
+    script.write_text(hooks._render_hook_script(), encoding="utf-8")
+    home = tmp_path / "home"
+    (home / ".claude").mkdir(parents=True)
+
+    def frame(api, out):
+        return {"session_id": "S1", "workspace": {"project_dir": str(tmp_path)},
+                "context_window": {"current_usage": {"output_tokens": out}},
+                "cost": {"total_api_duration_ms": api}}
+
+    _run_statusline_home(script, frame(10000, 5), home)            # 建 prev_api
+    out2 = _run_statusline_home(script, frame(11000, 200), home)   # Δ1000ms / out200 → tps 200
+    assert "TPS: 200 tokens/s" in out2
+    # Δ 很大(100s) + output 小(20) → tps≈0.2 → round 0 → 不刷新、沿用 200
+    out3 = _run_statusline_home(script, frame(111000, 20), home)
+    assert "TPS: 200 tokens/s" in out3
+    assert "TPS: 0 tokens/s" not in out3

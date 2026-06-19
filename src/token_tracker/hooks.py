@@ -14,7 +14,7 @@ CLAUDE_SETTINGS = os.path.expanduser("~/.claude/settings.json")
 HOOK_SCRIPT_PATH = os.path.expanduser("~/.claude/tt-statusline.py")
 CODEX_CONFIG = os.path.expanduser("~/.codex/config.toml")
 CODEX_BACKUP = os.path.expanduser("~/.codex/tt-backup.json")
-HOOK_VERSION = "1.16"
+HOOK_VERSION = "1.17"
 REPORT_HOOK_VERSION = "1.0"
 CC_REPORT_HOOK_PATH = os.path.expanduser("~/.claude/tt-report-hook.py")
 CC_COMMANDS_DIR = os.path.expanduser("~/.claude/commands")
@@ -186,13 +186,15 @@ def _read_prev(session_id):
 
 
 def _compute_tps(data, prev_api_ms, prev_tps):
-    """本轮 TPS = 本轮 output / Δapi_duration；中间帧（output/Δ 太小）沿用上次值，避免频繁回落 -。"""
+    """本轮 TPS = 本轮 output / Δapi_duration；数据缺失/中间帧/算出会显示为 0 时都沿用上次值、不刷新。"""
     cur_api_ms = (data.get("cost") or {}).get("total_api_duration_ms")
     out = ((data.get("context_window") or {}).get("current_usage") or {}).get("output_tokens", 0)
     if prev_api_ms is not None and cur_api_ms is not None:
         delta_ms = cur_api_ms - prev_api_ms
         if delta_ms >= 500 and out >= 20:
-            return out / (delta_ms / 1000)
+            tps = out / (delta_ms / 1000)
+            if round(tps) > 0:  # 算出会显示成 0 的（output 小 / Δ 很大），不刷新、保持上次值
+                return tps
     return prev_tps
 
 

@@ -31,6 +31,7 @@ from .format import (
     _width_mode,
     append_metric,
     brand_line,
+    system_tz,
 )
 from .panels import (
     _render_active_block,
@@ -142,7 +143,7 @@ def _render_recent_sessions(stats: list[SessionStats], title: str | None = None)
     table.add_column(t("col_messages"), justify="right", style=_S.dim)
 
     for s in stats:
-        row: list = [s.start_time.strftime("%m-%d %H:%M")]
+        row: list = [s.start_time.astimezone(system_tz()).strftime("%m-%d %H:%M")]
         if multi_agent:
             row.append(AGENT_SHORT.get(s.agent_id, s.agent_id))
         row.append(_project_short(s.project))
@@ -585,7 +586,7 @@ def render_sessions(stats: list[SessionStats], limit: int = 20) -> None:
     max_tokens = max(s.total_tokens for s in shown) if shown else 1
 
     for s in shown:
-        row: list = [s.start_time.strftime("%m-%d %H:%M")]
+        row: list = [s.start_time.astimezone(system_tz()).strftime("%m-%d %H:%M")]
         if multi_agent:
             row.append(AGENT_SHORT.get(s.agent_id, s.agent_id))
         row.append(_project_short(s.project))

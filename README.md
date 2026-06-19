@@ -47,9 +47,11 @@
 | `context-remaining` | 上下文窗口剩余占比 |
 | `model-with-reasoning` | 模型名 + 推理强度（如 `gpt-5-codex/high`） |
 
-## Dashboard 数据面板和 日/周/月 数据报表分析
+## Status 实时面板和 日/周/月 数据报表分析
 
-![Token Tracker Dashboard](assets/screenshot.png)
+`tt`（无参）/ `tt status`：聚焦**过去 5 小时**的实时面板——顶部多 Agent **合并**概览（Token / Cost / Sessions / Messages / Top Model），中间 **5h / 7d 订阅额度**进度条（Claude Code / Codex 分开；都没订阅额度时换成 per-agent 的 token/cost/sessions/messages 统计），底部**近期会话**列表（CC + Codex 合并、带 Agent 列、按 Cost 倒序、Cost 前三名高亮）。所有时间按**系统时区**显示，配色跟随当前主题。
+
+![Token Tracker Status](assets/screenshot.png)
 
 ![Token Tracker Daily](assets/screenshot-daily.png)
 
@@ -85,7 +87,8 @@ pip install --force-reinstall token-tracker && tt setup
 
 ```bash
 tt setup          # 初始化配置 Claude Code + Codex status_line
-tt                # 交互式 Dashboard（方向键切换 Agent）
+tt                # 过去 5h 实时面板（合并概览 + 5h/7d 额度 + 近期会话，= tt status）
+tt status         # 同上（tt 无参即进 status）
 tt daily          # 过去一年 token 贡献热力图（GitHub 风格）+ 年度分析卡片
 tt weekly         # 周报：本周分析卡片 + 每日趋势柱状图 + 周 / 项目 / 模型趋势
 tt monthly        # 按月汇总（多 Agent 分组展示）

@@ -47,9 +47,11 @@ The status line has four rows, left to right:
 | `context-remaining` | Remaining percentage of the context window |
 | `model-with-reasoning` | Model name + reasoning level (e.g. `gpt-5-codex/high`) |
 
-## Dashboard & Daily / Weekly / Monthly Reports
+## Status Panel & Daily / Weekly / Monthly Reports
 
-![Token Tracker Dashboard](assets/screenshot.png)
+`tt` (no args) / `tt status`: a **last-5-hours** real-time panel — top: multi-agent **merged** overview (Token / Cost / Sessions / Messages / Top Model); middle: **5h / 7d subscription quota** bars (Claude Code / Codex separately; when neither has a subscription quota, shows per-agent token/cost/sessions/messages instead); bottom: **recent sessions** (CC + Codex merged, with an Agent column, sorted by Cost desc, top-3 cost highlighted). All times use the **system timezone**; colors follow the current theme.
+
+![Token Tracker Status](assets/screenshot.png)
 
 ![Token Tracker Daily](assets/screenshot-daily.png)
 
@@ -85,7 +87,8 @@ pip install --force-reinstall token-tracker && tt setup
 
 ```bash
 tt setup          # initialize and configure Claude Code + Codex status_line
-tt                # interactive dashboard (arrow keys to switch agents)
+tt                # last-5h real-time panel (merged overview + 5h/7d quota + recent sessions, = tt status)
+tt status         # same (tt with no args enters status)
 tt daily          # last-12-months token contribution heatmap (GitHub-style) + yearly analysis card
 tt weekly         # weekly report: this-week card + daily-trend bars + weekly / project / model trends
 tt monthly        # monthly summary (per-agent grouping)
