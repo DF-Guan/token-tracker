@@ -330,7 +330,7 @@ def main():
 
     agent_ids = {a.id for a in agents}
 
-    if command not in ("status", "dashboard", "daily", "weekly", "sessions"):
+    if command not in ("status", "dashboard", "daily", "weekly", "monthly", "sessions"):
         get_console().print(f"[dim]{t('detected', agents=', '.join(a.name + ' ✓' for a in agents))}[/dim]")
 
     if not is_setup():
@@ -376,6 +376,10 @@ def main():
         render_sessions_view(_summary_from_sessions(shown), shown, agent_names)
     elif command == "weekly":
         render_weekly(stats, agents=agent_names, daily=_aggregate_per_agent(report_agents, aggregate_daily))
+    elif command == "monthly":
+        render_monthly(stats, agents=agent_names,
+                       daily=_aggregate_per_agent(report_agents, aggregate_daily),
+                       weekly=_aggregate_per_agent(report_agents, aggregate_weekly))
     elif command == "daily":
         d_entries = [e for a in report_agents for e in _load_entries(a.id)]
         # 最活跃时段：过去一个月按小时聚合 token（24 小时分布），渲染层据此求活跃区间

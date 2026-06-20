@@ -4,6 +4,7 @@
 本模块聚焦各类表格与把它们组装成 dashboard。
 """
 
+import calendar
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
@@ -23,7 +24,6 @@ from .format import (
     AGENT_SHORT,
     _fmt_cost,
     _fmt_tokens,
-    _group_by_agent,
     _is_multi_agent,
     _model_short,
     _project_short,
@@ -118,7 +118,7 @@ def render_weekly(stats: list[WeeklyStats], agents: list[str] | None = None,
                 by_date[d.date] = by_date.get(d.date, 0) + d.total_tokens
             _render_daily_barchart(by_date)
         _render_weekly_trend(weeks)
-        _render_distribution("Project Trend", "Project", cur.projects, _project_short, _S.pink)
+        _render_distribution("Project Trend", "Project", cur.projects, _project_short, _S.pink, min_pct=2)
         _render_distribution("Model Trend", "Model", cur.models, _model_short, _S.blue)
         get_console().print(Text("  tt · by stormzhang", style=_S.dim))
 
@@ -186,6 +186,45 @@ def _render_daily_barchart(by_date: dict[str, int], days_back: int = 30, height:
     start, end = day_labels[0], day_labels[-1]
     gap = max(1, width - len(start) - len(end))
     lines.append(Text(start + " " * gap + end, style=_S.dim))
+    get_console().print(Padding(Group(*lines), (0, 0, 0, 2), expand=False))
+    get_console().print()
+
+
+def _render_weekly_barchart(weeks: list[WeeklyStats], weeks_back: int = 20, height: int = 6) -> None:
+    """最近 weeks_back 周的每周 token 垂直柱状图（▁-█ sub-cell，列间留白），橙色，仿 Daily Trend 但按周；
+    峰值柱上方标周起始、底部两端标起止周。周数据连续，无需 daily 的稀疏 gap 压缩。"""
+    recent = weeks[-weeks_back:]
+    if not recent:
+        return
+    vals = [w.total_tokens for w in recent]
+    labels = [f"{int(w.week_start[:2])}/{w.week_start[3:]}" for w in recent]  # "06-15" -> "6/15"
+    max_v = max(vals) or 1
+    blocks = " ▁▂▃▄▅▆▇█"
+    width = len(recent) * 2 - 1
+    top3 = set(sorted(range(len(vals)), key=lambda k: vals[k], reverse=True)[:3])
+    peak_k = max(range(len(vals)), key=lambda k: vals[k])
+
+    title = Text()
+    title.append("[Weekly Trend]", style=f"bold {_S.peach}")
+    title.append(f" (last {len(recent)} weeks)", style=f"dim {_S.peach}")
+    lines: list[Text] = [title, Text()]
+    top = [" "] * width
+    pos = max(0, min(width - len(labels[peak_k]), peak_k * 2 - len(labels[peak_k]) // 2))
+    for jx, ch in enumerate(labels[peak_k]):
+        if pos + jx < width:  # 周数很少时 width 可能短于标签，越界部分丢弃
+            top[pos + jx] = ch
+    lines.append(Text("".join(top), style=_S.peach))
+    for row in range(height, 0, -1):
+        line = Text()
+        for k, v in enumerate(vals):
+            diff = v / max_v * height - (row - 1)
+            ch = "█" if diff >= 1 else " " if diff <= 0 else blocks[round(diff * 8)]
+            line.append(ch, style=_S.peach if k in top3 else f"dim {_S.peach}")
+            if k < len(vals) - 1:
+                line.append(" ")
+        lines.append(line)
+    gap = max(1, width - len(labels[0]) - len(labels[-1]))
+    lines.append(Text(labels[0] + " " * gap + labels[-1], style=_S.dim))
     get_console().print(Padding(Group(*lines), (0, 0, 0, 2), expand=False))
     get_console().print()
 
@@ -283,9 +322,9 @@ def _render_weekly_trend(weeks: list[WeeklyStats], limit: int = 8) -> None:
 
 
 def _render_distribution(title: str, name_col: str, data: dict[str, int],
-                         short_fn: Callable[[str], str], accent: str) -> None:
-    """通用分布表（Project / Model）：标题、名称列、进度条统一用模块主色 accent，
-    按 token 降序取前 8；Token/Ratio 数值保持中性。"""
+                         short_fn: Callable[[str], str], accent: str, min_pct: float = 0.0) -> None:
+    """通用分布表（Project / Model）：标题、名称列、进度条统一用模块主色 accent，按 token 降序。
+    min_pct>0 时过滤掉占比 ≤min_pct% 的项（如 Project 取 >2%），=0 则全部显示；Token/Ratio 数值保持中性。"""
     if not data:
         return
     total = sum(data.values())
@@ -296,138 +335,116 @@ def _render_distribution(title: str, name_col: str, data: dict[str, int],
     table.add_column("Token", justify="right")
     table.add_column("", min_width=20)
     table.add_column("", justify="right", style=f"dim {accent}")
-    for idx, (name, tokens) in enumerate(items[:8]):
+    for idx, (name, tokens) in enumerate(items):
         pct = tokens / total * 100 if total else 0
+        if min_pct and pct <= min_pct:  # 过滤长尾小项（如 Project 只留 >2%）
+            continue
         fill = accent if idx == 0 else _darken(accent)
         table.add_row(short_fn(name), _fmt_tokens(tokens),
                       _bar_text(pct / 100, fill), f"{pct:.1f}%")
     get_console().print(Padding(table, (0, 0, 0, 2), expand=False))
 
 
-def _render_monthly_table(stats: list[MonthlyStats], title: str | None = None) -> None:
-    mode = _width_mode()
-    table = Table(
-        title=title, title_style="bold", box=box.SIMPLE_HEAVY,
-        header_style="bold", padding=(0, 1), expand=True,
-    )
-    table.add_column(t("col_month"), style=_S.token, no_wrap=True)
-    if mode != "compact":
-        table.add_column("Input", justify="right")
-        table.add_column("Output", justify="right")
-    if mode == "wide":
-        table.add_column(t("col_cache_create"), justify="right")
-        table.add_column(t("col_cache_read"), justify="right")
-    table.add_column(t("col_total_tokens"), justify="right", style="bold")
-    table.add_column(t("col_cost"), justify="right", style=_S.good)
-    table.add_column(t("col_sessions"), justify="right", style=_S.dim)
-    table.add_column(t("col_messages"), justify="right", style=_S.dim)
-
+def _merge_months(stats: list[MonthlyStats]) -> list[MonthlyStats]:
+    """跨 agent 合并同一月（多 agent 时每月多条），按月升序返回。"""
+    merged: dict[str, MonthlyStats] = {}
     for s in stats:
-        row: list = [s.month]
-        if mode != "compact":
-            row += [_fmt_tokens(s.input_tokens), _fmt_tokens(s.output_tokens)]
-        if mode == "wide":
-            row += [_fmt_tokens(s.cache_creation_tokens), _fmt_tokens(s.cache_read_tokens)]
-        row += [
-            _fmt_tokens(s.total_tokens),
-            _fmt_cost(s.cost_usd),
-            str(s.session_count),
-            str(s.message_count),
-        ]
-        table.add_row(*row)
-
-    table.add_section()
-    total_row: list = [f"[bold]{t('total_row')}[/bold]"]
-    if mode != "compact":
-        total_row += [
-            _fmt_tokens(sum(s.input_tokens for s in stats)),
-            _fmt_tokens(sum(s.output_tokens for s in stats)),
-        ]
-    if mode == "wide":
-        total_row += [
-            _fmt_tokens(sum(s.cache_creation_tokens for s in stats)),
-            _fmt_tokens(sum(s.cache_read_tokens for s in stats)),
-        ]
-    total_row += [
-        f"[{_S.token_bold}]{_fmt_tokens(sum(s.total_tokens for s in stats))}[/{_S.token_bold}]",
-        f"[{_S.cost_bold}]{_fmt_cost(sum(s.cost_usd for s in stats))}[/{_S.cost_bold}]",
-        str(sum(s.session_count for s in stats)),
-        str(sum(s.message_count for s in stats)),
-    ]
-    table.add_row(*total_row)
-
-    get_console().print(table)
+        m = merged.get(s.month)
+        if m is None:
+            m = merged[s.month] = MonthlyStats(month=s.month)
+        m.input_tokens += s.input_tokens
+        m.output_tokens += s.output_tokens
+        m.cache_creation_tokens += s.cache_creation_tokens
+        m.cache_read_tokens += s.cache_read_tokens
+        m.total_tokens += s.total_tokens
+        m.cost_usd += s.cost_usd
+        m.session_count += s.session_count
+        m.message_count += s.message_count
+        for k, v in s.models.items():
+            m.models[k] = m.models.get(k, 0) + v
+        for k, v in s.projects.items():
+            m.projects[k] = m.projects.get(k, 0) + v
+    return [merged[k] for k in sorted(merged)]
 
 
-def render_monthly(stats: list[MonthlyStats], agents: list[str] | None = None) -> None:
+def _month_span(month: str) -> tuple[int, int]:
+    """返回 (本月总天数, 已过天数)：当前月按今天、历史月按整月。month 形如 '2026-06'。"""
+    year, mon = int(month[:4]), int(month[5:7])
+    total = calendar.monthrange(year, mon)[1]
+    today = datetime.now(UTC).date()
+    elapsed = today.day if (year, mon) == (today.year, today.month) else total
+    return total, elapsed
+
+
+def _render_month_summary(cur: MonthlyStats, prev: MonthlyStats | None, agents: list[str],
+                          active_days: int) -> None:
+    """本月分析卡片：品牌行 + 分割线 + 月份；第二行 Tokens/Cost/Avg·Cost（橙）、
+    第三行 Sessions/Msgs/Active Days（蓝），带环比上月。Avg/Cost = 本月成本 ÷ 已过天数（日均）。"""
+    brand = brand_line(agents)
+    body = Text()
+    body.append("This Month", style=f"bold {_S.good}")
+    body.append(f"  {cur.month}", style=f"dim {_S.good}")
+    body.append("\n")
+    days_in_month, elapsed = _month_span(cur.month)
+    cur_avg = cur.cost_usd / max(1, elapsed)
+    prev_avg = prev.cost_usd / max(1, _month_span(prev.month)[0]) if prev else None
+    # 第二行（橙）：Tokens / Cost / Avg/Cost（日均花费）
+    append_metric(body, "Tokens", _fmt_tokens(cur.total_tokens), _S.peach,
+                  cur.total_tokens, prev.total_tokens if prev else None)
+    body.append("   ")
+    append_metric(body, "Cost", _fmt_cost(cur.cost_usd), _S.peach,
+                  cur.cost_usd, prev.cost_usd if prev else None)
+    body.append("   ")
+    append_metric(body, "Avg/Cost", _fmt_cost(cur_avg), _S.peach, cur_avg, prev_avg)
+    body.append("\n")
+    # 第三行（蓝）：Sessions / Msgs / Active Days
+    append_metric(body, "Sessions", str(cur.session_count), _S.blue,
+                  cur.session_count, prev.session_count if prev else None)
+    body.append("   ")
+    append_metric(body, "Msgs", str(cur.message_count), _S.blue,
+                  cur.message_count, prev.message_count if prev else None)
+    body.append("   ")
+    append_metric(body, "Active Days", f"{active_days}/{days_in_month}", _S.blue, active_days, None)
+    get_console().print(Panel(Group(brand, Rule(style=f"bold {_S.red}"), body),
+                              expand=False, border_style=_S.blue, padding=(0, 1)))
+    get_console().print()
+
+
+def _render_monthly_trend(months: list[MonthlyStats], limit: int = 12) -> None:
+    """逐月 token 进度条（最近若干月，最新在上；逐月同亮绿，本月在最上无需另高亮）。"""
+    recent = months[-limit:]
+    max_tok = max((m.total_tokens for m in recent), default=0) or 1
+    table = Table(title=Text("[Monthly Trend]", style=f"bold {_S.good}"), title_justify="left", box=box.SIMPLE,
+                  header_style="bold", padding=(0, 1), expand=False, border_style=_S.good)
+    table.add_column("Month", style=_S.good, no_wrap=True)
+    table.add_column("Token", justify="right")
+    table.add_column("", min_width=20)
+    for m in reversed(recent):
+        table.add_row(
+            m.month,
+            _fmt_tokens(m.total_tokens),
+            _bar_text(m.total_tokens / max_tok, _S.good),
+        )
+    get_console().print(Padding(table, (0, 0, 0, 2), expand=False))
+
+
+def render_monthly(stats: list[MonthlyStats], agents: list[str] | None = None,
+                   daily: list[DailyStats] | None = None,
+                   weekly: list[WeeklyStats] | None = None) -> None:
     if not stats:
         get_console().print(f"[{_S.warn}]{t('no_data')}[/{_S.warn}]")
         return
 
-    multi_agent = _is_multi_agent(stats)
-    months = {s.month for s in stats}
-    total_tokens = sum(s.total_tokens for s in stats)
-    total_cost = sum(s.cost_usd for s in stats)
-    total_msgs = sum(s.message_count for s in stats)
-    total_sessions = sum(s.session_count for s in stats)
-    days = len(months) * 30
+    months = _merge_months(stats)
+    cur = months[-1]
+    prev = months[-2] if len(months) >= 2 else None
 
-    _render_header(agents or ["Claude Code"], total_tokens, total_cost, total_sessions, total_msgs, days)
-
-    if multi_agent:
-        for agent_id, group in sorted(_group_by_agent(stats).items()):
-            _render_monthly_table(group, title=AGENT_LABEL.get(agent_id, agent_id))
-    else:
-        _render_monthly_table(stats)
-
-    if len(stats) > 1:
-        get_console().print()
-        _render_model_breakdown(stats)
-
-    get_console().print()
-
-
-def _render_model_breakdown(stats: list[MonthlyStats]) -> None:
-    all_models: dict[str, int] = {}
-    for s in stats:
-        for model, tokens in s.models.items():
-            all_models[model] = all_models.get(model, 0) + tokens
-
-    if not all_models:
-        return
-
-    total = sum(all_models.values())
-    sorted_models = sorted(all_models.items(), key=lambda x: x[1], reverse=True)
-
-    table = Table(
-        title=t("model_breakdown"),
-        box=box.SIMPLE,
-        header_style="bold",
-        padding=(0, 1),
-        expand=True,
-    )
-    table.add_column(t("col_model"), style=_S.cost, no_wrap=True)
-    table.add_column("Token", justify="right")
-    table.add_column(t("col_ratio"), justify="right")
-    table.add_column("", min_width=20)
-
-    for model, tokens in sorted_models[:8]:
-        pct = tokens / total * 100 if total > 0 else 0
-        bar_width = int(pct / 100 * 20)
-        bar_text = "█" * bar_width + "░" * (20 - bar_width)
-
-        if pct > 50:
-            bar_style = _S.token_bold
-        elif pct > 20:
-            bar_style = _S.blue
-        else:
-            bar_style = _S.dim
-
-        table.add_row(
-            _model_short(model),
-            _fmt_tokens(tokens),
-            f"{pct:.1f}%",
-            Text(bar_text, style=bar_style),
-        )
-
-    get_console().print(table)
+    with forced_color_console():
+        active_days = len({d.date for d in daily if d.date.startswith(cur.month)}) if daily else 0
+        _render_month_summary(cur, prev, agents or ["Claude Code"], active_days)
+        if weekly:
+            _render_weekly_barchart(_merge_weeks(weekly))
+        _render_monthly_trend(months)
+        _render_distribution("Project Trend", "Project", cur.projects, _project_short, _S.pink, min_pct=2)
+        _render_distribution("Model Trend", "Model", cur.models, _model_short, _S.blue)
+        get_console().print(Text("  tt · by stormzhang", style=_S.dim))

@@ -1,7 +1,6 @@
 """纯格式化与分组工具：宽度模式、token/成本/时长格式、agent/模型短名、卡片文本片段（品牌行 / 指标）。"""
 
 import os
-from collections import defaultdict
 from zoneinfo import ZoneInfo
 
 from rich.text import Text
@@ -51,13 +50,6 @@ def _width_mode() -> str:
 
 def _is_multi_agent(stats) -> bool:
     return len({s.agent_id for s in stats if s.agent_id}) > 1
-
-
-def _group_by_agent(stats) -> dict[str, list]:
-    by_agent: dict[str, list] = defaultdict(list)
-    for s in stats:
-        by_agent[s.agent_id].append(s)
-    return by_agent
 
 
 def _model_short(model: str) -> str:
