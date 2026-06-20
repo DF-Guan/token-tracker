@@ -67,6 +67,7 @@
 - 桌面版（Tauri）规划：图表可视化、数据钻取、实时监控、多 Agent 多模型监控（仅规划，未启动）
 - **会话内彩色报表 hook — 桌面多形态适配**（终端部分已落地，见「进行中」）：桌面 app / web GUI 不吃 ANSI（实测乱码），需按形态输出 HTML/markdown（`tt` 加 `--format`、hook 检测形态）。详见本地 `docs/cc-hook-tt-真彩色.md`。
 - **Codex 伪 statusline**（✅ 已实测可用、待产品化）：`Stop` hook + `systemMessage` 实测**渲染真彩色 + 不污染上下文**（2026-06-19）；可用版 `.codex/hooks/tt-statusline.py`（一行 `[项目](git) | 5h/7d（+reset）| Ctx`，本地 gitignore），剩进 `tt setup` 自动注册。详见 `docs/codex-hooks-statusline-research.md`。
+- **远程下发通知通道**（📝 规划，新分支 `feature/broadcast` 做）：纯下行——读本地 `~/.claude/tt-broadcast.json`，在 **statusline 第 5 行**（未过期里优先级最高一条、按 level 着色）+ **`tt status` 头图上方横幅**（全部未过期）展示远程下发的公告/告警/进度；level 分流 `urgent`/`info`/`progress` + `expires_at` 自动过期；配 `tt broadcast` 写入命令自测。**只接收不上传、不碰隐私定位**。同步链路（远程→文件）+ 排行榜 PK（需上行、必 opt-in + 脱敏）留后续。详见 `docs/broadcast-plan.md`。
 - `mypy src` 有 5 个历史遗留报错（`aggregator.py` / `cli.py`）：准则是**别新增**，不顺手改无关旧报错
 
 ## 阻塞
