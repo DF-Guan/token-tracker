@@ -65,6 +65,53 @@ def test_report_hooks_render_inject_version_and_python():
         assert "token_tracker.cli" in rendered
 
 
+def test_codex_statusline_render_injects_version():
+    # Codex 伪 statusline 脚本：版本号注入、占位符不残留、语法正确（无 __TT_PYTHON__ 需求）。
+    rendered = hooks._render_codex_statusline_hook()
+    assert f'__version__ = "{hooks.STATUSLINE_HOOK_VERSION}"' in rendered
+    assert "__STATUSLINE_HOOK_VERSION__" not in rendered
+    compile(rendered, "<codex-statusline>", "exec")
+
+
+def test_codex_statusline_install_uninstall_roundtrip(tmp_path, monkeypatch):
+    # 末尾追加 tt Stop 段、保留用户已有 Stop hook；幂等；卸载删净 tt 段、留用户项。
+    monkeypatch.setattr(hooks, "CODEX_STATUSLINE_HOOK_PATH", str(tmp_path / "tt-statusline.py"))
+    base = (
+        '[tui]\nstatus_line = ["project"]\n\n'
+        '[[hooks.Stop]]\n\n'
+        '[[hooks.Stop.hooks]]\ntype = "command"\ncommand = "mine"\ntimeout = 5\n'
+    )
+    installed = hooks._install_codex_statusline(base, "python3")
+    assert "tt-statusline" in installed and 'command = "mine"' in installed
+    assert hooks._install_codex_statusline(installed, "python3") == installed  # 幂等
+    removed = hooks._uninstall_codex_statusline(installed)
+    assert "tt-statusline" not in removed and 'command = "mine"' in removed
+
+
+def test_codex_statusline_version_roundtrip(tmp_path, monkeypatch):
+    # _installed_codex_statusline_version 读回的版本应与写入的 STATUSLINE_HOOK_VERSION 一致，
+    # 保证 needs_update 不会因解析偏差而误判。
+    script_path = tmp_path / "tt-statusline.py"
+    monkeypatch.setattr(hooks, "CODEX_STATUSLINE_HOOK_PATH", str(script_path))
+    assert hooks._installed_codex_statusline_version() is None  # 未装
+    hooks._write_codex_statusline_script()
+    assert hooks._installed_codex_statusline_version() == hooks.STATUSLINE_HOOK_VERSION
+
+
+def test_codex_statusline_uninstall_keeps_other_stop_hooks(tmp_path, monkeypatch):
+    # 卸载只移除 tt 自己追加的那段 [[hooks.Stop]]，用户已有的 Stop hook 不动。
+    monkeypatch.setattr(hooks, "CODEX_STATUSLINE_HOOK_PATH", str(tmp_path / "tt-statusline.py"))
+    user_stop = (
+        '\n[[hooks.Stop]]\n\n'
+        '[[hooks.Stop.hooks]]\ntype = "command"\ncommand = "/usr/bin/my-other-stop"\ntimeout = 3\n'
+    )
+    base = '[tui]\nstatus_line = ["project"]\n' + user_stop
+    installed = hooks._install_codex_statusline(base, "python3")
+    removed = hooks._uninstall_codex_statusline(installed)
+    assert "tt-statusline" not in removed
+    assert "/usr/bin/my-other-stop" in removed  # 用户的 Stop 完整保留
+
+
 def test_is_tt_report_entry():
     tt = {"matcher": "tt-daily", "hooks": [{"type": "command", "command": "py /x/tt-report-hook.py"}]}
     other = {"matcher": "x", "hooks": [{"type": "command", "command": "echo hi"}]}

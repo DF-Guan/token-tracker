@@ -35,9 +35,11 @@ The status line has four rows, left to right:
 
 > When terminal width is limited, the display auto-degrades: first hides reset countdowns, then simplifies progress bars to plain percentages. **API mode** has no subscription quota, so row 2 shows only Ctx.
 
-**Codex**: Custom StatusLine rendering is not yet supported by Codex, so the official default style is reused. `tt setup` only writes the field configuration.
+**Codex**: Custom StatusLine rendering is not yet supported by Codex, so the official default style is reused (top `status_line`, configured by `tt setup`). `tt setup` also enables a **faux statusline** — a colored status line appended after each turn completes, to make up for Codex having no real custom status bar:
 
 ![Codex StatusLine](assets/screenshot-statusline-codex.png)
+
+**Official `status_line` fields**:
 
 | Field | Meaning |
 |------|------|
@@ -46,6 +48,10 @@ The status line has four rows, left to right:
 | `weekly-limit` | 7-day rolling-window quota usage |
 | `context-remaining` | Remaining percentage of the context window |
 | `model-with-reasoning` | Model name + reasoning level (e.g. `gpt-5-codex/high`) |
+
+**Faux statusline layout**: `[project](branch +A -D) | 5h: <%> (reset <ttl>) | 7d: <%> (reset <ttl>) | Ctx: <%>`
+
+Implemented via a Codex `Stop` hook returning `systemMessage` — renders 24-bit truecolor and **does not enter the model context** (verified). `tt unsetup` removes it.
 
 ## Status Panel & Daily / Weekly / Monthly Reports
 

@@ -16,9 +16,11 @@ CODEX_CONFIG = os.path.expanduser("~/.codex/config.toml")
 CODEX_BACKUP = os.path.expanduser("~/.codex/tt-backup.json")
 HOOK_VERSION = "1.19"
 REPORT_HOOK_VERSION = "1.0"
+STATUSLINE_HOOK_VERSION = "1.0"
 CC_REPORT_HOOK_PATH = os.path.expanduser("~/.claude/tt-report-hook.py")
 CC_COMMANDS_DIR = os.path.expanduser("~/.claude/commands")
 CODEX_REPORT_HOOK_PATH = os.path.expanduser("~/.codex/tt-report-hook.py")
+CODEX_STATUSLINE_HOOK_PATH = os.path.expanduser("~/.codex/tt-statusline.py")
 # 会话内彩色报表命令：CC 斜杠命令名 → 命令说明（生成 commands/*.md 用；matcher 用其 key）
 _CC_REPORT_CMDS = {
     "tt-daily": "tt daily 真彩色热力图（会话内直接渲染，不发模型）",
@@ -528,6 +530,186 @@ sys.exit(0)
 '''
 
 
+# Codex 伪 statusline（Stop hook + systemMessage）；每次回答后追加一行彩色 status。
+# 实测：Stop 的 systemMessage 渲染 24-bit 真彩色 + 不进模型上下文（2026-06-19）。
+# 配色暂 mocha 硬编码（CC statusline 烘焙值），未接主题系统——TUI 渲染区与 CC statusline 解耦。
+CODEX_STATUSLINE_HOOK_SCRIPT = r'''#!/usr/bin/env python3
+"""token-tracker Codex 伪 statusline（Stop hook）：每次回答后追加一行彩色 status。
+一行：[项目](分支 +A -D) | 5h: <%> (reset <倒计时>) | 7d: <%> (reset <倒计时>) | Ctx: <%>
+数据：codex.load_rate_limits()（5h/7d + reset，Codex 自带、账号级准）+ 当前会话 token_count
+（Ctx=last_input ÷ window，按 Stop payload 的 transcript_path 精确定位、回退最近文件）+ git。
+由 `tt setup` 生成，勿手改。"""
+__version__ = "__STATUSLINE_HOOK_VERSION__"
+import json
+import os
+import subprocess
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+# 配色（mocha 烘焙值；与 CC statusline 视觉一致）
+GREEN = "\033[38;2;166;227;161m"
+RED = "\033[38;2;243;139;168m"
+PINK = "\033[38;2;245;194;231m"
+YELLOW = "\033[38;2;249;226;175m"
+FAINT, BOLD, RST = "\033[2m", "\033[1m", "\033[0m"
+
+
+def _color(pct):
+    return GREEN if pct < 50 else YELLOW if pct < 80 else RED
+
+
+def _fmt_duration(s):
+    s = int(s)
+    if s >= 86400:
+        return f"{s // 86400}d{s % 86400 // 3600}h"
+    if s >= 3600:
+        return f"{s // 3600}h{s % 3600 // 60}m"
+    return f"{s // 60}m"
+
+
+def _parse_session(path):
+    """解析一个 session jsonl → (cwd, 最后一个 token_count 的 info)。"""
+    from token_tracker.adapters.util import iter_jsonl_dicts
+    cwd = ""
+    info = None
+    for d in iter_jsonl_dicts(path):
+        p = d.get("payload", {})
+        if d.get("type") == "session_meta":
+            cwd = p.get("cwd", "")
+        elif p.get("type") == "token_count" and p.get("info"):
+            info = p["info"]
+    return cwd, info
+
+
+def _current_session(payload):
+    """优先按 Stop payload 的 transcript_path 精确定位当前会话；拿不到再回退最近改动文件。"""
+    try:
+        tp = payload.get("transcript_path")
+        if tp and os.path.exists(tp):
+            cwd, info = _parse_session(Path(tp))
+            if info:
+                return cwd, info
+        from token_tracker.adapters import codex
+        for f in sorted(Path(codex.SESSIONS_DIR).rglob("*.jsonl"),
+                        key=lambda p: p.stat().st_mtime, reverse=True)[:3]:
+            cwd, info = _parse_session(f)
+            if info:
+                return cwd, info
+    except Exception:
+        pass
+    return "", None
+
+
+def _ctx_pct(info):
+    """当前 context 占用 % = 最后一次请求的 input ÷ 模型上下文窗口。"""
+    try:
+        win = info.get("model_context_window")
+        last = info.get("last_token_usage") or {}
+        if win and last.get("input_tokens"):
+            return last["input_tokens"] / win * 100
+    except Exception:
+        pass
+    return None
+
+
+def _git_status(cwd):
+    """(branch, +A, -D)；失败/非 git/无 commit 返回 ("", 0, 0)。"""
+    if not cwd:
+        return "", 0, 0
+
+    def run(args):
+        return subprocess.check_output(
+            ["git", *args], cwd=cwd, stderr=subprocess.DEVNULL, text=True, timeout=2,
+        ).strip()
+
+    try:
+        branch = run(["branch", "--show-current"])
+    except Exception:
+        return "", 0, 0
+    if not branch:
+        return "", 0, 0
+    try:
+        if run(["status", "--porcelain", "--untracked-files=no"]):
+            branch += "*"
+    except Exception:
+        pass
+    a = d = 0
+    try:
+        for ln in run(["diff", "HEAD", "--numstat"]).splitlines():
+            parts = ln.split("\t")
+            if len(parts) >= 2:
+                if parts[0].isdigit():
+                    a += int(parts[0])
+                if parts[1].isdigit():
+                    d += int(parts[1])
+    except Exception:
+        pass
+    return branch, a, d
+
+
+def _render_project(cwd):
+    if not cwd:
+        return ""
+    name = os.path.basename(cwd.rstrip("/"))
+    branch, a, d = _git_status(cwd)
+    if not branch:
+        return f"{BOLD}{GREEN}[{name}]{RST}"
+    inner = f"{RED}{branch}{RST}"
+    if a:
+        inner += f" {GREEN}+{a}{RST}"
+    if d:
+        inner += f" {RED}-{d}{RST}"
+    return f"{BOLD}{GREEN}[{name}]{RST}({inner})"
+
+
+def _render_limit(label, pct, resets_at, now_ts):
+    s = f"{PINK}{label}: {RST}{_color(pct)}{pct:.0f}%{RST}"
+    if resets_at:
+        remain = int(resets_at) - now_ts
+        if remain > 0:
+            s += f" {FAINT}{PINK}(reset {_fmt_duration(remain)}){RST}"
+    return s
+
+
+def main():
+    try:
+        payload = json.load(sys.stdin)
+    except Exception:
+        payload = {}
+
+    rl = None
+    try:
+        from token_tracker.adapters import codex
+        rl = codex.load_rate_limits()
+    except Exception:
+        pass
+
+    cwd, info = _current_session(payload)
+    cwd = payload.get("cwd") or cwd
+    ctx = _ctx_pct(info) if info else None
+    now_ts = int(datetime.now(timezone.utc).timestamp())
+
+    parts = []
+    proj = _render_project(cwd)
+    if proj:
+        parts.append(proj)
+    if rl and rl.five_hour_pct is not None:
+        parts.append(_render_limit("5h", rl.five_hour_pct, rl.five_hour_resets_at, now_ts))
+    if rl and rl.seven_day_pct is not None:
+        parts.append(_render_limit("7d", rl.seven_day_pct, rl.seven_day_resets_at, now_ts))
+    if ctx is not None:
+        parts.append(f"{PINK}Ctx: {RST}{_color(ctx)}{ctx:.0f}%{RST}")
+
+    if parts:
+        print(json.dumps({"systemMessage": " | ".join(parts)}))
+
+
+if __name__ == "__main__":
+    main()
+'''
+
+
 # --- helpers ---
 
 def _render_hook_script() -> str:
@@ -669,6 +851,64 @@ def _uninstall_codex_report(content: str) -> str:
     return _CODEX_HOOK_REGEX.sub("\n", content)
 
 
+def _render_codex_statusline_hook() -> str:
+    """注入版本号，得到要落盘的 Codex 伪 statusline 脚本（不需 __TT_PYTHON__：脚本无 subprocess 调 tt）。"""
+    return CODEX_STATUSLINE_HOOK_SCRIPT.replace(
+        "__STATUSLINE_HOOK_VERSION__", STATUSLINE_HOOK_VERSION
+    )
+
+
+def _write_codex_statusline_script() -> None:
+    with open(CODEX_STATUSLINE_HOOK_PATH, "w", encoding="utf-8") as f:
+        f.write(_render_codex_statusline_hook())
+    if os.name != "nt":
+        os.chmod(CODEX_STATUSLINE_HOOK_PATH,
+                 os.stat(CODEX_STATUSLINE_HOOK_PATH).st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+
+def _installed_codex_statusline_version() -> str | None:
+    try:
+        with open(CODEX_STATUSLINE_HOOK_PATH, encoding="utf-8") as f:
+            for line in f:
+                if line.startswith("__version__"):
+                    return line.split("=", 1)[1].strip().strip('"\'')
+    except OSError:
+        pass
+    return None
+
+
+# 卸载时定位 tt 追加的整段 [[hooks.Stop]]（按 command 含特征码 tt-statusline）
+_CODEX_STATUSLINE_REGEX = re.compile(
+    r'\n*\[\[hooks\.Stop\]\]\s*'
+    r'\[\[hooks\.Stop\.hooks\]\]\s*'
+    r'type = "command"\s*'
+    r'command = "[^"]*tt-statusline[^"]*"\s*'
+    r'timeout = \d+\s*'
+)
+
+
+def _install_codex_statusline(content: str, python: str) -> str:
+    """落盘 Codex statusline 脚本 + 在 config.toml 末尾追加 Stop hook 段（幂等：已含特征码则不重复）。"""
+    _write_codex_statusline_script()
+    if "tt-statusline" in content:
+        return content
+    cmd = f"{python} {CODEX_STATUSLINE_HOOK_PATH}"
+    return content.rstrip() + (
+        "\n\n[[hooks.Stop]]\n\n"
+        "[[hooks.Stop.hooks]]\n"
+        'type = "command"\n'
+        f'command = "{cmd}"\n'
+        "timeout = 10\n"
+    )
+
+
+def _uninstall_codex_statusline(content: str) -> str:
+    """删 Codex statusline 脚本 + 从 content 移除 tt 追加的 Stop hook 段（不动用户其它）。"""
+    if os.path.exists(CODEX_STATUSLINE_HOOK_PATH):
+        os.remove(CODEX_STATUSLINE_HOOK_PATH)
+    return _CODEX_STATUSLINE_REGEX.sub("\n", content)
+
+
 def _status_line_toml(items: list[str]) -> str:
     body = ",\n".join(f'  "{item}"' for item in items)
     return f"status_line = [\n{body},\n]"
@@ -719,7 +959,7 @@ def _installed_hook_version() -> str | None:
 
 
 def needs_update() -> bool:
-    # report hook 只在已安装时纳入版本判断（未装不主动装）
+    # report / statusline hook 都只在已安装时纳入版本判断（未装不主动装）
     if os.path.isdir(os.path.dirname(HOOK_SCRIPT_PATH)):
         if _installed_hook_version() != HOOK_VERSION:
             return True
@@ -727,7 +967,10 @@ def needs_update() -> bool:
         if rv is not None and rv != REPORT_HOOK_VERSION:
             return True
     cv = _installed_codex_report_version()
-    return cv is not None and cv != REPORT_HOOK_VERSION
+    if cv is not None and cv != REPORT_HOOK_VERSION:
+        return True
+    sv = _installed_codex_statusline_version()
+    return sv is not None and sv != STATUSLINE_HOOK_VERSION
 
 
 def update_hook() -> None:
@@ -741,6 +984,8 @@ def update_hook() -> None:
             _write_cc_report_script()
     if _installed_codex_report_version() is not None:
         _write_codex_report_script()
+    if _installed_codex_statusline_version() is not None:
+        _write_codex_statusline_script()
 
 
 # --- setup ---
@@ -814,8 +1059,9 @@ def _setup_codex() -> None:
         else:
             content += f"\n[tui]\n{_status_line_toml(CODEX_STATUS_LINE)}\n"
 
-    # report hook（末尾追加，幂等）
+    # report hook + 伪 statusline hook（均末尾追加，幂等）
     content = _install_codex_report(content, python)
+    content = _install_codex_statusline(content, python)
 
     with open(CODEX_CONFIG, "w", encoding="utf-8") as f:
         f.write(content)
@@ -824,6 +1070,7 @@ def _setup_codex() -> None:
     if old is not None and old != CODEX_STATUS_LINE:
         get_console().print(f"[dim]{t('codex_backup', path=CODEX_BACKUP)}[/dim]")
     get_console().print(f"[dim]{t('codex_report_hint')}[/dim]")
+    get_console().print(f"[dim]{t('codex_statusline_hint')}[/dim]")
     get_console().print(f"[dim]{t('restart_codex')}[/dim]")
 
 
@@ -884,7 +1131,9 @@ def _unsetup_codex() -> None:
         return
     content, parsed = result
 
-    content = _uninstall_codex_report(content)  # 先独立清 report（脚本 + hook 段），不受 status_line 检查阻断
+    # 先独立清 report + 伪 statusline（脚本 + hook 段），不受 status_line 检查阻断
+    content = _uninstall_codex_report(content)
+    content = _uninstall_codex_statusline(content)
 
     if parsed.get("tui", {}).get("status_line") is not None:
         if os.path.exists(CODEX_BACKUP):

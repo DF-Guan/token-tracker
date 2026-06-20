@@ -35,9 +35,11 @@
 
 > 终端宽度不足时会自动降级：先隐藏重置倒计时，再将进度条简化为百分比数字。**API 模式**无订阅配额，第 2 行只显示 Ctx。
 
-**Codex**：官方暂不支持自定义 StatusLine 渲染，沿用官方默认样式，`tt setup` 仅写入字段配置
+**Codex**：官方暂不支持自定义 StatusLine 渲染，沿用官方默认样式（顶部官方 status_line，`tt setup` 写入字段配置）。`tt setup` 同时启用**伪 statusline**——每次回答完成后在回答尾部追加一行彩色 status，弥补 Codex 无自定义状态栏的缺口：
 
 ![Codex StatusLine](assets/screenshot-statusline-codex.png)
+
+**官方 status_line 字段**：
 
 | 字段 | 说明 |
 |------|------|
@@ -46,6 +48,10 @@
 | `weekly-limit` | 7 天滑动窗口配额用量 |
 | `context-remaining` | 上下文窗口剩余占比 |
 | `model-with-reasoning` | 模型名 + 推理强度（如 `gpt-5-codex/high`） |
+
+**伪 statusline 一行布局** `[项目](分支 +A -D) | 5h: <%> (reset <倒计时>) | 7d: <%> (reset <倒计时>) | Ctx: <%>`
+
+通过 Codex `Stop` hook 注入 `systemMessage` 实现，渲染 24-bit 真彩色、**不进模型上下文**（实测）。`tt unsetup` 一并移除。
 
 ## Status 实时面板和 日/周/月 数据报表分析
 
