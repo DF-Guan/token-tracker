@@ -125,10 +125,11 @@ tt theme               # 显示当前主题及来源
 tt theme list          # 列出全部主题 + 色块预览
 tt theme preview nord  # 预览某主题（CLI 样例 + 状态栏样例行）
 tt theme set nord      # 切换主题（持久化 + 重烘焙状态栏）
+tt monthly --theme nord  # 任意报表临时换主题渲染（不持久化、不动状态栏，适合对比）
 ```
 
 - **首次运行**（终端内、非 AI 会话）会进入交互向导引导选主题；CI / 脚本 / 会话内自动跳过、静默用默认。
-- 切换持久化到 `~/.config/token-tracker/theme.json` ；环境变量 `TT_THEME=<主题名>` 优先级最高、可临时覆盖。
+- 切换持久化到 `~/.config/token-tracker/theme.json` ；优先级 `--theme` 参数 > `TT_THEME` 环境变量 > 配置文件 > 自动（`--theme` 和 `TT_THEME` 都只临时生效、不写配置）。
 - 终端支持 truecolor 用精确配色；不支持的（如 macOS 自带 Terminal.app）自动降级到当前主题的 **256 色近似**，8 色老终端不再适配。
 
 ### 报告排序

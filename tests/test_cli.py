@@ -28,3 +28,11 @@ def test_apply_sort_unknown_key_falls_back():
     ]
     cli._apply_sort(stats, "bogus", descending=True, default_attr="date", default_reverse=True)
     assert [s.date for s in stats] == ["2026-01-02", "2026-01-01"]
+
+
+def test_extract_theme_arg():
+    # --theme NAME 从任意位置提取并从 args 移除；未给则 None；缺值不崩
+    assert cli._extract_theme_arg(["monthly", "--theme", "dracula"]) == (["monthly"], "dracula")
+    assert cli._extract_theme_arg(["--theme", "nord", "weekly"]) == (["weekly"], "nord")
+    assert cli._extract_theme_arg(["monthly"]) == (["monthly"], None)
+    assert cli._extract_theme_arg(["--theme"]) == (["--theme"], None)  # 缺值：原样留，不消耗

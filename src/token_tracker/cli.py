@@ -67,6 +67,21 @@ def _parse_limit(args: list[str], default: int) -> int:
     return default
 
 
+def _extract_theme_arg(args: list[str]) -> tuple[list[str], str | None]:
+    """提取 --theme NAME，返回 (剩余 args, theme_name)；未给则 name=None。用于报表临时切主题、不落配置。"""
+    remaining: list[str] = []
+    name = None
+    i = 0
+    while i < len(args):
+        if args[i] == "--theme" and i + 1 < len(args):
+            name = args[i + 1].lower()
+            i += 2
+        else:
+            remaining.append(args[i])
+            i += 1
+    return remaining, name
+
+
 def _parse_sort_args(args: list[str]) -> tuple[list[str], str | None, bool]:
     """Extract --sort KEY and --asc from args, return (remaining, sort_key, descending)."""
     remaining = []
@@ -299,6 +314,14 @@ def cmd_theme(args: list[str]) -> None:
 
 def main():
     args = sys.argv[1:]
+    # --theme NAME：临时覆盖主题（仅本次进程、不落配置/不重烘焙状态栏），对所有报表 + status 生效
+    args, theme_override = _extract_theme_arg(args)
+    if theme_override is not None:
+        if theme_override not in themes.THEMES:
+            get_console().print(f"[red]{t('theme_unknown', name=theme_override)}[/red]")
+            get_console().print(f"[dim]{t('theme_options', names=', '.join(themes.THEME_NAMES))}[/dim]")
+            sys.exit(1)
+        theme.set_active_theme(theme_override)
     command = args[0] if args else "status"
 
     # 版本查询不该触发任何文件读写，放在 auto-update 之前短路返回

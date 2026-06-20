@@ -125,10 +125,11 @@ tt theme               # show current theme and its source
 tt theme list          # list all themes with color swatches
 tt theme preview nord  # preview a theme (CLI sample + status line sample)
 tt theme set nord      # switch theme (persist + re-bake status line)
+tt monthly --theme nord  # render any report in a theme temporarily (no persist, status line untouched)
 ```
 
 - **First run** (in a terminal, not inside an AI session) opens an interactive wizard to pick a theme; CI / scripts / in-session runs skip it silently and use the default.
-- Choice persists to `~/.config/token-tracker/theme.json` ; the `TT_THEME=<name>` env var has the highest priority and can override temporarily.
+- Choice persists to `~/.config/token-tracker/theme.json` ; priority: `--theme` flag > `TT_THEME` env var > config file > auto (both `--theme` and `TT_THEME` are temporary and never written to config).
 - Truecolor terminals get exact colors; terminals without truecolor (e.g. macOS Terminal.app) fall back to a **256-color approximation** of the current theme; 8-color terminals are no longer targeted.
 
 ### Report Sorting
