@@ -25,3 +25,6 @@ docs/
 weekly-report*.html
 weekly-report*.png
 *.docx
+
+# 本地 mock 演示数据（不入库，仅本地截图 / 演示用）
+/mock/
