@@ -340,7 +340,12 @@ def main():
         update_hook()
 
     if command == "setup":
-        setup()
+        if "-i" in args[1:] or "--interactive" in args[1:]:
+            # 完整重配：语言 + 主题 + 增强项（不只是组件），wizard 内部会调 setup
+            from .wizard import run_wizard
+            run_wizard()
+        else:
+            setup()
         return
     if command == "unsetup":
         unsetup()

@@ -81,11 +81,19 @@ _STRINGS = {
         "theme_env_override": "注意：环境变量 TT_THEME 已设置，会覆盖此次切换",
         "theme_usage": "用法: tt theme [show | list | set <主题名> | preview <主题名>]",
         # --- wizard (wizard.py) ---
-        "wizard_welcome": "欢迎使用 token-tracker！",
-        "wizard_intro": "首次运行，先快速配置（之后可用 tt theme / tt setup 调整）",
-        "wizard_pick_theme": "可选配色主题（CLI 报表 + 状态栏统一）：",
+        "wizard_pick_theme": "选择配色主题",
         "wizard_theme_prompt": "选择主题",
-        "wizard_done": "配置完成！",
+        "wizard_q_report_hooks": "启用会话内彩色命令（/tt-daily 等，不经模型）",
+        "wizard_q_codex_statusline": "启用 Codex 伪 statusline（每次回答后追加状态行）",
+        "theme_recommended": "（推荐）",
+        "wizard_done": "配置完成",
+        "wizard_summary_theme": "主题",
+        "wizard_summary_report": "会话内彩色命令",
+        "wizard_summary_statusline": "Codex 伪 statusline",
+        "wizard_summary_on": "开",
+        "wizard_summary_off": "关",
+        "wizard_restart": "重启 Claude Code / Codex 后生效",
+        "wizard_done_next": "下一步：跑 tt 看实时面板，或 tt daily / weekly / monthly 看报表",
         # --- hooks.py ---
         "no_agent_install": "未检测到 Claude Code 或 Codex，请先安装其中之一",
         "first_setup": "首次使用，正在配置状态栏...",
@@ -190,11 +198,19 @@ _STRINGS = {
         "theme_env_override": "Note: env TT_THEME is set and overrides this change",
         "theme_usage": "Usage: tt theme [show | list | set <name> | preview <name>]",
         # --- wizard (wizard.py) ---
-        "wizard_welcome": "Welcome to token-tracker!",
-        "wizard_intro": "First run — a quick setup (adjust later with tt theme / tt setup)",
-        "wizard_pick_theme": "Available themes (unified across CLI reports + status line):",
+        "wizard_pick_theme": "Pick a theme",
         "wizard_theme_prompt": "Pick a theme",
-        "wizard_done": "Setup complete!",
+        "wizard_q_report_hooks": "Enable in-session color commands (/tt-daily etc., no model)",
+        "wizard_q_codex_statusline": "Enable Codex faux statusline (status line after each reply)",
+        "theme_recommended": "(recommended)",
+        "wizard_done": "Setup complete",
+        "wizard_summary_theme": "Theme",
+        "wizard_summary_report": "In-session color commands",
+        "wizard_summary_statusline": "Codex faux statusline",
+        "wizard_summary_on": "on",
+        "wizard_summary_off": "off",
+        "wizard_restart": "Restart Claude Code / Codex to take effect",
+        "wizard_done_next": "Next: run tt for the live panel, or tt daily / weekly / monthly for reports",
         # --- hooks.py ---
         "no_agent_install": "Claude Code or Codex not detected, please install one first",
         "first_setup": "First run, configuring status bar...",
@@ -223,6 +239,15 @@ _STRINGS = {
 
 
 def _detect_lang() -> str:
+    # 1. 用户配置文件优先（wizard 选过）。延迟 import 避免顶层循环。
+    try:
+        from . import config
+        saved = config.resolve_lang()
+        if saved:
+            return saved
+    except Exception:
+        pass
+    # 2. 环境变量兜底
     env_lang = os.environ.get("TT_LANG", "").lower()
     if env_lang:
         return "zh" if env_lang.startswith("zh") else "en"
@@ -235,6 +260,13 @@ def _detect_lang() -> str:
 
 LANG = _detect_lang()
 _CURRENT = _STRINGS.get(LANG, _STRINGS["en"])
+
+
+def set_lang(lang: str) -> None:
+    """运行时切换语言（wizard 选完即时生效，后续 t() 调用返回新语言文案）。"""
+    global LANG, _CURRENT
+    LANG = lang if lang in _STRINGS else "en"
+    _CURRENT = _STRINGS[LANG]
 
 
 def t(msg_key: str, **kwargs) -> str:

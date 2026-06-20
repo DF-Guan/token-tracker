@@ -4,11 +4,24 @@ import re
 import stat
 import sys
 import tomllib
+from dataclasses import dataclass
 
 from . import config
 from .i18n import t
 from .ui import themes
 from .ui.console import get_console
+
+
+@dataclass
+class SetupComponents:
+    """组件开关。状态栏总装（不可关，是 setup 的核心目的）；可选项为会话内彩色报表 hook
+    （CC /tt-daily·/tt-weekly + Codex ttdaily·ttweekly）+ Codex 伪 statusline（Stop hook）。"""
+    report_hooks: bool = True
+    codex_faux_statusline: bool = True
+
+    @classmethod
+    def all_on(cls) -> "SetupComponents":
+        return cls(report_hooks=True, codex_faux_statusline=True)
 
 CLAUDE_SETTINGS = os.path.expanduser("~/.claude/settings.json")
 HOOK_SCRIPT_PATH = os.path.expanduser("~/.claude/tt-statusline.py")
@@ -990,31 +1003,38 @@ def update_hook() -> None:
 
 # --- setup ---
 
-def setup(auto: bool = False) -> None:
+def setup(auto: bool = False, components: SetupComponents | None = None, quiet: bool = False) -> None:
+    """安装状态栏 + 可选组件。components=None 表示全装（向后兼容）。
+    quiet=True 时不打任何提示（wizard 场景：由 wizard 末尾给一次综合总结）。"""
+    if components is None:
+        components = SetupComponents.all_on()
+    p = (lambda *a, **k: None) if quiet else get_console().print
+
     has_cc = os.path.isdir(os.path.dirname(CLAUDE_SETTINGS))
     has_codex = os.path.exists(CODEX_CONFIG)
 
     if not has_cc and not has_codex:
-        get_console().print(f"[red]{t('no_agent_install')}[/red]")
+        p(f"[red]{t('no_agent_install')}[/red]")
         return
 
     if auto:
-        get_console().print(f"[dim]{t('first_setup')}[/dim]")
+        p(f"[dim]{t('first_setup')}[/dim]")
 
     if has_cc:
-        _setup_claude()
+        _setup_claude(components, quiet)
     else:
         if not auto:
-            get_console().print(f"[dim]{t('cc_not_found')}[/dim]")
+            p(f"[dim]{t('cc_not_found')}[/dim]")
 
     if has_codex:
-        _setup_codex()
+        _setup_codex(components, quiet)
     else:
         if not auto:
-            get_console().print(f"[dim]{t('codex_not_found')}[/dim]")
+            p(f"[dim]{t('codex_not_found')}[/dim]")
 
 
-def _setup_claude() -> None:
+def _setup_claude(components: SetupComponents, quiet: bool = False) -> None:
+    p = (lambda *a, **k: None) if quiet else get_console().print
     update_hook()
 
     settings: dict = {}
@@ -1024,22 +1044,27 @@ def _setup_claude() -> None:
 
     existing = settings.get("statusLine")
     if existing and "tt-statusline" not in (existing.get("command") or ""):
-        get_console().print(f"[yellow]{t('sl_backup_replace')}[/yellow]")
+        p(f"[yellow]{t('sl_backup_replace')}[/yellow]")
         settings.setdefault(_BACKUP_KEY, {})[_PREV_SL_KEY] = existing
 
     python = sys.executable or "python3"
     settings["statusLine"] = {"type": "command", "command": f"{python} {HOOK_SCRIPT_PATH}"}
-    _install_cc_report(settings, python)
+    if components.report_hooks:
+        _install_cc_report(settings, python)
+    else:
+        _uninstall_cc_report(settings)  # 用户关掉时，清掉旧的（如果之前装过）
 
     with open(CLAUDE_SETTINGS, "w", encoding="utf-8") as f:
         json.dump(settings, f, indent=2, ensure_ascii=False)
 
-    get_console().print(f"[green]✓[/green] {t('cc_configured')}")
-    get_console().print(f"[dim]{t('cc_report_hint')}[/dim]")
-    get_console().print(f"[dim]{t('restart_cc')}[/dim]")
+    p(f"[green]✓[/green] {t('cc_configured')}")
+    if components.report_hooks:
+        p(f"[dim]{t('cc_report_hint')}[/dim]")
+    p(f"[dim]{t('restart_cc')}[/dim]")
 
 
-def _setup_codex() -> None:
+def _setup_codex(components: SetupComponents, quiet: bool = False) -> None:
+    p = (lambda *a, **k: None) if quiet else get_console().print
     result = _read_codex_config()
     if not result:
         return
@@ -1059,19 +1084,27 @@ def _setup_codex() -> None:
         else:
             content += f"\n[tui]\n{_status_line_toml(CODEX_STATUS_LINE)}\n"
 
-    # report hook + 伪 statusline hook（均末尾追加，幂等）
-    content = _install_codex_report(content, python)
-    content = _install_codex_statusline(content, python)
+    # report hook + 伪 statusline hook（均末尾追加，幂等）；按 components 开关
+    if components.report_hooks:
+        content = _install_codex_report(content, python)
+    else:
+        content = _uninstall_codex_report(content)
+    if components.codex_faux_statusline:
+        content = _install_codex_statusline(content, python)
+    else:
+        content = _uninstall_codex_statusline(content)
 
     with open(CODEX_CONFIG, "w", encoding="utf-8") as f:
         f.write(content)
 
-    get_console().print(f"[green]✓[/green] {t('codex_configured')}")
+    p(f"[green]✓[/green] {t('codex_configured')}")
     if old is not None and old != CODEX_STATUS_LINE:
-        get_console().print(f"[dim]{t('codex_backup', path=CODEX_BACKUP)}[/dim]")
-    get_console().print(f"[dim]{t('codex_report_hint')}[/dim]")
-    get_console().print(f"[dim]{t('codex_statusline_hint')}[/dim]")
-    get_console().print(f"[dim]{t('restart_codex')}[/dim]")
+        p(f"[dim]{t('codex_backup', path=CODEX_BACKUP)}[/dim]")
+    if components.report_hooks:
+        p(f"[dim]{t('codex_report_hint')}[/dim]")
+    if components.codex_faux_statusline:
+        p(f"[dim]{t('codex_statusline_hint')}[/dim]")
+    p(f"[dim]{t('restart_codex')}[/dim]")
 
 
 # --- unsetup ---

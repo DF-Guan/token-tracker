@@ -193,13 +193,70 @@ def test_should_run_wizard(monkeypatch):
     assert cli._should_run_wizard() is False
 
 
+def test_save_resolve_lang_roundtrip(tmp_path, monkeypatch):
+    # 写入 zh / en 都能读回；非法值 / 未配置都返回 None（由 i18n 走环境变量兜底）。
+    monkeypatch.setattr(config, "CONFIG_DIR", str(tmp_path))
+    monkeypatch.setattr(config, "LANG_CONFIG_PATH", str(tmp_path / "lang.json"))
+    assert config.resolve_lang() is None  # 未配置
+    config.save_lang("zh")
+    assert config.resolve_lang() == "zh"
+    config.save_lang("en")
+    assert config.resolve_lang() == "en"
+    config.save_lang("ja")  # 非法值
+    assert config.resolve_lang() is None
+
+
+def test_i18n_set_lang_switches_translations():
+    # set_lang 立即切换全局 _CURRENT，后续 t() 返回新语言文案。
+    from token_tracker import i18n
+    original = i18n.LANG
+    try:
+        i18n.set_lang("zh")
+        assert i18n.t("wizard_pick_theme") == "选择配色主题"
+        i18n.set_lang("en")
+        assert i18n.t("wizard_pick_theme") == "Pick a theme"
+        i18n.set_lang("invalid")  # 非法值 → 兜底 en
+        assert i18n.LANG == "en"
+    finally:
+        i18n.set_lang(original)  # 还原避免污染后续测试
+
+
+def test_detect_lang_prefers_config_over_env(tmp_path, monkeypatch):
+    # 用户配置文件优先于 LANG 环境变量（防止终端 LANG=en_US 但用户在 wizard 选了 zh）。
+    monkeypatch.setattr(config, "CONFIG_DIR", str(tmp_path))
+    monkeypatch.setattr(config, "LANG_CONFIG_PATH", str(tmp_path / "lang.json"))
+    monkeypatch.setenv("LANG", "en_US.UTF-8")
+    monkeypatch.delenv("TT_LANG", raising=False)
+    from token_tracker import i18n
+    config.save_lang("zh")
+    assert i18n._detect_lang() == "zh"
+
+
 def test_run_wizard_saves_theme(tmp_path, monkeypatch):
-    from token_tracker import wizard
+    # wizard 用 questionary 交互：mock select 直接返回值（避免起 prompt_toolkit 主循环）。
+    from token_tracker import i18n, wizard
+
+    class _FakeQ:
+        def __init__(self, value):
+            self._v = value
+
+        def ask(self):
+            return self._v
+
     monkeypatch.setattr(config, "CONFIG_DIR", str(tmp_path))
     monkeypatch.setattr(config, "CONFIG_PATH", str(tmp_path / "theme.json"))
-    monkeypatch.setattr("rich.prompt.Prompt.ask", lambda *a, **k: "nord")
-    monkeypatch.setattr(wizard, "setup", lambda: None)  # 不真落地配置
+    monkeypatch.setattr(config, "LANG_CONFIG_PATH", str(tmp_path / "lang.json"))
+
+    # 顺序：选语言（zh）→ 选主题（nord）→ 增强项 Yes/No（按检测到的 agent 数量）
+    # has_cc / has_codex 固定，问题数稳定；多余 mock 序列不会被消耗。
+    monkeypatch.setattr(wizard, "_has_cc", lambda: True)
+    monkeypatch.setattr(wizard, "_has_codex", lambda: True)
+    selects = iter(["zh", "nord", "Yes", "Yes"])
+    monkeypatch.setattr("questionary.select", lambda *a, **k: _FakeQ(next(selects)))
+    monkeypatch.setattr(wizard, "setup", lambda **kw: None)  # 不真落地配置
     monkeypatch.delenv("TT_THEME", raising=False)
     monkeypatch.setattr(theme, "_ACTIVE_NAME", None)
     wizard.run_wizard()
     assert config.load_theme_config()["theme"] == "nord"
+    assert config.load_lang_config()["lang"] == "zh"  # 语言也被保存
+    assert i18n.LANG == "zh"  # i18n 即时切换

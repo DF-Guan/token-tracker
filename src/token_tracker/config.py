@@ -11,6 +11,7 @@ from .ui import themes
 
 CONFIG_DIR = os.path.expanduser("~/.config/token-tracker")
 CONFIG_PATH = os.path.join(CONFIG_DIR, "theme.json")
+LANG_CONFIG_PATH = os.path.join(CONFIG_DIR, "lang.json")
 
 # 旧 TT_THEME 值兼容映射。
 _ALIASES = {"light": "latte", "dark": "mocha"}
@@ -51,6 +52,29 @@ def _auto_theme() -> str:
         except (ValueError, IndexError):
             pass
     return "mocha"
+
+
+def load_lang_config() -> dict:
+    """读语言配置，缺失/损坏都返回空 dict。"""
+    try:
+        with open(LANG_CONFIG_PATH, encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def save_lang(lang: str) -> None:
+    """把语言写入配置文件（wizard 选完调）。"""
+    os.makedirs(CONFIG_DIR, exist_ok=True)
+    with open(LANG_CONFIG_PATH, "w", encoding="utf-8") as f:
+        json.dump({"lang": lang}, f, indent=2, ensure_ascii=False)
+
+
+def resolve_lang() -> str | None:
+    """读用户保存的语言偏好，仅返回受支持值（zh/en）；未配置 / 非法返回 None。"""
+    val = load_lang_config().get("lang")
+    return val if val in ("zh", "en") else None
 
 
 def resolve_theme() -> str:

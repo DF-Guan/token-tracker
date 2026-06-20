@@ -98,6 +98,64 @@ def test_codex_statusline_version_roundtrip(tmp_path, monkeypatch):
     assert hooks._installed_codex_statusline_version() == hooks.STATUSLINE_HOOK_VERSION
 
 
+def test_setup_components_defaults_all_on():
+    # 不传 components 时 setup() 应等价于全装；SetupComponents 默认值也是全开。
+    c = hooks.SetupComponents()
+    assert c.report_hooks is True and c.codex_faux_statusline is True
+    assert hooks.SetupComponents.all_on() == c
+
+
+def test_setup_components_off_skips_install(tmp_path, monkeypatch):
+    # components.report_hooks=False → CC report hook 不装；codex_faux_statusline=False → Codex 伪 statusline 不装。
+    # 隔离 HOME，避免污染主人真实 ~/.claude / ~/.codex
+    home = tmp_path / "home"
+    (home / ".claude").mkdir(parents=True)
+    (home / ".codex").mkdir(parents=True)
+    settings_path = home / ".claude" / "settings.json"
+    settings_path.write_text("{}", encoding="utf-8")
+    codex_config = home / ".codex" / "config.toml"
+    codex_config.write_text("[tui]\nstatus_line = []\n", encoding="utf-8")
+    monkeypatch.setattr(hooks, "CLAUDE_SETTINGS", str(settings_path))
+    monkeypatch.setattr(hooks, "HOOK_SCRIPT_PATH", str(home / ".claude" / "tt-statusline.py"))
+    monkeypatch.setattr(hooks, "CC_REPORT_HOOK_PATH", str(home / ".claude" / "tt-report-hook.py"))
+    monkeypatch.setattr(hooks, "CC_COMMANDS_DIR", str(home / ".claude" / "commands"))
+    monkeypatch.setattr(hooks, "CODEX_CONFIG", str(codex_config))
+    monkeypatch.setattr(hooks, "CODEX_REPORT_HOOK_PATH", str(home / ".codex" / "tt-report-hook.py"))
+    monkeypatch.setattr(hooks, "CODEX_STATUSLINE_HOOK_PATH", str(home / ".codex" / "tt-statusline.py"))
+
+    hooks.setup(components=hooks.SetupComponents(report_hooks=False, codex_faux_statusline=False))
+
+    # CC statusline 仍装；CC report hook 不装
+    assert json.loads(settings_path.read_text())["statusLine"]["command"].endswith("tt-statusline.py")
+    assert not os.path.exists(str(home / ".claude" / "tt-report-hook.py"))
+    # Codex status_line 仍写、但 Stop hook（tt-statusline）不在 config 里
+    codex_content = codex_config.read_text()
+    assert "five-hour-limit" in codex_content
+    assert "tt-statusline" not in codex_content   # Codex 伪 statusline hook 段未追加
+    assert "tt-report-hook" not in codex_content  # report hook 段未追加
+
+
+def test_cli_setup_dash_i_calls_run_wizard(monkeypatch):
+    # `tt setup -i` 进完整重配：调 run_wizard（语言+主题+增强项），而非直接 setup() 全装。
+    from token_tracker import cli, wizard
+    calls: dict = {}
+
+    def mock_run_wizard():
+        calls["run_wizard"] = True
+
+    def mock_setup(components=None):
+        calls["setup_direct"] = True  # 不应该走这里
+
+    monkeypatch.setattr(wizard, "run_wizard", mock_run_wizard)
+    monkeypatch.setattr("token_tracker.cli.setup", mock_setup)
+    monkeypatch.setattr(cli, "is_setup", lambda: True)
+    monkeypatch.setattr(cli, "needs_update", lambda: False)
+    monkeypatch.setattr("sys.argv", ["tt", "setup", "-i"])
+    cli.main()
+    assert calls.get("run_wizard") is True
+    assert calls.get("setup_direct") is None  # 没绕过 wizard 直接全装
+
+
 def test_codex_statusline_uninstall_keeps_other_stop_hooks(tmp_path, monkeypatch):
     # 卸载只移除 tt 自己追加的那段 [[hooks.Stop]]，用户已有的 Stop hook 不动。
     monkeypatch.setattr(hooks, "CODEX_STATUSLINE_HOOK_PATH", str(tmp_path / "tt-statusline.py"))

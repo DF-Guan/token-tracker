@@ -92,7 +92,8 @@ pip install --force-reinstall token-tracker && tt setup
 ## 使用
 
 ```bash
-tt setup          # 初始化配置 Claude Code + Codex status_line
+tt setup          # 初始化配置 Claude Code + Codex status_line（一键全装）
+tt setup -i       # 交互式选择要装哪些组件（上下键选 Yes/No）
 tt                # 过去 5h 实时面板（合并概览 + 5h/7d 额度 + 近期会话，= tt status）
 tt status         # 同上（tt 无参即进 status）
 tt daily          # 过去一年 token 贡献热力图（GitHub 风格）+ 年度分析卡片
@@ -104,6 +105,16 @@ tt unsetup        # 卸载并恢复安装前的配置
 ```
 
 > 💡 `tt daily` 是 GitHub 风格的 token 贡献热力图（深浅绿方格）。在 Claude Code 会话里输入 `!tt daily` 即可看到彩色热力图 —— 用户主动用 `!` 执行的命令，Claude Code 会渲染其 24-bit 真彩色输出。
+
+### 首次运行向导
+
+第一次跑 `tt`（或通过 curl 一键安装脚本装完自动启动）会进入**交互式配置向导**：
+
+1. **选配色主题** — 6 套主题上下键选择，选完即时预览
+2. **启用会话内彩色报表命令** — Yes/No（`/tt-daily`、`ttdaily` 等）
+3. **启用 Codex 伪 statusline** — Yes/No（仅检测到 Codex 时）
+
+全程上下键 + 回车操作。CI / 非 tty 环境（Docker / 脚本）自动降级到非交互全装。后续想精选用 `tt setup -i`。
 
 ### 会话内彩色命令（`tt setup` 自动注册）
 
