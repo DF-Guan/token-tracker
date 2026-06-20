@@ -15,9 +15,10 @@ def _entry(agent, sid, model, ts, inp=100, out=50, msgs=1):
     )
 
 
-def _session(sid, agent, model, start, dur, total, cost, msgs):
+def _session(sid, agent, model, start, dur, total, cost, msgs, active=None):
     return SessionStats(session_id=sid, project="proj", model=model, start_time=start,
-                        end_time=start, duration_minutes=dur, total_tokens=total,
+                        end_time=start, duration_minutes=dur,
+                        active_minutes=dur if active is None else active, total_tokens=total,
                         cost_usd=cost, message_count=msgs, agent_id=agent)
 
 
@@ -97,7 +98,7 @@ def test_render_status_with_limits(monkeypatch):
     assert "Cost:" in out and "$12" in out     # 当天 cost
     assert "Model:" in out and "Opus 4.8" in out  # model（去掉 (1M context) 后缀）
     assert "Claude" in out and "Codex" in out  # session Agent 列（短名 Claude / Codex）
-    assert "1h05m" in out                      # Duration（65min）
+    assert "1.1h / 1.1h" in out                # Duration 组合：活跃 / 跨度（65min 连续会话，小数小时）
 
 
 def test_render_status_no_limits_shows_agent_stats(monkeypatch):

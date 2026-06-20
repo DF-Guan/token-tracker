@@ -86,7 +86,8 @@ class SessionStats:
     model: str
     start_time: datetime
     end_time: datetime
-    duration_minutes: float
+    duration_minutes: float  # 会话跨度（首尾时间差），仅用于显示
+    active_minutes: float = 0.0  # 活跃时长：相邻 entry 间隔 ≤ CAP 才累加、大空隙丢弃；也用于过滤 <5min 短会话
     input_tokens: int = 0
     output_tokens: int = 0
     cache_creation_tokens: int = 0

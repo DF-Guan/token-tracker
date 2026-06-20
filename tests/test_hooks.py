@@ -193,8 +193,8 @@ def test_statusline_total_tokens(tmp_path):
     assert "Cache" not in out  # Cache 单列已删除
 
 
-def test_statusline_line4_tps_dash_when_no_prior_value(tmp_path):
-    # 从未有过有效值时（output 一直太小）→ TPS 显示 "-"。
+def test_statusline_line3_tps_hidden_when_no_prior_value(tmp_path):
+    # 从未有过有效值时（output 一直太小）→ TPS 项隐藏（不再显示 "-"）；L3 无其它数据时整行不出现。
     script = tmp_path / "tt-statusline.py"
     script.write_text(hooks._render_hook_script(), encoding="utf-8")
     home = tmp_path / "home"
@@ -203,8 +203,8 @@ def test_statusline_line4_tps_dash_when_no_prior_value(tmp_path):
             "context_window": {"current_usage": {"output_tokens": 2}},
             "cost": {"total_api_duration_ms": 5000}}
     _run_statusline_home(script, base, home)
-    out = _run_statusline_home(script, base, home)  # Δ=0、output=2、无历史值 → -
-    assert "TPS: -" in out
+    out = _run_statusline_home(script, base, home)  # Δ=0、output=2、无历史值 → 不显示 TPS 项
+    assert "TPS" not in out
 
 
 def test_statusline_tps_keeps_last_value_when_zero(tmp_path):

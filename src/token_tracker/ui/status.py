@@ -19,7 +19,7 @@ from .format import (
     AGENT_LABEL,
     AGENT_SHORT,
     _fmt_cost,
-    _fmt_duration,
+    _fmt_session_duration,
     _fmt_tokens,
     _model_short,
     _project_short,
@@ -173,7 +173,7 @@ def _render_sessions(sessions) -> None:
             tok_cell,
             cost_cell,
             str(s.message_count),
-            _fmt_duration(s.duration_minutes),
+            _fmt_session_duration(s.active_minutes, s.duration_minutes),
         ]
         if mode != "compact":
             names = list(s.models) or [s.model]

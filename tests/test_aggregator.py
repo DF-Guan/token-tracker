@@ -101,6 +101,33 @@ def test_aggregate_sessions_models_ordered_by_output_for_display():
     assert list(s.models) == ["claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5"]
 
 
+def test_aggregate_sessions_active_minutes_drops_large_gaps():
+    # 活跃时长：相邻间隔 ≤30min 才累加，大空隙（这里跨 3 天）整段丢弃；duration_minutes 仍是首尾跨度
+    base = datetime(2026, 1, 1, 10, 0, tzinfo=UTC)
+    from datetime import timedelta
+    sessions = aggregate_sessions([
+        entry(base, "s1"),                               # 10:00
+        entry(base + timedelta(minutes=20), "s1"),       # +20min（≤30，计入）
+        entry(base + timedelta(minutes=40), "s1"),       # +20min（≤30，计入）
+        entry(base + timedelta(days=3), "s1"),           # 跨 3 天大空隙（>30min，丢弃）
+        entry(base + timedelta(days=3, minutes=10), "s1"),  # +10min（≤30，计入）
+    ])
+    s = sessions[0]
+    # 活跃 = 20 + 20 + 10 = 50min（3 天空隙不计）
+    assert s.active_minutes == 50.0
+    # 跨度 = 首尾 3 天 10 分钟
+    assert s.duration_minutes == round((3 * 24 * 60) + 10, 1)
+
+
+def test_fmt_session_duration_combines_active_and_span():
+    from token_tracker.ui.format import _fmt_session_duration
+    # 活跃恒小数小时；跨度 ≥1 天用 天d时h（整天省略小时），<1 天用小数小时
+    assert _fmt_session_duration(564, 32520) == "9.4h / 22d14h"        # 主例：活跃 9h24m / 跨度 22d14h
+    assert _fmt_session_duration(9 * 60, 22 * 24 * 60) == "9.0h / 22d"  # 整天跨度省略小时
+    assert _fmt_session_duration(5 * 60, 6 * 60) == "5.0h / 6.0h"      # 跨度 <1 天用小数小时
+    assert _fmt_session_duration(45, 90) == "0.8h / 1.5h"             # 活跃/跨度均不足 1h/1 天
+
+
 def test_aggregate_fills_projects_by_token():
     # projects 维度（weekly 项目分布用）：按 project 累加 token，与 models 同机制
     d = datetime(2026, 1, 1, 10, tzinfo=UTC)

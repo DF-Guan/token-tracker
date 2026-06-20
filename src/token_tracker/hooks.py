@@ -14,7 +14,7 @@ CLAUDE_SETTINGS = os.path.expanduser("~/.claude/settings.json")
 HOOK_SCRIPT_PATH = os.path.expanduser("~/.claude/tt-statusline.py")
 CODEX_CONFIG = os.path.expanduser("~/.codex/config.toml")
 CODEX_BACKUP = os.path.expanduser("~/.codex/tt-backup.json")
-HOOK_VERSION = "1.18"
+HOOK_VERSION = "1.19"
 REPORT_HOOK_VERSION = "1.0"
 CC_REPORT_HOOK_PATH = os.path.expanduser("~/.claude/tt-report-hook.py")
 CC_COMMANDS_DIR = os.path.expanduser("~/.claude/commands")
@@ -335,9 +335,9 @@ def render(data, now, tps=None):
         if cache_read:
             tok += f", cache {fmt_tokens(cache_read)}"
         line3.append(tok + C['reset'])
-    # 本轮 TPS（main 里算好传入，带单位）；颜色与 L3 Tokens 一致（tokens 桃色）
-    tps_str = f"{tps:.0f} tokens/s" if tps else "-"
-    line3.append(f"{C['tokens']}Out TPS: {tps_str}{C['reset']}")
+    # 本轮 TPS（main 里算好传入）；无数据则不追加这一项，L3 整行空了由末尾 if line 隐藏整行
+    if tps:
+        line3.append(f"{C['tokens']}Out TPS: {tps:.0f} tokens/s{C['reset']}")
     while len(line3) > 1 and vlen(" | ".join(line3)) > W:
         line3.pop()
 

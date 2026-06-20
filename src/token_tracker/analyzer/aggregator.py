@@ -78,6 +78,9 @@ def aggregate_weekly(entries: list[UsageEntry]) -> list[WeeklyStats]:
     return _aggregate_by_key(entries, _week_key, _factory, "week")
 
 
+ACTIVE_GAP_CAP_MIN = 30  # 相邻 entry 间隔超过此值视为「人离开」，不计入活跃时长
+
+
 def aggregate_sessions(entries: list[UsageEntry]) -> list[SessionStats]:
     by_session: dict[str, list[UsageEntry]] = defaultdict(list)
 
@@ -90,6 +93,12 @@ def aggregate_sessions(entries: list[UsageEntry]) -> list[SessionStats]:
         first = session_entries[0]
         last = session_entries[-1]
         duration = (last.timestamp - first.timestamp).total_seconds() / 60
+        # 活跃时长：累加相邻间隔，但单段间隔超过 CAP 视为离开、整段丢弃
+        active = 0.0
+        for a, b in zip(session_entries, session_entries[1:], strict=False):
+            gap = (b.timestamp - a.timestamp).total_seconds() / 60
+            if gap <= ACTIVE_GAP_CAP_MIN:
+                active += gap
 
         # 代表模型按 output_tokens（真实生成量）选，output 持平时用 total 兜底；
         # 不用 total 直接选，避免后台小模型（如 Haiku）读了大量上下文、cache_read 撑高 total 被误判为主力。
@@ -108,6 +117,7 @@ def aggregate_sessions(entries: list[UsageEntry]) -> list[SessionStats]:
             start_time=first.timestamp,
             end_time=last.timestamp,
             duration_minutes=round(duration, 1),
+            active_minutes=round(active, 1),
             models={m: out_by_model[m] for m in ranked},
         )
         for e in session_entries:

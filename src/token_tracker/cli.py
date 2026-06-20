@@ -140,7 +140,7 @@ def _build_status_data(agents) -> dict | None:
             summary.message_count += e.message_count
             a_sum.message_count += e.message_count
             summary.models[e.model] = summary.models.get(e.model, 0) + e.total_tokens
-        a_sessions = [s for s in aggregate_sessions(entries) if s.duration_minutes >= 5]
+        a_sessions = [s for s in aggregate_sessions(entries) if s.active_minutes >= 5]
         for s in a_sessions:
             s.agent_id = a.id
         a_sum.session_count = len(a_sessions)
@@ -370,8 +370,8 @@ def main():
     _apply_sort(stats, sort_key, sort_desc, default_attr, default_reverse)
 
     if command == "sessions":
-        # 过滤掉 <5min 的短会话，再按 cost 倒序取前 20（不足 20 则显示全部）
-        kept = [s for s in stats if s.duration_minutes >= 5]
+        # 过滤掉活跃 <5min 的短会话（按活跃时长，避免挂机/cron 长会话占位），再按 cost 倒序取前 20
+        kept = [s for s in stats if s.active_minutes >= 5]
         shown = kept[:_parse_limit(rest_args, default=20)]
         render_sessions_view(_summary_from_sessions(shown), shown, agent_names)
     elif command == "weekly":
