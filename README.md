@@ -93,7 +93,7 @@ pip install --force-reinstall token-tracker && tt setup
 
 ```bash
 tt setup          # 初始化配置 Claude Code + Codex status_line（一键全装）
-tt setup -i       # 交互式选择要装哪些组件（上下键选 Yes/No）
+tt setup -i       # 交互式重配（上下键选语言 / 主题 / 各组件开关）
 tt                # 过去 5h 实时面板（合并概览 + 5h/7d 额度 + 近期会话，= tt status）
 tt status         # 同上（tt 无参即进 status）
 tt daily          # 过去一年 token 贡献热力图（GitHub 风格）+ 年度分析卡片
@@ -108,13 +108,14 @@ tt unsetup        # 卸载并恢复安装前的配置
 
 ### 首次运行向导
 
-第一次跑 `tt`（或通过 curl 一键安装脚本装完自动启动）会进入**交互式配置向导**：
+第一次跑 `tt`（或通过 curl 一键安装脚本装完自动启动）会进入**交互式配置向导**，全程上下键选 + 回车确认：
 
-1. **选配色主题** — 6 套主题上下键选择，选完即时预览
-2. **启用会话内彩色报表命令** — Yes/No（`/tt-daily`、`ttdaily` 等）
-3. **启用 Codex 伪 statusline** — Yes/No（仅检测到 Codex 时）
+1. **选语言** — 中文 / English（落 `~/.config/token-tracker/lang.json`，之后所有命令跟随）
+2. **选配色主题** — 6 套主题上下键选择，每个选项右侧内联色板预览
+3. **启用会话内彩色命令** — Yes/No（`/tt-daily`、`ttdaily` 等，仅检测到对应 Agent 时问）
+4. **启用 Codex 伪 statusline** — Yes/No（仅检测到 Codex 时）
 
-全程上下键 + 回车操作。CI / 非 tty 环境（Docker / 脚本）自动降级到非交互全装。后续想精选用 `tt setup -i`。
+选完给一行综合总结。CI / 非 tty 环境（Docker / 脚本）自动降级到非交互全装。装好后想改任何一项，重跑 `tt setup -i` 即可。
 
 ### 会话内彩色命令（`tt setup` 自动注册）
 

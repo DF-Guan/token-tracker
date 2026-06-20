@@ -93,7 +93,7 @@ pip install --force-reinstall token-tracker && tt setup
 
 ```bash
 tt setup          # initialize Claude Code + Codex status_line (install everything)
-tt setup -i       # interactive component picker (arrow-key Yes/No)
+tt setup -i       # interactive reconfigure (arrow-key: language / theme / each component)
 tt                # last-5h real-time panel (merged overview + 5h/7d quota + recent sessions, = tt status)
 tt status         # same (tt with no args enters status)
 tt daily          # last-12-months token contribution heatmap (GitHub-style) + yearly analysis card
@@ -108,13 +108,14 @@ tt unsetup        # uninstall and restore previous config
 
 ### First-run wizard
 
-The first time you run `tt` (or right after the curl one-liner installer finishes), an **interactive wizard** kicks in:
+The first time you run `tt` (or right after the curl one-liner installer finishes), an **interactive wizard** kicks in — arrow keys to move, Enter to confirm:
 
-1. **Pick a color theme** — 6 themes, arrow-key selection, instant preview
-2. **Enable in-session color report commands** — Yes/No (`/tt-daily`, `ttdaily`, etc.)
-3. **Enable Codex faux statusline** — Yes/No (only when Codex is detected)
+1. **Pick a language** — 中文 / English (saved to `~/.config/token-tracker/lang.json`, applied to all commands)
+2. **Pick a color theme** — 6 themes with an inline color swatch on each option
+3. **Enable in-session color commands** — Yes/No (`/tt-daily`, `ttdaily`, etc.; asked only when the matching agent is detected)
+4. **Enable Codex faux statusline** — Yes/No (only when Codex is detected)
 
-All arrow-key + Enter. CI / non-tty environments (Docker, scripts) auto-degrade to a non-interactive full install. To re-pick later, run `tt setup -i`.
+A one-line summary follows. CI / non-tty environments (Docker, scripts) auto-degrade to a non-interactive full install. To change anything later, just re-run `tt setup -i`.
 
 ### In-session color commands (auto-registered by `tt setup`)
 
