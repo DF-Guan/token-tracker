@@ -10,10 +10,10 @@ PIP=$(command -v pip3 || command -v pip)
 $PIP install -U token-tracker
 
 echo ""
-# 有 tty 时跑 tt 进首次运行向导（curl|bash 管道下 stdin 是 curl 输出，必须接 /dev/tty）；
-# 无 tty（CI/Docker）降级到非交互 tt setup 全装。
+# 有 tty 时跑 tt setup 进交互向导（curl|bash 管道下 stdin 是 curl 输出，必须接 /dev/tty）；
+# 无 tty（CI/Docker）降级到非交互全装。
 if [ -t 1 ] && [ -e /dev/tty ]; then
-    tt < /dev/tty
+    tt setup < /dev/tty
 else
     echo "Configuring status bar..."
     tt setup

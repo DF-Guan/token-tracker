@@ -340,8 +340,8 @@ def main():
         update_hook()
 
     if command == "setup":
-        if "-i" in args[1:] or "--interactive" in args[1:]:
-            # 完整重配：语言 + 主题 + 增强项（不只是组件），wizard 内部会调 setup
+        # 终端里每次 setup 都进交互向导（语言 + 主题 + 组件）；非 tty（CI/Docker/管道）降级非交互全装
+        if _is_tty():
             from .wizard import run_wizard
             run_wizard()
         else:

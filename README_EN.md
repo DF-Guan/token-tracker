@@ -92,8 +92,7 @@ pip install --force-reinstall token-tracker && tt setup
 ## Usage
 
 ```bash
-tt setup          # initialize Claude Code + Codex status_line (install everything)
-tt setup -i       # interactive reconfigure (arrow-key: language / theme / each component)
+tt setup          # interactive setup wizard (terminal: language / theme / components); auto full-install on non-tty
 tt                # last-5h real-time panel (merged overview + 5h/7d quota + recent sessions, = tt status)
 tt status         # same (tt with no args enters status)
 tt daily          # last-12-months token contribution heatmap (GitHub-style) + yearly analysis card
@@ -115,7 +114,7 @@ The first time you run `tt` (or right after the curl one-liner installer finishe
 3. **Enable in-session color commands** — Yes/No (`/tt-daily`, `ttdaily`, etc.; asked only when the matching agent is detected)
 4. **Enable Codex faux statusline** — Yes/No (only when Codex is detected)
 
-A one-line summary follows. CI / non-tty environments (Docker, scripts) auto-degrade to a non-interactive full install. To change anything later, just re-run `tt setup -i`.
+A one-line summary follows. CI / non-tty environments (Docker, scripts) auto-degrade to a non-interactive full install. To change anything later, just run `tt setup` again (in a terminal, every `tt setup` enters the wizard).
 
 ### In-session color commands (auto-registered by `tt setup`)
 

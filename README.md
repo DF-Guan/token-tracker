@@ -92,8 +92,7 @@ pip install --force-reinstall token-tracker && tt setup
 ## 使用
 
 ```bash
-tt setup          # 初始化配置 Claude Code + Codex status_line（一键全装）
-tt setup -i       # 交互式重配（上下键选语言 / 主题 / 各组件开关）
+tt setup          # 交互配置向导（终端：上下键选语言 / 主题 / 各组件）；非 tty 环境自动全装
 tt                # 过去 5h 实时面板（合并概览 + 5h/7d 额度 + 近期会话，= tt status）
 tt status         # 同上（tt 无参即进 status）
 tt daily          # 过去一年 token 贡献热力图（GitHub 风格）+ 年度分析卡片
@@ -115,7 +114,7 @@ tt unsetup        # 卸载并恢复安装前的配置
 3. **启用会话内彩色命令** — Yes/No（`/tt-daily`、`ttdaily` 等，仅检测到对应 Agent 时问）
 4. **启用 Codex 伪 statusline** — Yes/No（仅检测到 Codex 时）
 
-选完给一行综合总结。CI / 非 tty 环境（Docker / 脚本）自动降级到非交互全装。装好后想改任何一项，重跑 `tt setup -i` 即可。
+选完给一行综合总结。CI / 非 tty 环境（Docker / 脚本）自动降级到非交互全装。装好后想改任何一项，再跑一次 `tt setup` 即可（终端里每次 `tt setup` 都进向导）。
 
 ### 会话内彩色命令（`tt setup` 自动注册）
 

@@ -135,25 +135,24 @@ def test_setup_components_off_skips_install(tmp_path, monkeypatch):
     assert "tt-report-hook" not in codex_content  # report hook 段未追加
 
 
-def test_cli_setup_dash_i_calls_run_wizard(monkeypatch):
-    # `tt setup -i` 进完整重配：调 run_wizard（语言+主题+增强项），而非直接 setup() 全装。
+def test_cli_setup_enters_wizard_on_tty(monkeypatch):
+    # `tt setup` 在 tty 下进交互向导（run_wizard）；非 tty 降级非交互 setup() 全装。
     from token_tracker import cli, wizard
     calls: dict = {}
-
-    def mock_run_wizard():
-        calls["run_wizard"] = True
-
-    def mock_setup(components=None):
-        calls["setup_direct"] = True  # 不应该走这里
-
-    monkeypatch.setattr(wizard, "run_wizard", mock_run_wizard)
-    monkeypatch.setattr("token_tracker.cli.setup", mock_setup)
+    monkeypatch.setattr(wizard, "run_wizard", lambda: calls.__setitem__("wizard", True))
+    monkeypatch.setattr("token_tracker.cli.setup", lambda components=None: calls.__setitem__("setup", True))
     monkeypatch.setattr(cli, "is_setup", lambda: True)
     monkeypatch.setattr(cli, "needs_update", lambda: False)
-    monkeypatch.setattr("sys.argv", ["tt", "setup", "-i"])
+    monkeypatch.setattr("sys.argv", ["tt", "setup"])
+
+    monkeypatch.setattr(cli, "_is_tty", lambda: True)  # tty → 向导
     cli.main()
-    assert calls.get("run_wizard") is True
-    assert calls.get("setup_direct") is None  # 没绕过 wizard 直接全装
+    assert calls == {"wizard": True}
+
+    calls.clear()
+    monkeypatch.setattr(cli, "_is_tty", lambda: False)  # 非 tty → 全装
+    cli.main()
+    assert calls == {"setup": True}
 
 
 def test_codex_statusline_uninstall_keeps_other_stop_hooks(tmp_path, monkeypatch):
