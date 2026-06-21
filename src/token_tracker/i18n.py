@@ -96,6 +96,7 @@ _STRINGS = {
         "wizard_done_next": "下一步：跑 tt 看实时面板，或 tt daily / weekly / monthly 看报表",
         # --- hooks.py ---
         "no_agent_install": "未检测到 Claude Code 或 Codex，请先安装其中之一",
+        "auto_setup_hint": "非交互环境，已按默认（语言跟随系统 / 主题 mocha / 组件全开）配置；如需自定义请在终端运行 tt setup",
         "first_setup": "首次使用，正在配置状态栏...",
         "cc_not_found": "未检测到 Claude Code，跳过",
         "codex_not_found": "未检测到 Codex，跳过",
@@ -213,6 +214,7 @@ _STRINGS = {
         "wizard_done_next": "Next: run tt for the live panel, or tt daily / weekly / monthly for reports",
         # --- hooks.py ---
         "no_agent_install": "Claude Code or Codex not detected, please install one first",
+        "auto_setup_hint": "Non-interactive env — configured with defaults (language follows system / theme mocha / all components on); run tt setup in a terminal to customize",
         "first_setup": "First run, configuring status bar...",
         "cc_not_found": "Claude Code not detected, skipping",
         "codex_not_found": "Codex not detected, skipping",
@@ -238,6 +240,30 @@ _STRINGS = {
 }
 
 
+def _detect_system_lang() -> str:
+    """检测系统语言设置，**绕过 CLI 的 `LANG` 环境变量**（主人 CLI 多设 en，但系统可能是中文，
+    同时区那套：读系统设置而非环境变量）。macOS 读 `defaults -g AppleLanguages` 首选语言；
+    其它平台 / 失败回退 `LANG` 等环境变量。zh 开头 → 中文，否则英文。"""
+    import sys
+    if sys.platform == "darwin":
+        try:
+            import re
+            import subprocess
+            out = subprocess.run(
+                ["defaults", "read", "-g", "AppleLanguages"],
+                capture_output=True, text=True, timeout=2,
+            ).stdout
+            m = re.search(r'"([^"]+)"', out)  # 取数组首项，如 "zh-Hans-US"
+            if m:
+                return "zh" if m.group(1).lower().startswith("zh") else "en"
+        except Exception:
+            pass
+    for var in ("LANG", "LC_ALL", "LC_MESSAGES"):
+        if os.environ.get(var, "").lower().startswith("zh"):
+            return "zh"
+    return "en"
+
+
 def _detect_lang() -> str:
     # 1. 用户配置文件优先（wizard 选过）。延迟 import 避免顶层循环。
     try:
@@ -247,15 +273,12 @@ def _detect_lang() -> str:
             return saved
     except Exception:
         pass
-    # 2. 环境变量兜底
+    # 2. TT_LANG 显式覆盖
     env_lang = os.environ.get("TT_LANG", "").lower()
     if env_lang:
         return "zh" if env_lang.startswith("zh") else "en"
-    for var in ("LANG", "LC_ALL", "LC_MESSAGES"):
-        val = os.environ.get(var, "").lower()
-        if val.startswith("zh"):
-            return "zh"
-    return "en"
+    # 3. 系统语言设置（绕过 CLI LANG，见 _detect_system_lang）
+    return _detect_system_lang()
 
 
 LANG = _detect_lang()

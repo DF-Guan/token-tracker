@@ -114,7 +114,7 @@ The first time you run `tt` (or right after the curl one-liner installer finishe
 3. **Enable in-session color commands** — Yes/No (`/tt-daily`, `ttdaily`, etc.; asked only when the matching agent is detected)
 4. **Enable Codex faux statusline** — Yes/No (only when Codex is detected)
 
-A one-line summary follows. CI / non-tty environments (Docker, scripts) auto-degrade to a non-interactive full install. To change anything later, just run `tt setup` again (in a terminal, every `tt setup` enters the wizard).
+A one-line summary follows. CI / non-tty environments (Docker, scripts) auto-install with defaults: **language follows the system setting** (reads the OS language, not misled by the CLI's `LANG`), theme mocha, all components on. To change anything later, just run `tt setup` again (in a terminal, every `tt setup` enters the wizard).
 
 ### In-session color commands (auto-registered by `tt setup`)
 

@@ -25,8 +25,9 @@ class SetupComponents:
 
 CLAUDE_SETTINGS = os.path.expanduser("~/.claude/settings.json")
 HOOK_SCRIPT_PATH = os.path.expanduser("~/.claude/tt-statusline.py")
-CODEX_CONFIG = os.path.expanduser("~/.codex/config.toml")
-CODEX_BACKUP = os.path.expanduser("~/.codex/tt-backup.json")
+CODEX_DIR = os.path.expanduser("~/.codex")
+CODEX_CONFIG = os.path.join(CODEX_DIR, "config.toml")
+CODEX_BACKUP = os.path.join(CODEX_DIR, "tt-backup.json")
 HOOK_VERSION = "1.19"
 REPORT_HOOK_VERSION = "1.0"
 STATUSLINE_HOOK_VERSION = "1.0"
@@ -938,7 +939,7 @@ def _read_codex_config() -> tuple[str, dict] | None:
 
 def is_setup() -> bool:
     has_cc = os.path.isdir(os.path.dirname(CLAUDE_SETTINGS))
-    has_codex = os.path.exists(CODEX_CONFIG)
+    has_codex = os.path.isdir(CODEX_DIR)
     if not has_cc and not has_codex:
         return False
     if has_cc:
@@ -1011,7 +1012,7 @@ def setup(auto: bool = False, components: SetupComponents | None = None, quiet: 
     p = (lambda *a, **k: None) if quiet else get_console().print
 
     has_cc = os.path.isdir(os.path.dirname(CLAUDE_SETTINGS))
-    has_codex = os.path.exists(CODEX_CONFIG)
+    has_codex = os.path.isdir(CODEX_DIR)
 
     if not has_cc and not has_codex:
         p(f"[red]{t('no_agent_install')}[/red]")
@@ -1066,9 +1067,12 @@ def _setup_claude(components: SetupComponents, quiet: bool = False) -> None:
 def _setup_codex(components: SetupComponents, quiet: bool = False) -> None:
     p = (lambda *a, **k: None) if quiet else get_console().print
     result = _read_codex_config()
-    if not result:
-        return
-    content, parsed = result
+    if result:
+        content, parsed = result
+    elif os.path.isdir(CODEX_DIR):
+        content, parsed = "", {}  # 装了 Codex（~/.codex 在）但还没 config.toml → 新建
+    else:
+        return  # 没装 Codex
 
     python = sys.executable or "python3"
 
@@ -1111,7 +1115,7 @@ def _setup_codex(components: SetupComponents, quiet: bool = False) -> None:
 
 def unsetup() -> None:
     has_cc = os.path.isdir(os.path.dirname(CLAUDE_SETTINGS))
-    has_codex = os.path.exists(CODEX_CONFIG)
+    has_codex = os.path.isdir(CODEX_DIR)
 
     if has_cc:
         _unsetup_claude()

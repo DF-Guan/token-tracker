@@ -16,7 +16,7 @@ from prompt_toolkit.styles import Style
 from questionary.prompts import common as _q_common
 
 from . import config, i18n
-from .hooks import CLAUDE_SETTINGS, CODEX_CONFIG, SetupComponents, setup
+from .hooks import CLAUDE_SETTINGS, CODEX_DIR, SetupComponents, setup
 from .i18n import t
 from .ui import themes
 from .ui.console import get_console
@@ -114,7 +114,7 @@ def _has_cc() -> bool:
 
 
 def _has_codex() -> bool:
-    return os.path.exists(CODEX_CONFIG)
+    return os.path.isdir(CODEX_DIR)
 
 
 def _ask_language(prefix: str = "") -> None:
@@ -218,6 +218,7 @@ def _print_summary(console, choice: str, components: SetupComponents) -> None:
 
 
 def run_wizard() -> None:
+    # agent 守卫由调用方 cli._run_setup_flow 统一做（唯一入口），这里假设至少有一个 agent。
     from .cli import _get_version
 
     console = get_console()

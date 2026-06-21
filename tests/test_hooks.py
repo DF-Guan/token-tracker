@@ -119,6 +119,7 @@ def test_setup_components_off_skips_install(tmp_path, monkeypatch):
     monkeypatch.setattr(hooks, "HOOK_SCRIPT_PATH", str(home / ".claude" / "tt-statusline.py"))
     monkeypatch.setattr(hooks, "CC_REPORT_HOOK_PATH", str(home / ".claude" / "tt-report-hook.py"))
     monkeypatch.setattr(hooks, "CC_COMMANDS_DIR", str(home / ".claude" / "commands"))
+    monkeypatch.setattr(hooks, "CODEX_DIR", str(home / ".codex"))
     monkeypatch.setattr(hooks, "CODEX_CONFIG", str(codex_config))
     monkeypatch.setattr(hooks, "CODEX_REPORT_HOOK_PATH", str(home / ".codex" / "tt-report-hook.py"))
     monkeypatch.setattr(hooks, "CODEX_STATUSLINE_HOOK_PATH", str(home / ".codex" / "tt-statusline.py"))
@@ -135,24 +136,39 @@ def test_setup_components_off_skips_install(tmp_path, monkeypatch):
     assert "tt-report-hook" not in codex_content  # report hook 段未追加
 
 
-def test_cli_setup_enters_wizard_on_tty(monkeypatch):
-    # `tt setup` 在 tty 下进交互向导（run_wizard）；非 tty 降级非交互 setup() 全装。
+def test_cli_setup_wizard_or_auto(monkeypatch):
+    # `tt setup` 经 _run_setup_flow：装了 agent 时，双 tty 非会话内 → run_wizard；否则 → _auto_setup。
     from token_tracker import cli, wizard
     calls: dict = {}
+    monkeypatch.setattr(cli, "detect_agents", lambda: [object()])  # 有 agent（守卫单一入口）
     monkeypatch.setattr(wizard, "run_wizard", lambda: calls.__setitem__("wizard", True))
-    monkeypatch.setattr("token_tracker.cli.setup", lambda components=None: calls.__setitem__("setup", True))
+    monkeypatch.setattr(cli, "_auto_setup", lambda: calls.__setitem__("auto", True))
     monkeypatch.setattr(cli, "is_setup", lambda: True)
     monkeypatch.setattr(cli, "needs_update", lambda: False)
     monkeypatch.setattr("sys.argv", ["tt", "setup"])
 
-    monkeypatch.setattr(cli, "_is_tty", lambda: True)  # tty → 向导
+    monkeypatch.setattr(cli, "_should_run_wizard", lambda: True)
     cli.main()
     assert calls == {"wizard": True}
 
     calls.clear()
-    monkeypatch.setattr(cli, "_is_tty", lambda: False)  # 非 tty → 全装
+    monkeypatch.setattr(cli, "_should_run_wizard", lambda: False)
     cli.main()
-    assert calls == {"setup": True}
+    assert calls == {"auto": True}
+
+
+def test_cli_setup_flow_no_agent(monkeypatch):
+    # _run_setup_flow 是 agent 守卫单一入口：零 agent → 提示 no_agent_install，不进 wizard / auto。
+    from token_tracker import cli, wizard
+    calls: dict = {}
+    monkeypatch.setattr(cli, "detect_agents", lambda: [])  # 没装 agent
+    monkeypatch.setattr(wizard, "run_wizard", lambda: calls.__setitem__("wizard", True))
+    monkeypatch.setattr(cli, "_auto_setup", lambda: calls.__setitem__("auto", True))
+    monkeypatch.setattr(cli, "is_setup", lambda: False)
+    monkeypatch.setattr(cli, "needs_update", lambda: False)
+    monkeypatch.setattr("sys.argv", ["tt", "setup"])
+    cli.main()
+    assert calls == {}  # 既没进 wizard 也没 auto
 
 
 def test_codex_statusline_uninstall_keeps_other_stop_hooks(tmp_path, monkeypatch):
@@ -372,3 +388,34 @@ def test_statusline_progress_bar_empty_grid_tinted(tmp_path):
 
     out60 = bar_out(60)
     assert "░" in out60 and esc.findall(out60)[-1] + "░" not in out60  # pct>0：未填充格被染色、不在 reset 后
+
+
+def test_setup_codex_creates_missing_config(tmp_path, monkeypatch):
+    # 装了 Codex（~/.codex 目录在）但还没 config.toml → setup 应创建该文件并写入 status_line + hooks。
+    home = tmp_path / "home"
+    (home / ".codex").mkdir(parents=True)  # 只有目录、无 config.toml
+    codex_config = home / ".codex" / "config.toml"
+    monkeypatch.setattr(hooks, "CODEX_DIR", str(home / ".codex"))
+    monkeypatch.setattr(hooks, "CODEX_CONFIG", str(codex_config))
+    monkeypatch.setattr(hooks, "CODEX_BACKUP", str(home / ".codex" / "tt-backup.json"))
+    monkeypatch.setattr(hooks, "CODEX_REPORT_HOOK_PATH", str(home / ".codex" / "tt-report-hook.py"))
+    monkeypatch.setattr(hooks, "CODEX_STATUSLINE_HOOK_PATH", str(home / ".codex" / "tt-statusline.py"))
+
+    assert not codex_config.exists()
+    hooks._setup_codex(hooks.SetupComponents(), quiet=True)
+    assert codex_config.exists()  # 已创建
+    content = codex_config.read_text()
+    assert "five-hour-limit" in content      # status_line 写入
+    assert "tt-statusline" in content        # 伪 statusline Stop hook 写入
+    assert "tt-report-hook" in content       # report hook 写入
+
+
+def test_detect_system_lang_non_darwin_falls_back_to_env(monkeypatch):
+    # 非 macOS（或 darwin 检测失败）回退环境变量：LANG=zh → zh，否则 en。
+    from token_tracker import i18n
+    monkeypatch.setattr("sys.platform", "linux")
+    monkeypatch.setenv("LANG", "zh_CN.UTF-8")
+    monkeypatch.delenv("LC_ALL", raising=False)
+    assert i18n._detect_system_lang() == "zh"
+    monkeypatch.setenv("LANG", "en_US.UTF-8")
+    assert i18n._detect_system_lang() == "en"

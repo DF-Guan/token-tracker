@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 
 from rich.text import Text
 
-from . import config
+from . import config, i18n
 from .adapters import claude, codex
 from .adapters.rate_limits import load_rate_limits as load_claude_rate_limits
 from .adapters.registry import detect_agents
@@ -202,6 +202,20 @@ def _get_version() -> str:
     return version("token-tracker")
 
 
+def _load_local_mock() -> None:
+    """`--mock`：加载本地 `mock/run.py` 演示数据（monkeypatch 数据源 + 概览渲染）。
+    `mock/` 在 .gitignore、不随包发布；发布环境找不到就友好提示并退出（普通用户用不到）。"""
+    import importlib.util
+    run_py = os.path.join(os.path.dirname(__file__), "..", "..", "mock", "run.py")
+    if not os.path.isfile(run_py):
+        get_console().print("[yellow]--mock is for local dev only (mock/ not found)[/yellow]")
+        sys.exit(0)
+    sys.path.insert(0, os.path.dirname(run_py))  # 让 run.py 的 `import mockdata` 生效
+    spec = importlib.util.spec_from_file_location("_tt_mock_run", run_py)
+    assert spec and spec.loader  # run_py 上面已 isfile 校验，spec/loader 必非 None
+    spec.loader.exec_module(importlib.util.module_from_spec(spec))  # 模块级即完成 patch
+
+
 # --- 首次运行交互向导判定 ---
 
 def _is_tty() -> bool:
@@ -209,8 +223,36 @@ def _is_tty() -> bool:
 
 
 def _should_run_wizard() -> bool:
-    """首次运行是否进交互向导：必须双 tty 且不在 AI 会话内（否则降级静默 setup）。"""
+    """是否进交互向导：必须双 tty 且不在 AI 会话内（否则走 _auto_setup 非交互全装）。"""
     return _is_tty() and not _current_session_agent()
+
+
+def _run_setup_flow() -> None:
+    """配置流程**单一入口**：先确认装了至少一个 agent（detect_agents 守卫只此一处），
+    再按环境分流——双 tty 非会话内进交互向导，否则非交互默认全装。
+    `tt setup` 与首次运行「没配过」时都走这里。"""
+    if not detect_agents():
+        get_console().print(f"[red]{t('no_agent_install')}[/red]")
+        return
+    if _should_run_wizard():
+        from .wizard import run_wizard
+        run_wizard()
+    else:
+        _auto_setup()
+
+
+def _auto_setup() -> None:
+    """非交互环境（非 tty / CI / 会话内）：默认全装——语言跟随**系统设置**（绕过 CLI LANG）、
+    主题 mocha、组件全开。仅当用户从未配置过语言/主题时落默认（不覆盖已有选择）。
+    agent 守卫在 _run_setup_flow 已做，这里假设至少有一个 agent。"""
+    if config.resolve_lang() is None:
+        sys_lang = i18n._detect_system_lang()
+        config.save_lang(sys_lang)
+        i18n.set_lang(sys_lang)
+    if not config.load_theme_config().get("theme"):
+        config.save_theme("mocha")
+    setup(auto=True)  # 组件默认全开
+    get_console().print(f"[dim]{t('auto_setup_hint')}[/dim]")
 
 
 # --- theme 命令 ---
@@ -313,6 +355,11 @@ def cmd_theme(args: list[str]) -> None:
 
 
 def main():
+    # --mock：本地开发演示，加载 mock/ 假数据再走正常报表流程（mock/ 在 .gitignore）
+    if "--mock" in sys.argv:
+        sys.argv = [a for a in sys.argv if a != "--mock"]
+        _load_local_mock()
+
     args = sys.argv[1:]
     # --theme NAME：临时覆盖主题（仅本次进程、不落配置/不重烘焙状态栏），对所有报表 + status 生效
     args, theme_override = _extract_theme_arg(args)
@@ -340,33 +387,24 @@ def main():
         update_hook()
 
     if command == "setup":
-        # 终端里每次 setup 都进交互向导（语言 + 主题 + 组件）；非 tty（CI/Docker/管道）降级非交互全装
-        if _is_tty():
-            from .wizard import run_wizard
-            run_wizard()
-        else:
-            setup()
+        _run_setup_flow()
         return
     if command == "unsetup":
         unsetup()
         return
 
-    agents = detect_agents()
-    if not agents:
-        get_console().print(f"[red]{t('no_agent')}[/red]")
-        sys.exit(1)
+    # 数据命令只看「配没配过」：没配过 → 走 setup 流程（装没装 agent 的检测都在那），
+    # 引导后仍未配置（零 agent / 用户取消）→ 退出。配过则直接往下拿 agents 跑。
+    if not is_setup():
+        _run_setup_flow()
+        if not is_setup():
+            sys.exit(1)
 
+    agents = detect_agents()
     agent_ids = {a.id for a in agents}
 
     if command not in ("status", "dashboard", "daily", "weekly", "monthly", "sessions"):
         get_console().print(f"[dim]{t('detected', agents=', '.join(a.name + ' ✓' for a in agents))}[/dim]")
-
-    if not is_setup():
-        if _should_run_wizard():
-            from .wizard import run_wizard
-            run_wizard()
-        else:
-            setup(auto=True)
 
     if command in ("status", "dashboard"):
         data = _build_status_data(agents)

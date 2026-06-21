@@ -114,7 +114,7 @@ tt unsetup        # 卸载并恢复安装前的配置
 3. **启用会话内彩色命令** — Yes/No（`/tt-daily`、`ttdaily` 等，仅检测到对应 Agent 时问）
 4. **启用 Codex 伪 statusline** — Yes/No（仅检测到 Codex 时）
 
-选完给一行综合总结。CI / 非 tty 环境（Docker / 脚本）自动降级到非交互全装。装好后想改任何一项，再跑一次 `tt setup` 即可（终端里每次 `tt setup` 都进向导）。
+选完给一行综合总结。CI / 非 tty 环境（Docker / 脚本）自动按默认全装：**语言跟随系统设置**（读系统语言、不被 CLI 的 `LANG` 误导）、主题 mocha、组件全开。装好后想改任何一项，再跑一次 `tt setup` 即可（终端里每次 `tt setup` 都进向导）。
 
 ### 会话内彩色命令（`tt setup` 自动注册）
 
