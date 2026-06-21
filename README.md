@@ -178,6 +178,8 @@ tt sessions --sort tokens --asc # 按 token 升序
 | Claude Code | `~/.claude/projects/*/` | JSONL（逐消息用量） |
 | Codex | `~/.codex/sessions/` | JSONL + SQLite |
 
+路径跨平台：Windows 下 `~` 解析到 `%USERPROFILE%`（如 `C:\Users\xxx\.claude`）。设了 `CLAUDE_CONFIG_DIR` / `CODEX_HOME` 环境变量（官方支持的自定义目录）时自动跟随。
+
 Token Tracker 对 Agent 数据**只读**，不做任何修改。
 
 ## 环境要求

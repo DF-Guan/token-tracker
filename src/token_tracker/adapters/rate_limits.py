@@ -3,8 +3,9 @@ import os
 from datetime import UTC, datetime
 
 from .types import RateLimits, normalize_pct
+from .util import claude_home
 
-STATUS_FILE = os.path.expanduser("~/.claude/tt-status.json")
+STATUS_FILE = os.path.join(claude_home(), "tt-status.json")
 
 
 def load_rate_limits() -> RateLimits | None:

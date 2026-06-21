@@ -7,9 +7,13 @@ import tomllib
 from dataclasses import dataclass
 
 from . import config
+from .adapters.util import claude_home, codex_home
 from .i18n import t
 from .ui import themes
 from .ui.console import get_console
+
+_CLAUDE = claude_home()  # CLAUDE_CONFIG_DIR 覆盖 / ~/.claude
+_CODEX = codex_home()    # CODEX_HOME 覆盖 / ~/.codex
 
 
 @dataclass
@@ -23,18 +27,18 @@ class SetupComponents:
     def all_on(cls) -> "SetupComponents":
         return cls(report_hooks=True, codex_faux_statusline=True)
 
-CLAUDE_SETTINGS = os.path.expanduser("~/.claude/settings.json")
-HOOK_SCRIPT_PATH = os.path.expanduser("~/.claude/tt-statusline.py")
-CODEX_DIR = os.path.expanduser("~/.codex")
+CLAUDE_SETTINGS = os.path.join(_CLAUDE, "settings.json")
+HOOK_SCRIPT_PATH = os.path.join(_CLAUDE, "tt-statusline.py")
+CODEX_DIR = _CODEX
 CODEX_CONFIG = os.path.join(CODEX_DIR, "config.toml")
 CODEX_BACKUP = os.path.join(CODEX_DIR, "tt-backup.json")
-HOOK_VERSION = "1.19"
+HOOK_VERSION = "1.20"
 REPORT_HOOK_VERSION = "1.0"
 STATUSLINE_HOOK_VERSION = "1.0"
-CC_REPORT_HOOK_PATH = os.path.expanduser("~/.claude/tt-report-hook.py")
-CC_COMMANDS_DIR = os.path.expanduser("~/.claude/commands")
-CODEX_REPORT_HOOK_PATH = os.path.expanduser("~/.codex/tt-report-hook.py")
-CODEX_STATUSLINE_HOOK_PATH = os.path.expanduser("~/.codex/tt-statusline.py")
+CC_REPORT_HOOK_PATH = os.path.join(_CLAUDE, "tt-report-hook.py")
+CC_COMMANDS_DIR = os.path.join(_CLAUDE, "commands")
+CODEX_REPORT_HOOK_PATH = os.path.join(_CODEX, "tt-report-hook.py")
+CODEX_STATUSLINE_HOOK_PATH = os.path.join(_CODEX, "tt-statusline.py")
 # 会话内彩色报表命令：CC 斜杠命令名 → 命令说明（生成 commands/*.md 用；matcher 用其 key）
 _CC_REPORT_CMDS = {
     "tt-daily": "tt daily 真彩色热力图（会话内直接渲染，不发模型）",
@@ -60,7 +64,9 @@ __version__ = "__HOOK_VERSION__"
 import json, os, re, subprocess, sys, tempfile
 from datetime import datetime, timezone
 
-STATUS_FILE = os.path.expanduser("~/.claude/tt-status.json")
+STATUS_FILE = os.path.join(
+    os.environ.get("CLAUDE_CONFIG_DIR", "").split(",")[0].strip() or os.path.expanduser("~/.claude"),
+    "tt-status.json")
 ANSI_RE = re.compile(r'\033\[[0-9;]*m')
 # 配色在 tt setup / update_hook 烘焙时由 themes.theme_to_statusline_ansi(当前主题) 注入：
 # THEME_COLORS 为当前主题 truecolor，THEME_COLORS_256 为同主题的 256 色近似（兜底不支持
@@ -1153,7 +1159,7 @@ def _unsetup_claude() -> None:
             backup.pop(_PREV_SL_KEY, None)
             if not backup:
                 del settings[_BACKUP_KEY]
-        status_file = os.path.expanduser("~/.claude/tt-status.json")
+        status_file = os.path.join(_CLAUDE, "tt-status.json")
         if os.path.exists(status_file):
             os.remove(status_file)
             get_console().print(f"[green]✓[/green] {t('deleted_cache', path=status_file)}")

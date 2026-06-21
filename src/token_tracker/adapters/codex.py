@@ -4,9 +4,9 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from .types import AgentInfo, RateLimits, UsageEntry, normalize_pct
-from .util import iter_jsonl_dicts, project_from_cwd
+from .util import codex_home, iter_jsonl_dicts, project_from_cwd
 
-CODEX_DIR = os.path.expanduser("~/.codex")
+CODEX_DIR = codex_home()
 SESSIONS_DIR = os.path.join(CODEX_DIR, "sessions")
 STATE_DB = os.path.join(CODEX_DIR, "state_5.sqlite")
 _RATE_LIMIT_SCAN_FILES = 5  # 只扫最近改动的 N 个 session 文件找限额信息

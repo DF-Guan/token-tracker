@@ -242,8 +242,9 @@ _STRINGS = {
 
 def _detect_system_lang() -> str:
     """检测系统语言设置，**绕过 CLI 的 `LANG` 环境变量**（主人 CLI 多设 en，但系统可能是中文，
-    同时区那套：读系统设置而非环境变量）。macOS 读 `defaults -g AppleLanguages` 首选语言；
-    其它平台 / 失败回退 `LANG` 等环境变量。zh 开头 → 中文，否则英文。"""
+    同时区那套：读系统设置而非环境变量）。macOS 读 `defaults -g AppleLanguages` 首选语言、
+    Windows 读用户界面语言（`GetUserDefaultUILanguage`）；其它平台 / 失败回退 `LANG` 等环境变量。
+    zh 开头 → 中文，否则英文。"""
     import sys
     if sys.platform == "darwin":
         try:
@@ -256,6 +257,15 @@ def _detect_system_lang() -> str:
             m = re.search(r'"([^"]+)"', out)  # 取数组首项，如 "zh-Hans-US"
             if m:
                 return "zh" if m.group(1).lower().startswith("zh") else "en"
+        except Exception:
+            pass
+    elif sys.platform == "win32":
+        try:
+            import ctypes
+            # GetUserDefaultUILanguage 返回 LANGID；主语言 ID = 低 10 位，0x04 = 中文（简/繁均是）
+            if (ctypes.windll.kernel32.GetUserDefaultUILanguage() & 0x3FF) == 0x04:
+                return "zh"
+            return "en"
         except Exception:
             pass
     for var in ("LANG", "LC_ALL", "LC_MESSAGES"):

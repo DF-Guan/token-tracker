@@ -178,6 +178,8 @@ Available sort fields: `tokens` / `cost` / `messages` / `time` / `input` / `outp
 | Claude Code | `~/.claude/projects/*/` | JSONL (per-message usage) |
 | Codex | `~/.codex/sessions/` | JSONL + SQLite |
 
+Cross-platform paths: on Windows `~` resolves to `%USERPROFILE%` (e.g. `C:\Users\xxx\.claude`). Honors `CLAUDE_CONFIG_DIR` / `CODEX_HOME` (the official custom-directory env vars) when set.
+
 Token Tracker is **read-only** — it never modifies any agent data.
 
 ## Requirements

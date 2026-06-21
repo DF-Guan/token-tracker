@@ -221,6 +221,15 @@ def test_i18n_set_lang_switches_translations():
         i18n.set_lang(original)  # 还原避免污染后续测试
 
 
+def test_detect_system_lang_win32_falls_back_when_ctypes_unavailable(monkeypatch):
+    # Windows 分支：拿不到 windll（如非 Windows 环境）时优雅回退环境变量，不崩。
+    from token_tracker import i18n
+    monkeypatch.setattr("sys.platform", "win32")
+    monkeypatch.setenv("LANG", "zh_CN.UTF-8")
+    monkeypatch.delenv("LC_ALL", raising=False)
+    assert i18n._detect_system_lang() == "zh"  # ctypes.windll 不可用 → except → 回退 LANG
+
+
 def test_detect_lang_prefers_config_over_env(tmp_path, monkeypatch):
     # 用户配置文件优先于 LANG 环境变量（防止终端 LANG=en_US 但用户在 wizard 选了 zh）。
     monkeypatch.setattr(config, "CONFIG_DIR", str(tmp_path))

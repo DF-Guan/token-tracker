@@ -3,10 +3,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from .types import AgentInfo, UsageEntry
-from .util import iter_jsonl_dicts, project_from_cwd
+from .util import claude_home, iter_jsonl_dicts, project_from_cwd
 
 CLAUDE_DIRS = [
-    os.path.expanduser("~/.claude/projects"),
+    os.path.join(claude_home(), "projects"),
     os.path.expanduser("~/.config/claude/projects"),
 ]
 

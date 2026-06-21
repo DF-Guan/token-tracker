@@ -1,9 +1,26 @@
-"""adapter 间共享的小工具：JSONL 逐行解析、cwd → 项目名。"""
+"""adapter 间共享的小工具：JSONL 逐行解析、cwd → 项目名、agent 配置根目录。"""
 
 import json
 import os
 from collections.abc import Iterator
 from pathlib import Path
+
+
+def claude_home() -> str:
+    """Claude Code 配置/数据根目录：`CLAUDE_CONFIG_DIR`（逗号分隔取第一个）优先，否则 `~/.claude`。
+    官方支持该环境变量覆盖位置；Windows 下 `~` 经 expanduser 解析到 `%USERPROFILE%`。"""
+    env = os.environ.get("CLAUDE_CONFIG_DIR", "").strip()
+    if env:
+        return env.split(",")[0].strip()
+    return os.path.expanduser("~/.claude")
+
+
+def codex_home() -> str:
+    """Codex 配置/数据根目录：`CODEX_HOME` 优先，否则 `~/.codex`（官方支持该环境变量覆盖）。"""
+    env = os.environ.get("CODEX_HOME", "").strip()
+    if env:
+        return env
+    return os.path.expanduser("~/.codex")
 
 
 def iter_jsonl_dicts(path: Path | str) -> Iterator[dict]:
