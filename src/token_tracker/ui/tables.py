@@ -124,78 +124,72 @@ def render_weekly(stats: list[WeeklyStats], agents: list[str] | None = None,
 
 
 def _render_daily_barchart(by_date: dict[str, int], days_back: int = 30, height: int = 6) -> None:
-    """最近 days_back 天的每日 token 垂直柱状图（▁-█ sub-cell 精度，列间留白）；峰值柱子上方标
-    日期、底部两端标起止日期。数据稀疏时：去开头前导空白天（至少留 7 天）、中间 > 5 天的连续空段
-    压成 3 列「·」gap（既不留大片空、也不把两端柱子谎称成连续）。"""
+    """最近 days_back 天的每日 token 垂直柱状图（▁-█ sub-cell 精度，列间留白）：每天都画一列，
+    峰值柱上方标日期、底部两端标起止日期。无可见高度的天（空白天、或量极小不足一格）
+    在最底行画一格基线，基线色比真实矮柱更暗、一眼可辨；时间轴连续、空白天一目了然；
+    不再做前导裁剪或中段空段压缩，整段窗口如实全显示。"""
     today = datetime.now(UTC).date()
     dates = [today - timedelta(days=i) for i in range(days_back - 1, -1, -1)]
     vals = [by_date.get(d.isoformat(), 0) for d in dates]
-    # 去开头前导空白天（从第一个有活动那天画起），但至少留 7 天、避免缩成几根
-    first = next((i for i, v in enumerate(vals) if v > 0), 0)
-    start_idx = min(first, max(0, len(vals) - 7))
-    dates, vals = dates[start_idx:], vals[start_idx:]
     max_v = max(vals) or 1
     blocks = " ▁▂▃▄▅▆▇█"
 
-    # 列结构 (is_gap, 柱高, tokens, 日期标签)：中间连续空 > 5 天压成 3 列 gap、避免大片留白
-    cols: list[tuple[bool, float, int, str]] = []
-    i, n = 0, len(vals)
-    while i < n:
-        if vals[i] == 0:
-            j = i
-            while j < n and vals[j] == 0:
-                j += 1
-            if j - i > 5 and i > 0 and j < n:  # 中间长空段
-                cols += [(True, 0.0, 0, "")] * 3
-            else:                              # 首尾空 / 短空：如实保留
-                cols += [(False, 0.0, 0, dates[k].strftime("%m/%d")) for k in range(i, j)]
-            i = j
-        else:
-            cols.append((False, vals[i] / max_v * height, vals[i], dates[i].strftime("%m/%d")))
-            i += 1
-
-    width = len(cols) * 2 - 1
-    mid_row = (height + 1) // 2
-    day_k = [k for k, c in enumerate(cols) if not c[0]]
-    top3 = set(sorted(day_k, key=lambda k: cols[k][2], reverse=True)[:3])
-    peak_k = max(day_k, key=lambda k: cols[k][2]) if day_k else 0
+    width = len(vals) * 2 - 1
+    top3 = set(sorted(range(len(vals)), key=lambda k: vals[k], reverse=True)[:3])
+    peak_k = max(range(len(vals)), key=lambda k: vals[k])
 
     title = Text()
     title.append("[Daily Trend]", style=f"bold {_S.peach}")
     title.append(f" (last {len(dates)}d)", style=f"dim {_S.peach}")
     lines: list[Text] = [title, Text()]
-    peak_label = cols[peak_k][3]
+    peak_label = dates[peak_k].strftime("%m/%d")
     top = [" "] * width
     pos = max(0, min(width - len(peak_label), peak_k * 2 - len(peak_label) // 2))
     for jx, ch in enumerate(peak_label):
         top[pos + jx] = ch
     lines.append(Text("".join(top), style=_S.peach))
+    # 基线（空白天 / 量极小不足一格的天）专用更暗的 peach，和真实矮柱（dim peach）拉开、一眼可辨
+    baseline_style = f"dim {_darken(_S.peach, 0.4)}"
     for row in range(height, 0, -1):
         line = Text()
-        for k, c in enumerate(cols):
-            if c[0]:  # gap 列：中间行画「·」表示这里跳过了若干天
-                line.append("·" if row == mid_row else " ", style=f"dim {_S.peach}")
+        for k, v in enumerate(vals):
+            bar_h = v / max_v * height
+            if round(bar_h * 8) == 0:  # 没有可见高度（空白天或量极小）→ 最底行画暗基线占位
+                line.append("▁" if row == 1 else " ", style=baseline_style)
             else:
-                diff = c[1] - (row - 1)
+                diff = bar_h - (row - 1)
                 ch = "█" if diff >= 1 else " " if diff <= 0 else blocks[round(diff * 8)]
                 line.append(ch, style=_S.peach if k in top3 else f"dim {_S.peach}")
-            if k < len(cols) - 1:
+            if k < len(vals) - 1:
                 line.append(" ")
         lines.append(line)
-    day_labels = [c[3] for c in cols if not c[0]]
-    start, end = day_labels[0], day_labels[-1]
+    start, end = dates[0].strftime("%m/%d"), dates[-1].strftime("%m/%d")
     gap = max(1, width - len(start) - len(end))
     lines.append(Text(start + " " * gap + end, style=_S.dim))
     get_console().print(Padding(Group(*lines), (0, 0, 0, 2), expand=False))
     get_console().print()
 
 
-def _render_weekly_barchart(weeks: list[WeeklyStats], weeks_back: int = 20, height: int = 6) -> None:
-    """最近 weeks_back 周的每周 token 垂直柱状图（▁-█ sub-cell，列间留白），橙色，仿 Daily Trend 但按周；
-    峰值柱上方标该周起止日期、底部两端标起止周。周数据连续，无需 daily 的稀疏 gap 压缩。"""
-    recent = weeks[-weeks_back:]
-    if not recent:
+def _render_weekly_barchart(weeks: list[WeeklyStats], weeks_back: int = 30, height: int = 6) -> None:
+    """最近 weeks_back 个日历周的每周 token 垂直柱状图（▁-█ sub-cell，列间留白），橙色，仿 Daily Trend 但按周：
+    固定窗口、每周都画一列（含没用过的空白周），峰值柱上方标该周起止日期、底部两端标起止周。
+    无可见高度的周（空白周、或量极小不足一格）画一格基线，基线色比真实矮柱更暗、一眼可辨。"""
+    if not weeks:
         return
+    # 固定最近 weeks_back 个日历周窗口（对齐 daily 的固定 30 天）：没用过 / 缺失的周补 0。
+    # week 是 monday 的 ISO 日期，从本周一往前逐周对齐
+    by_week = {w.week: w for w in weeks}
+    today = datetime.now(UTC).date()
+    this_monday = today - timedelta(days=today.weekday())
+    recent: list[WeeklyStats] = []
+    for i in range(weeks_back - 1, -1, -1):
+        mon = this_monday - timedelta(weeks=i)
+        w = by_week.get(mon.isoformat())
+        if w is None:
+            sun = mon + timedelta(days=6)
+            w = WeeklyStats(week=mon.isoformat(), week_start=mon.strftime("%m-%d"), week_end=sun.strftime("%m-%d"))
+        recent.append(w)
+
     vals = [w.total_tokens for w in recent]
     labels = [f"{int(w.week_start[:2])}/{w.week_start[3:]}" for w in recent]  # "06-15" -> "6/15"
     max_v = max(vals) or 1
@@ -216,12 +210,18 @@ def _render_weekly_barchart(weeks: list[WeeklyStats], weeks_back: int = 20, heig
         if pos + jx < width:  # 周数很少时 width 可能短于标签，越界部分丢弃
             top[pos + jx] = ch
     lines.append(Text("".join(top), style=_S.peach))
+    # 基线（空白周 / 量极小不足一格的周）专用更暗的 peach，和真实矮柱（dim peach）拉开、一眼可辨
+    baseline_style = f"dim {_darken(_S.peach, 0.4)}"
     for row in range(height, 0, -1):
         line = Text()
         for k, v in enumerate(vals):
-            diff = v / max_v * height - (row - 1)
-            ch = "█" if diff >= 1 else " " if diff <= 0 else blocks[round(diff * 8)]
-            line.append(ch, style=_S.peach if k in top3 else f"dim {_S.peach}")
+            bar_h = v / max_v * height
+            if round(bar_h * 8) == 0:  # 没有可见高度（空白周或量极小）→ 最底行画暗基线占位
+                line.append("▁" if row == 1 else " ", style=baseline_style)
+            else:
+                diff = bar_h - (row - 1)
+                ch = "█" if diff >= 1 else " " if diff <= 0 else blocks[round(diff * 8)]
+                line.append(ch, style=_S.peach if k in top3 else f"dim {_S.peach}")
             if k < len(vals) - 1:
                 line.append(" ")
         lines.append(line)
