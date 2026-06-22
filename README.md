@@ -54,9 +54,9 @@
 
 `tt status`：聚焦**过去 5 小时**的实时面板——顶部多 Agent **合并**概览（Token / Cost / Sessions / Messages / Top Model），中间 **5h / 7d 订阅额度**进度条（Claude Code / Codex 分开；都没订阅额度时换成 per-agent 的 token/cost/sessions/messages 统计），底部**近期会话**列表（CC + Codex 合并、带 Agent 列、按 Cost 倒序、Cost 前三名高亮）。所有时间按**系统时区**显示，配色跟随当前主题。
 
-![Token Tracker Status](assets/screenshot.png)
-
 ![Token Tracker Daily](assets/screenshot-daily.png)
+
+![Token Tracker Status](assets/screenshot.png)
 
 ![Token Tracker Weekly](assets/screenshot-weekly.png)
 

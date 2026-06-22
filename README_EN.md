@@ -54,9 +54,9 @@ Implemented via a `Stop` hook returning `systemMessage` — renders 24-bit truec
 
 `tt status`: a **last-5-hours** real-time panel — top: multi-agent **merged** overview (Token / Cost / Sessions / Messages / Top Model); middle: **5h / 7d subscription quota** bars (Claude Code / Codex separately; when neither has a subscription quota, shows per-agent token/cost/sessions/messages instead); bottom: **recent sessions** (CC + Codex merged, with an Agent column, sorted by Cost desc, top-3 cost highlighted). All times use the **system timezone**; colors follow the current theme.
 
-![Token Tracker Status](assets/screenshot.png)
-
 ![Token Tracker Daily](assets/screenshot-daily.png)
+
+![Token Tracker Status](assets/screenshot.png)
 
 ![Token Tracker Weekly](assets/screenshot-weekly.png)
 
