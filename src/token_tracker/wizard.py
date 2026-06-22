@@ -194,22 +194,29 @@ def ask_components(step_prefix_fn: Callable[[int], str] | None = None) -> SetupC
 
 
 def _print_summary(console, choice: str, components: SetupComponents) -> None:
-    """选完所有项后的综合简洁总结：一行配置汇总 + 重启提示 + 下一步（不再渲染配色面板，
-    选主题时每个选项右边已内联色板）。Codex 伪 statusline 显示用双因素（意图 AND 文件存在）。"""
+    """选完所有项后的综合简洁总结：键值对齐的配置回顾 + 一行重启/下一步提示。
+    层次：暗色标签 + 值正常色、状态用 ✓/✗ 图标、✓ 配置完成头用绿。
+    Codex 状态栏显示用双因素（意图 AND 文件存在）。"""
     from .hooks import codex_statusline_active  # 延迟 import 避免循环
-    pink = themes.get_theme("mocha")["base"]["pink"]
-    on, off = t("wizard_summary_on"), t("wizard_summary_off")
+    base = themes.get_theme("mocha")["base"]
+    green, pink, dim = base["green"], base["pink"], base["overlay0"]
     lang_name = "中文" if i18n.LANG == "zh" else "English"  # 语言名本身不翻译
-    items = [f"{t('wizard_summary_lang')} {lang_name}", f"{t('wizard_summary_theme')} {choice}"]
+
+    rows = [(t("wizard_summary_lang"), lang_name), (t("wizard_summary_theme"), choice)]
     if _has_codex():
         # 双因素（意图 AND 文件实装）；_setup_codex 已写入意图，此处直接查 active
-        items.append(f"{t('wizard_summary_statusline')} {on if codex_statusline_active() else off}")
+        state = f"[{green}]✓[/{green}]" if codex_statusline_active() else f"[{dim}]✗[/{dim}]"
+        rows.append((t("wizard_summary_statusline"), state))
+    key_w = max(_disp_width(k) for k, _ in rows)
 
     console.print()
-    console.print(f"[green]✓[/green] {t('wizard_done')}")
-    console.print(f"[{pink}]{'  ·  '.join(items)}[/{pink}]")
-    console.print(f"[{pink}]{t('wizard_restart')}[/{pink}]")
-    console.print(f"[{pink}]{t('wizard_done_next')}[/{pink}]")
+    console.print(f"[{green}]✓[/{green}] {t('wizard_done')}")
+    for k, v in rows:
+        pad = " " * (key_w - _disp_width(k) + 3)  # 标签右侧对齐值，留 3 空格间距
+        console.print(f"  [{dim}]{k}[/{dim}]{pad}[{pink}]{v}[/{pink}]")
+    console.print(f"  [{dim}]{t('wizard_restart')}[/{dim}]")
+    console.print(f"  [{dim}]{t('wizard_reconfig')}[/{dim}]")
+    console.print(f"  [{dim}]{t('wizard_view_reports')}[/{dim}]")
 
 
 def run_wizard() -> None:
