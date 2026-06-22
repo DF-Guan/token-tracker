@@ -56,10 +56,12 @@ def test_statusline_script_bakes_theme_colors(monkeypatch):
 
 
 def test_codex_statusline_render_injects_version():
-    # Codex 伪 statusline 脚本：版本号注入、占位符不残留、语法正确（无 __TT_PYTHON__ 需求）。
+    # Codex 伪 statusline 脚本：版本号 + 主题配色注入、占位符不残留、语法正确（无 __TT_PYTHON__ 需求）。
     rendered = hooks._render_codex_statusline_hook()
     assert f'__version__ = "{hooks.STATUSLINE_HOOK_VERSION}"' in rendered
     assert "__STATUSLINE_HOOK_VERSION__" not in rendered
+    assert "__STATUSLINE_TRUECOLOR__" not in rendered  # 配色占位符已替换
+    assert "'reset'" in rendered and "38;2" in rendered  # 注入了 truecolor 配色 dict（跟随主题）
     compile(rendered, "<codex-statusline>", "exec")
 
 

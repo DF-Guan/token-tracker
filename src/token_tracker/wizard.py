@@ -183,9 +183,7 @@ def ask_components(step_prefix_fn: Callable[[int], str] | None = None) -> SetupC
     """
     has_codex = _has_codex()
     qi = 1
-    # 默认用上次意图（修「每次都重问」）；首次为 True
-    saved_intent = config.codex_faux_statusline_intent()
-    codex_faux = saved_intent if saved_intent is not None else True
+    codex_faux = True  # 固定默认 Yes（推荐项）：每次都从 Yes 起、不被上次选择带偏
     prefix = step_prefix_fn or (lambda i: "")
 
     # Q1: Codex 伪 statusline（仅 Codex 存在）
