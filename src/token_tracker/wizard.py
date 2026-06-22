@@ -203,8 +203,10 @@ def ask_components(step_prefix_fn: Callable[[int], str] | None = None) -> SetupC
 def _print_summary(console, choice: str, components: SetupComponents) -> None:
     """选完所有项后的综合简洁总结：一行配置汇总 + 重启提示 + 下一步（不再渲染配色面板，
     选主题时每个选项右边已内联色板）。"""
+    pink = themes.get_theme("mocha")["base"]["pink"]
     on, off = t("wizard_summary_on"), t("wizard_summary_off")
-    items = [f"{t('wizard_summary_theme')} {choice}"]
+    lang_name = "中文" if i18n.LANG == "zh" else "English"  # 语言名本身不翻译
+    items = [f"{t('wizard_summary_lang')} {lang_name}", f"{t('wizard_summary_theme')} {choice}"]
     if _has_cc() or _has_codex():
         items.append(f"{t('wizard_summary_report')} {on if components.report_hooks else off}")
     if _has_codex():
@@ -212,9 +214,9 @@ def _print_summary(console, choice: str, components: SetupComponents) -> None:
 
     console.print()
     console.print(f"[green]✓[/green] {t('wizard_done')}")
-    console.print(f"[dim]{'  ·  '.join(items)}[/dim]")
-    console.print(f"[dim]{t('wizard_restart')}[/dim]")
-    console.print(f"[dim]{t('wizard_done_next')}[/dim]")
+    console.print(f"[{pink}]{'  ·  '.join(items)}[/{pink}]")
+    console.print(f"[{pink}]{t('wizard_restart')}[/{pink}]")
+    console.print(f"[{pink}]{t('wizard_done_next')}[/{pink}]")
 
 
 def run_wizard() -> None:

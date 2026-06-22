@@ -34,7 +34,7 @@ CODEX_CONFIG = os.path.join(CODEX_DIR, "config.toml")
 CODEX_BACKUP = os.path.join(CODEX_DIR, "tt-backup.json")
 HOOK_VERSION = "1.20"
 REPORT_HOOK_VERSION = "1.0"
-STATUSLINE_HOOK_VERSION = "1.0"
+STATUSLINE_HOOK_VERSION = "1.3"
 CC_REPORT_HOOK_PATH = os.path.join(_CLAUDE, "tt-report-hook.py")
 CC_COMMANDS_DIR = os.path.join(_CLAUDE, "commands")
 CODEX_REPORT_HOOK_PATH = os.path.join(_CODEX, "tt-report-hook.py")
@@ -554,10 +554,11 @@ sys.exit(0)
 # 实测：Stop 的 systemMessage 渲染 24-bit 真彩色 + 不进模型上下文（2026-06-19）。
 # 配色暂 mocha 硬编码（CC statusline 烘焙值），未接主题系统——TUI 渲染区与 CC statusline 解耦。
 CODEX_STATUSLINE_HOOK_SCRIPT = r'''#!/usr/bin/env python3
-"""token-tracker Codex 伪 statusline（Stop hook）：每次回答后追加一行彩色 status。
-一行：[项目](分支 +A -D) | 5h: <%> (reset <倒计时>) | 7d: <%> (reset <倒计时>) | Ctx: <%>
-数据：codex.load_rate_limits()（5h/7d + reset，Codex 自带、账号级准）+ 当前会话 token_count
-（Ctx=last_input ÷ window，按 Stop payload 的 transcript_path 精确定位、回退最近文件）+ git。
+"""token-tracker Codex 伪 statusline（Stop hook）：每次回答后追加两行彩色 status，仿 CC statusline。
+L1：[项目](分支 +A -D) | Total: <会话累计 token> | Model: <模型>
+L2：Limit: 5h <bar> <%> (reset) | 7d <bar> <%> (reset) | <window> Ctx <bar> <%>
+数据：Total = 当前会话 total_token_usage（in+out+reasoning）；5h/7d = codex.load_rate_limits()（账号级准）；
+Ctx = last_input ÷ window；Model = Stop payload.model；会话按 transcript_path 精确定位、回退最近文件。
 由 `tt setup` 生成，勿手改。"""
 __version__ = "__STATUSLINE_HOOK_VERSION__"
 import json
@@ -588,18 +589,51 @@ def _fmt_duration(s):
     return f"{s // 60}m"
 
 
+def fmt_tokens(n):
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.1f}M"
+    if n >= 1_000:
+        return f"{n / 1_000:.0f}k"
+    return str(n)
+
+
+def _bar(pct, width=8):
+    """进度条（仿 CC statusline）：█ 填充档位色 + ░ 空槽（>0 也染档位色），尾接 % 档位色。"""
+    pct = max(0.0, min(100.0, float(pct)))
+    filled = round(pct / 100 * width)
+    empty = width - filled
+    color = _color(pct)
+    empty_s = f"{color}{'░' * empty}{RST}" if pct > 0 and empty else "░" * empty
+    return f"{color}{'█' * filled}{RST}{empty_s} {color}{pct:.0f}%{RST}"
+
+
+def _total_tokens(info):
+    """会话累计 token = total_token_usage 的 input(含 cached) + output + reasoning。"""
+    try:
+        u = info.get("total_token_usage") or {}
+        return u.get("input_tokens", 0) + u.get("output_tokens", 0) + u.get("reasoning_output_tokens", 0)
+    except Exception:
+        return 0
+
+
 def _parse_session(path):
-    """解析一个 session jsonl → (cwd, 最后一个 token_count 的 info)。"""
+    """解析 session jsonl → (cwd, 最后一个 token_count 的 info, model, effort)。
+    model/effort 取最后一个 turn_context（跟随中途换模型/调 effort）。"""
     from token_tracker.adapters.util import iter_jsonl_dicts
     cwd = ""
     info = None
+    model = effort = ""
     for d in iter_jsonl_dicts(path):
         p = d.get("payload", {})
-        if d.get("type") == "session_meta":
+        t = d.get("type")
+        if t == "session_meta":
             cwd = p.get("cwd", "")
+        elif t == "turn_context":  # 含 model（gpt-5.5）+ effort（high）
+            model = p.get("model") or model
+            effort = p.get("effort") or effort
         elif p.get("type") == "token_count" and p.get("info"):
             info = p["info"]
-    return cwd, info
+    return cwd, info, model, effort
 
 
 def _current_session(payload):
@@ -607,18 +641,18 @@ def _current_session(payload):
     try:
         tp = payload.get("transcript_path")
         if tp and os.path.exists(tp):
-            cwd, info = _parse_session(Path(tp))
-            if info:
-                return cwd, info
+            r = _parse_session(Path(tp))
+            if r[1]:
+                return r
         from token_tracker.adapters import codex
         for f in sorted(Path(codex.SESSIONS_DIR).rglob("*.jsonl"),
                         key=lambda p: p.stat().st_mtime, reverse=True)[:3]:
-            cwd, info = _parse_session(f)
-            if info:
-                return cwd, info
+            r = _parse_session(f)
+            if r[1]:
+                return r
     except Exception:
         pass
-    return "", None
+    return "", None, "", ""
 
 
 def _ctx_pct(info):
@@ -684,7 +718,7 @@ def _render_project(cwd):
 
 
 def _render_limit(label, pct, resets_at, now_ts):
-    s = f"{PINK}{label}: {RST}{_color(pct)}{pct:.0f}%{RST}"
+    s = f"{PINK}{label} {RST}{_bar(pct)}"
     if resets_at:
         remain = int(resets_at) - now_ts
         if remain > 0:
@@ -705,24 +739,41 @@ def main():
     except Exception:
         pass
 
-    cwd, info = _current_session(payload)
+    cwd, info, model, effort = _current_session(payload)
     cwd = payload.get("cwd") or cwd
     ctx = _ctx_pct(info) if info else None
     now_ts = int(datetime.now(timezone.utc).timestamp())
 
-    parts = []
+    # L1: 项目(git) | Total | Model
+    line1 = []
     proj = _render_project(cwd)
     if proj:
-        parts.append(proj)
-    if rl and rl.five_hour_pct is not None:
-        parts.append(_render_limit("5h", rl.five_hour_pct, rl.five_hour_resets_at, now_ts))
-    if rl and rl.seven_day_pct is not None:
-        parts.append(_render_limit("7d", rl.seven_day_pct, rl.seven_day_resets_at, now_ts))
-    if ctx is not None:
-        parts.append(f"{PINK}Ctx: {RST}{_color(ctx)}{ctx:.0f}%{RST}")
+        line1.append(proj)
+    total = _total_tokens(info) if info else 0
+    if total:
+        line1.append(f"{PINK}Total: {RST}{fmt_tokens(total)}")
+    model = model or payload.get("model") or ""  # session turn_context 的 model（gpt-5.5）优先
+    if model:
+        label = f"{model} {effort}" if effort else model
+        line1.append(f"{PINK}Model: {RST}{label}")
 
-    if parts:
-        print(json.dumps({"systemMessage": " | ".join(parts)}))
+    # L2: Limit: 5h | 7d | <window> Ctx（仿 CC statusline，带进度条 + reset）
+    line2 = []
+    if rl and rl.five_hour_pct is not None:
+        line2.append(_render_limit("5h", rl.five_hour_pct, rl.five_hour_resets_at, now_ts))
+    if rl and rl.seven_day_pct is not None:
+        line2.append(_render_limit("7d", rl.seven_day_pct, rl.seven_day_resets_at, now_ts))
+    if ctx is not None:
+        size = (info or {}).get("model_context_window") or 0
+        prefix = f"{fmt_tokens(size)} " if size else ""
+        line2.append(f"{PINK}{prefix}Ctx {RST}{_bar(ctx)}")
+    if line2:
+        line2[0] = f"{PINK}Limit:{RST} " + line2[0]
+
+    lines = [" | ".join(x) for x in (line1, line2) if x]
+    if lines:
+        # 开头加 \n：Codex 把 systemMessage 包成 "warning:" 开头，让 status 内容另起一行、与之分开
+        print(json.dumps({"systemMessage": "\n" + "\n".join(lines)}))
 
 
 if __name__ == "__main__":
