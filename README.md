@@ -91,7 +91,7 @@ tt status         # 同上（tt 无参即进 status）
 tt daily          # 过去一年 token 贡献热力图（GitHub 风格）+ 年度分析卡片
 tt weekly         # 周报：本周分析卡片 + 每日趋势柱状图 + 周 / 项目 / 模型趋势
 tt monthly        # 按月汇总（多 Agent 分组展示）
-tt sessions       # 最近 20 条会话明细数据
+tt sessions       # 最近 20 条会话明细（按 cost 倒序展示；tt sessions <n> 改条数、--sort 改排序）
 tt theme          # 查看 / 切换配色主题（show / list / set / preview）
 tt unsetup        # 卸载并恢复安装前的配置
 ```
