@@ -299,7 +299,7 @@ def _render_week_summary(cur: WeeklyStats, prev: WeeklyStats | None, agents: lis
     append_metric(body,"Msgs", str(cur.message_count), _S.blue,
                    cur.message_count, prev.message_count if prev else None)
     body.append("   ")
-    append_metric(body,"Active Days", f"{active_days}/7", _S.blue, active_days, None)
+    append_metric(body,t("active_days"), f"{active_days}/7", _S.blue, active_days, None)
     get_console().print(Panel(Group(brand, Rule(style=f"bold {_S.red}"), body),
                               expand=False, border_style=_S.blue, padding=(0, 1)))
     get_console().print()
@@ -406,7 +406,7 @@ def _render_month_summary(cur: MonthlyStats, prev: MonthlyStats | None, agents: 
     append_metric(body, "Msgs", str(cur.message_count), _S.blue,
                   cur.message_count, prev.message_count if prev else None)
     body.append("   ")
-    append_metric(body, "Active Days", f"{active_days}/{days_in_month}", _S.blue, active_days, None)
+    append_metric(body, t("active_days"), f"{active_days}/{days_in_month}", _S.blue, active_days, None)
     get_console().print(Panel(Group(brand, Rule(style=f"bold {_S.red}"), body),
                               expand=False, border_style=_S.blue, padding=(0, 1)))
     get_console().print()

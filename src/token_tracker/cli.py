@@ -235,7 +235,7 @@ def _run_setup_flow() -> None:
         return
     if _should_run_wizard():
         from .wizard import run_wizard
-        run_wizard()
+        run_wizard()  # wizard 欢迎行下会显示检测到的 agent
     else:
         _auto_setup()
 
@@ -401,9 +401,6 @@ def main():
 
     agents = detect_agents()
     agent_ids = {a.id for a in agents}
-
-    if command not in ("status", "dashboard", "daily", "weekly", "monthly", "sessions"):
-        get_console().print(f"[dim]{t('detected', agents=', '.join(a.name + ' ✓' for a in agents))}[/dim]")
 
     if command in ("status", "dashboard"):
         data = _build_status_data(agents)

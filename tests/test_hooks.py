@@ -140,7 +140,9 @@ def test_cli_setup_wizard_or_auto(monkeypatch):
     # `tt setup` 经 _run_setup_flow：装了 agent 时，双 tty 非会话内 → run_wizard；否则 → _auto_setup。
     from token_tracker import cli, wizard
     calls: dict = {}
-    monkeypatch.setattr(cli, "detect_agents", lambda: [object()])  # 有 agent（守卫单一入口）
+    from types import SimpleNamespace
+    monkeypatch.setattr(cli, "detect_agents",
+                        lambda: [SimpleNamespace(name="Claude Code", id="claude-code")])  # 有 agent
     monkeypatch.setattr(wizard, "run_wizard", lambda: calls.__setitem__("wizard", True))
     monkeypatch.setattr(cli, "_auto_setup", lambda: calls.__setitem__("auto", True))
     monkeypatch.setattr(cli, "is_setup", lambda: True)

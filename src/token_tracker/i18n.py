@@ -69,7 +69,7 @@ _STRINGS = {
         # --- heatmap.py ---（图例 Less / More 不翻译、硬编码英文）
         "daily_peak": "峰值",
         "daily_streak": "连续/最长",
-        "daily_active_days": "活跃天数",
+        "active_days": "活跃天数",
         "daily_busiest": "最忙",
         "weekday_full": "周一,周二,周三,周四,周五,周六,周日",  # busiest 值（Mon 开头）
         "weekday_grid": "周日,周一,周二,周三,周四,周五,周六",  # 热力图左侧行标签（周日开头）
@@ -191,7 +191,7 @@ _STRINGS = {
         # --- heatmap.py ---（图例 Less / More 不翻译、硬编码英文）
         "daily_peak": "Peak",
         "daily_streak": "Current/Longest Streak",
-        "daily_active_days": "Active Days",
+        "active_days": "Active Days",
         "daily_busiest": "Busiest",
         "weekday_full": "Mon,Tue,Wed,Thu,Fri,Sat,Sun",  # busiest 值（Mon 开头）
         "weekday_grid": "Sun,Mon,Tue,Wed,Thu,Fri,Sat",  # 热力图左侧行标签（Sun 开头）

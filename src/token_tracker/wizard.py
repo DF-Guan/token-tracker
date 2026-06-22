@@ -219,6 +219,7 @@ def _print_summary(console, choice: str, components: SetupComponents) -> None:
 
 def run_wizard() -> None:
     # agent 守卫由调用方 cli._run_setup_flow 统一做（唯一入口），这里假设至少有一个 agent。
+    from .adapters.registry import detect_agents
     from .cli import _get_version
 
     console = get_console()
@@ -229,13 +230,15 @@ def run_wizard() -> None:
     enhancement_q = (1 if (has_cc or has_codex) else 0) + (1 if has_codex else 0)
     total = 2 + enhancement_q
 
-    # 欢迎行（品牌 + 版本 + 作者）放最前，固定英文不随语言；前段绿色、署名 dim。绿用 mocha green。
+    # 欢迎行（品牌 + 版本 + 作者，缩进 2）固定英文不随语言、前段绿署名 dim；下一行显示检测到的 agent
     console.print()
     green = themes.get_theme("mocha")["base"]["green"]
     console.print(
-        f"[bold {green}]Welcome to use token-tracker v{_get_version()}[/]"
+        f"  [bold {green}]Welcome to use token-tracker v{_get_version()}[/]"
         f" [dim]- by stormzhang[/dim]"
     )
+    agents = detect_agents()
+    console.print(f"  [dim]{t('detected', agents=', '.join(a.name + ' ✓' for a in agents))}[/dim]")
     console.print()
 
     # Step 1: 语言（也是配置项之一、带步骤号、影响后续所有 i18n 文案）

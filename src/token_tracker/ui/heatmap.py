@@ -67,7 +67,7 @@ def _render_summary(stats: list[DailyStats], agents: list[str] | None) -> None:
         ("Cost", _fmt_cost(total_cost)),
         ("Sessions", str(sum(s.session_count for s in rows))),
         ("Avg/Cost", _fmt_cost(total_cost / days if days else 0)),
-        (t("daily_active_days"), str(days)),
+        (t("active_days"), str(days)),
     ], _S.peach, avail)
     body.append("\n")
     # 第二行（蓝）：单日峰值 token / 当前·最长连续活跃天数
