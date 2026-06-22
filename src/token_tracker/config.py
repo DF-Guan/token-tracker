@@ -18,6 +18,11 @@ CONFIG_DIR = os.path.expanduser("~/.config/token-tracker")
 CONFIG_PATH = os.path.join(CONFIG_DIR, "config.json")
 SCHEMA_VERSION = 1
 
+# 引导版本：每次新增"值得让老用户重新走一遍 wizard"的配置项时手动 +1。
+# 老用户 config 里没这字段 → 读出 0 → 触发重新引导（真终端弹 wizard、非 tty 仅提示）。
+# 跟 SCHEMA_VERSION 解耦：那是数据格式版本，这是用户引导版本，bump 节奏完全不同。
+SETUP_VERSION = 1
+
 # 旧位置（独立 theme.json / lang.json），老用户首次读 config.json 不存在时自动合并迁移
 _LEGACY_THEME_PATH = os.path.join(CONFIG_DIR, "theme.json")
 _LEGACY_LANG_PATH = os.path.join(CONFIG_DIR, "lang.json")
@@ -149,3 +154,17 @@ def codex_faux_statusline_intent() -> bool | None:
     """读用户对 Codex 伪 statusline 的意图。严格 bool；非 bool / 缺字段 → None（视为没表达）。"""
     val = load_config().get("codex_faux_statusline")
     return val if isinstance(val, bool) else None
+
+
+# --- setup 引导版本（老用户升级后重新引导一次的判定依据） ---
+
+
+def save_setup_version(v: int = SETUP_VERSION) -> None:
+    """setup 真正完成后写入当前 SETUP_VERSION，标记"已按当前版本引导过"。"""
+    _save_field("setup_version", int(v))
+
+
+def setup_version() -> int:
+    """读已落地的 setup_version；老用户 / 字段缺失 / 非 int → 0（触发重新引导）。"""
+    val = load_config().get("setup_version")
+    return val if isinstance(val, int) else 0

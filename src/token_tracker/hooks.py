@@ -857,6 +857,10 @@ def setup(auto: bool = False, components: SetupComponents | None = None, quiet: 
         if not auto:
             p(f"[dim]{t('codex_not_found')}[/dim]")
 
+    # setup 真正落地了，写入当前引导版本——后续启动 cli 不再触发"老用户重新引导"。
+    # early-return 分支（无 agent）不会到这，符合语义。
+    config.save_setup_version()
+
 
 def _migrate_cc_legacy_backup(settings: dict) -> None:
     """老用户的 statusLine 备份藏在 settings.json 的 `tokenTracker.previousStatusLine` 子字段——

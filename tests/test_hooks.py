@@ -373,3 +373,106 @@ def test_detect_system_lang_non_darwin_falls_back_to_env(monkeypatch):
     assert i18n._detect_system_lang() == "zh"
     monkeypatch.setenv("LANG", "en_US.UTF-8")
     assert i18n._detect_system_lang() == "en"
+
+
+# --- SETUP_VERSION 引导版本（老用户升级后重新引导） ---
+
+
+def _isolate_config(monkeypatch, tmp_path):
+    """把 config.py 的所有路径常量切到 tmp_path，避免污染主人真实 ~/.config/token-tracker。"""
+    from token_tracker import config
+    monkeypatch.setattr(config, "CONFIG_DIR", str(tmp_path))
+    monkeypatch.setattr(config, "CONFIG_PATH", str(tmp_path / "config.json"))
+    monkeypatch.setattr(config, "_LEGACY_THEME_PATH", str(tmp_path / "theme.json"))
+    monkeypatch.setattr(config, "_LEGACY_LANG_PATH", str(tmp_path / "lang.json"))
+
+
+def test_setup_writes_setup_version(tmp_path, monkeypatch):
+    # setup() 真正落地后必须写入 setup_version=当前 SETUP_VERSION——
+    # 这是引导机制收口：所有路径（新用户 / wizard / _auto_setup / 手动 tt setup）都经此。
+    from token_tracker import config
+    home = tmp_path / "home"
+    (home / ".claude").mkdir(parents=True)
+    (home / ".codex").mkdir(parents=True)
+    settings_path = home / ".claude" / "settings.json"
+    settings_path.write_text("{}", encoding="utf-8")
+    codex_config = home / ".codex" / "config.toml"
+    codex_config.write_text("", encoding="utf-8")
+    monkeypatch.setattr(hooks, "CLAUDE_SETTINGS", str(settings_path))
+    monkeypatch.setattr(hooks, "HOOK_SCRIPT_PATH", str(home / ".claude" / "tt-statusline.py"))
+    monkeypatch.setattr(hooks, "CODEX_DIR", str(home / ".codex"))
+    monkeypatch.setattr(hooks, "CODEX_CONFIG", str(codex_config))
+    monkeypatch.setattr(hooks, "CODEX_STATUSLINE_HOOK_PATH", str(home / ".codex" / "tt-statusline.py"))
+    _isolate_config(monkeypatch, tmp_path / "cfg")
+
+    assert config.setup_version() == 0  # 老用户初始 0
+    hooks.setup(quiet=True)
+    assert config.setup_version() == config.SETUP_VERSION  # setup 完成后被打上当前版本
+
+
+def test_cli_outdated_setup_triggers_wizard_in_tty(monkeypatch, tmp_path):
+    # 老用户 is_setup=True 且 setup_version < SETUP_VERSION 且双 tty 非会话内 → 直接弹 wizard。
+    from token_tracker import cli, config, wizard
+    _isolate_config(monkeypatch, tmp_path)
+    calls: dict = {}
+
+    def fake_wizard():
+        calls["wizard"] = True
+        raise SystemExit(0)  # 短路 cli.main 后续数据命令逻辑
+
+    monkeypatch.setattr(wizard, "run_wizard", fake_wizard)
+    monkeypatch.setattr(cli, "is_setup", lambda: True)
+    monkeypatch.setattr(cli, "needs_update", lambda: False)
+    monkeypatch.setattr(cli, "_should_run_wizard", lambda: True)
+    # setup_version 字段缺失 → 读出 0 < SETUP_VERSION
+    monkeypatch.setattr(config, "SETUP_VERSION", 1)
+    monkeypatch.setattr("sys.argv", ["tt", "status"])
+
+    with pytest.raises(SystemExit):
+        cli.main()
+    assert calls == {"wizard": True}
+
+
+def test_cli_outdated_setup_non_tty_prints_hint_only(monkeypatch, tmp_path, capsys):
+    # 老用户但非 tty / 会话内 → 不进 wizard，只打印一行 setup_outdated_hint 提示。
+    from token_tracker import cli, config, wizard
+    _isolate_config(monkeypatch, tmp_path)
+    calls: dict = {}
+
+    monkeypatch.setattr(wizard, "run_wizard", lambda: calls.__setitem__("wizard", True))
+    monkeypatch.setattr(cli, "is_setup", lambda: True)
+    monkeypatch.setattr(cli, "needs_update", lambda: False)
+    monkeypatch.setattr(cli, "_should_run_wizard", lambda: False)
+    monkeypatch.setattr(cli, "_build_status_data", lambda _agents: {})  # 走 "no data" 早返回
+    from types import SimpleNamespace
+    monkeypatch.setattr(cli, "detect_agents",
+                        lambda: [SimpleNamespace(name="Claude Code", id="claude-code")])
+    monkeypatch.setattr(config, "SETUP_VERSION", 1)
+    monkeypatch.setattr("sys.argv", ["tt", "status"])
+
+    cli.main()
+    assert calls == {}  # wizard 没被调
+    out = capsys.readouterr().out
+    # 中英任一命中即可（取决于运行环境系统语言）
+    assert "tt setup" in out
+
+
+def test_cli_setup_up_to_date_skips_wizard(monkeypatch, tmp_path):
+    # setup_version 已是当前 → 不触发 wizard 也不打印提示，正常往下跑。
+    from token_tracker import cli, config, wizard
+    _isolate_config(monkeypatch, tmp_path)
+    calls: dict = {}
+
+    monkeypatch.setattr(wizard, "run_wizard", lambda: calls.__setitem__("wizard", True))
+    monkeypatch.setattr(cli, "is_setup", lambda: True)
+    monkeypatch.setattr(cli, "needs_update", lambda: False)
+    monkeypatch.setattr(cli, "_should_run_wizard", lambda: True)
+    monkeypatch.setattr(cli, "_build_status_data", lambda _agents: {})
+    from types import SimpleNamespace
+    monkeypatch.setattr(cli, "detect_agents",
+                        lambda: [SimpleNamespace(name="Claude Code", id="claude-code")])
+    config.save_setup_version(config.SETUP_VERSION)  # 已是最新
+    monkeypatch.setattr("sys.argv", ["tt", "status"])
+
+    cli.main()
+    assert calls == {}
