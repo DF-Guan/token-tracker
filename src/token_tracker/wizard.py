@@ -217,6 +217,8 @@ def _print_summary(console, choice: str, components: SetupComponents) -> None:
     console.print(f"  [{dim}]{t('wizard_restart')}[/{dim}]")
     console.print(f"  [{dim}]{t('wizard_reconfig')}[/{dim}]")
     console.print(f"  [{dim}]{t('wizard_view_reports')}[/{dim}]")
+    console.print()
+    console.print(f"  [{green}]{t('wizard_signoff')} - by stormzhang[/{green}]")  # 署名 sign-off，非 dim
 
 
 def run_wizard() -> None:
@@ -231,13 +233,10 @@ def run_wizard() -> None:
     enhancement_q = 1 if has_codex else 0
     total = 2 + enhancement_q
 
-    # 欢迎行（品牌 + 版本 + 作者，缩进 2）固定英文不随语言、前段绿署名 dim；下一行显示检测到的 agent
+    # 欢迎行（品牌 + 版本，缩进 2）固定英文不随语言；署名移到末尾 sign-off 行；下一行显示检测到的 agent
     console.print()
     green = themes.get_theme("mocha")["base"]["green"]
-    console.print(
-        f"  [bold {green}]Welcome to use token-tracker v{_get_version()}[/]"
-        f" [dim]- by stormzhang[/dim]"
-    )
+    console.print(f"  [bold {green}]Welcome to use token-tracker v{_get_version()}[/]")
     agents = detect_agents()
     console.print(f"  [dim]{t('detected', agents=', '.join(a.name + ' ✓' for a in agents))}[/dim]")
     console.print()
