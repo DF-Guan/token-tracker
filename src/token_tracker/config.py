@@ -149,14 +149,3 @@ def codex_faux_statusline_intent() -> bool | None:
     """读用户对 Codex 伪 statusline 的意图。严格 bool；非 bool / 缺字段 → None（视为没表达）。"""
     val = load_config().get("codex_faux_statusline")
     return val if isinstance(val, bool) else None
-
-
-# --- 向后兼容：保留旧 API 别名，供尚未迁移的代码用 ---
-
-
-def load_theme_config() -> dict:
-    return load_config()
-
-
-def load_lang_config() -> dict:
-    return load_config()

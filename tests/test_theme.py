@@ -154,7 +154,7 @@ def test_theme_set_writes_config(tmp_path, monkeypatch):
     monkeypatch.delenv("TT_THEME", raising=False)
     monkeypatch.setattr(theme, "_ACTIVE_NAME", None)
     cli.cmd_theme(["set", "nord"])
-    assert config.load_theme_config()["theme"] == "nord"
+    assert config.load_config()["theme"] == "nord"
     assert theme.get_active_theme_name() == "nord"
 
 
@@ -186,7 +186,7 @@ def test_cmd_theme_shorthand_set(tmp_path, monkeypatch):
     monkeypatch.delenv("TT_THEME", raising=False)
     monkeypatch.setattr(theme, "_ACTIVE_NAME", None)
     cli.cmd_theme(["frappe"])
-    assert config.load_theme_config()["theme"] == "frappe"
+    assert config.load_config()["theme"] == "frappe"
 
 
 def test_should_run_wizard(monkeypatch):

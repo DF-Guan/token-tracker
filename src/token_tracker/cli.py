@@ -248,7 +248,7 @@ def _auto_setup() -> None:
         sys_lang = i18n._detect_system_lang()
         config.save_lang(sys_lang)
         i18n.set_lang(sys_lang)
-    if not config.load_theme_config().get("theme"):
+    if not config.load_config().get("theme"):
         config.save_theme("mocha")
     setup(auto=True)  # 组件默认全开
     get_console().print(f"[dim]{t('auto_setup_hint')}[/dim]")
@@ -259,7 +259,7 @@ def _auto_setup() -> None:
 def _theme_source() -> str:
     if os.environ.get("TT_THEME", "").strip():
         return t("theme_src_env")
-    if config.load_theme_config().get("theme"):
+    if config.load_config().get("theme"):
         return t("theme_src_config")
     return t("theme_src_auto")
 

@@ -204,9 +204,8 @@ def _print_summary(console, choice: str, components: SetupComponents) -> None:
     lang_name = "中文" if i18n.LANG == "zh" else "English"  # 语言名本身不翻译
     items = [f"{t('wizard_summary_lang')} {lang_name}", f"{t('wizard_summary_theme')} {choice}"]
     if _has_codex():
-        # 双因素：意图为 True AND 实际装好（脚本 + config.toml 特征码）
-        active = components.codex_faux_statusline and codex_statusline_active()
-        items.append(f"{t('wizard_summary_statusline')} {on if active else off}")
+        # 双因素（意图 AND 文件实装）；_setup_codex 已写入意图，此处直接查 active
+        items.append(f"{t('wizard_summary_statusline')} {on if codex_statusline_active() else off}")
 
     console.print()
     console.print(f"[green]✓[/green] {t('wizard_done')}")
