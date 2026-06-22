@@ -150,9 +150,19 @@ def _parse_jsonl(
     model = "unknown"
     last_usage = None
     msg_count = 0
+    session_end_ts: datetime | None = None
 
     for data in iter_jsonl_dicts(path):
         row_type = data.get("type")
+        # 取所有事件里最大的 timestamp 作会话结束时间（与 session 开始的差 = 真实跨度，供 sessions 报表）
+        ts_raw = data.get("timestamp")
+        if ts_raw:
+            try:
+                et = datetime.fromisoformat(ts_raw.replace("Z", "+00:00"))
+                if session_end_ts is None or et > session_end_ts:
+                    session_end_ts = et
+            except (ValueError, AttributeError):
+                pass
 
         if row_type == "session_meta":
             payload = data.get("payload", {})
@@ -210,4 +220,5 @@ def _parse_jsonl(
         project=project,
         agent_id="codex",
         message_count=msg_count,
+        session_end=session_end_ts,
     ))

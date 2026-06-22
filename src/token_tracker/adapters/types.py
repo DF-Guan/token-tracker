@@ -29,6 +29,8 @@ class UsageEntry:
     project: str
     agent_id: str
     message_count: int = 1
+    # 仅 codex：单条 entry 即整段会话，记录会话结束时间，让 aggregate_sessions 能算真实跨度（claude 留 None 走多条 entry）
+    session_end: datetime | None = None
 
     @property
     def total_tokens(self) -> int:

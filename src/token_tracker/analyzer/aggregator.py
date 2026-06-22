@@ -92,7 +92,10 @@ def aggregate_sessions(entries: list[UsageEntry]) -> list[SessionStats]:
         session_entries.sort(key=lambda e: e.timestamp)
         first = session_entries[0]
         last = session_entries[-1]
-        duration = (last.timestamp - first.timestamp).total_seconds() / 60
+        # codex 单条 entry 自带会话结束时间（session_end）；取它与末条时间的最大值作真实结束，算出跨度
+        ends = [e.session_end for e in session_entries if e.session_end]
+        end_ts = max([last.timestamp, *ends])
+        duration = (end_ts - first.timestamp).total_seconds() / 60
         # 活跃时长：累加相邻间隔，但单段间隔超过 CAP 视为离开、整段丢弃
         active = 0.0
         for a, b in zip(session_entries, session_entries[1:], strict=False):
@@ -115,7 +118,7 @@ def aggregate_sessions(entries: list[UsageEntry]) -> list[SessionStats]:
             project=first.project,
             model=primary_model,
             start_time=first.timestamp,
-            end_time=last.timestamp,
+            end_time=end_ts,
             duration_minutes=round(duration, 1),
             active_minutes=round(active, 1),
             models={m: out_by_model[m] for m in ranked},

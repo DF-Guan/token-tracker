@@ -429,14 +429,19 @@ def main():
     agg_fn, render_fn, time_attr, no_sort_attr, default_reverse = _REPORT_COMMANDS[command]
     stats = _aggregate_per_agent(report_agents, agg_fn)
     default_attr = time_attr if sort_key == "time" else no_sort_attr
-    _apply_sort(stats, sort_key, sort_desc, default_attr, default_reverse)
 
     if command == "sessions":
-        # 过滤掉活跃 <5min 的短会话（按活跃时长，避免挂机/cron 长会话占位），再按 cost 倒序取前 20
-        kept = [s for s in stats if s.active_minutes >= 5]
+        # sessions 看「最近的会话」：先过滤掉跨度 <5min 的碎片会话，再按时间取最近 N 条
+        #（否则史上高 cost 会话恒久霸榜、新会话和低成本 agent 永远进不了榜），这 N 条再按 cost（或 --sort）展示
+        kept = [s for s in stats if s.duration_minutes >= 5]
+        kept.sort(key=lambda s: s.start_time, reverse=True)
         shown = kept[:_parse_limit(rest_args, default=20)]
+        _apply_sort(shown, sort_key, sort_desc, default_attr, default_reverse)
         render_sessions_view(_summary_from_sessions(shown), shown, agent_names)
-    elif command == "weekly":
+        return
+
+    _apply_sort(stats, sort_key, sort_desc, default_attr, default_reverse)
+    if command == "weekly":
         render_weekly(stats, agents=agent_names, daily=_aggregate_per_agent(report_agents, aggregate_daily))
     elif command == "monthly":
         render_monthly(stats, agents=agent_names,
