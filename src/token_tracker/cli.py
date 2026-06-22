@@ -368,7 +368,7 @@ def main():
             get_console().print(f"[dim]{t('theme_options', names=', '.join(themes.THEME_NAMES))}[/dim]")
             sys.exit(1)
         theme.set_active_theme(theme_override)
-    command = args[0] if args else "status"
+    command = args[0] if args else "daily"
 
     # 版本查询不该触发任何文件读写，放在 auto-update 之前短路返回
     if command in ("--version", "-v", "-V"):
@@ -455,7 +455,13 @@ def main():
         return
 
     _apply_sort(stats, sort_key, sort_desc, default_attr, default_reverse)
-    if command == "weekly":
+    if command == "daily":
+        # daily 顶部三卡片：Last 12 months + This Month + This Week，跟 weekly/monthly 同款样式、
+        # 复用 _render_month_summary / _render_week_summary。多算两份 weekly/monthly 聚合传进去。
+        render_fn(stats, agents=agent_names,  # type: ignore[operator]
+                  weekly=_aggregate_per_agent(report_agents, aggregate_weekly),
+                  monthly=_aggregate_per_agent(report_agents, aggregate_monthly))
+    elif command == "weekly":
         render_weekly(stats, agents=agent_names, daily=_aggregate_per_agent(report_agents, aggregate_daily))
     elif command == "monthly":
         render_monthly(stats, agents=agent_names,

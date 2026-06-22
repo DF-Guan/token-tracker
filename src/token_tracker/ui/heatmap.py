@@ -6,7 +6,6 @@
 总览自己渲染（不复用 dashboard 的宽 header），紧凑单行、半屏不折。
 """
 
-from collections import defaultdict
 from datetime import UTC, date, datetime, timedelta
 
 from rich.cells import cell_len
@@ -16,10 +15,11 @@ from rich.panel import Panel
 from rich.rule import Rule
 from rich.text import Text
 
-from ..adapters.types import DailyStats
+from ..adapters.types import DailyStats, MonthlyStats, WeeklyStats
 from ..i18n import t
 from .console import forced_color_console, get_console
-from .format import _fmt_cost, _fmt_tokens, _model_short, brand_line, emit_metrics
+from .format import _fmt_cost, _fmt_tokens, append_metric, brand_line, emit_metrics
+from .tables import _merge_months, _merge_weeks, _month_span
 from .theme import _S, _heat_level, _heat_thresholds, heat_greens
 
 _WEEKS = 53
@@ -29,7 +29,9 @@ _LABEL_COL = 6    # 星期标签列显示宽（含间隔），容纳「周日」
 _BLOCK_X = _INDENT + _LABEL_COL  # 方块起始列偏移（月份表头 / 图例对齐它）
 
 
-def render_daily_heatmap(stats: list[DailyStats], agents: list[str] | None = None) -> None:
+def render_daily_heatmap(stats: list[DailyStats], agents: list[str] | None = None,
+                          weekly: list[WeeklyStats] | None = None,
+                          monthly: list[MonthlyStats] | None = None) -> None:
     if not stats:
         get_console().print(f"[{_S.warn}]{t('no_data')}[/{_S.warn}]")
         return
@@ -40,35 +42,40 @@ def render_daily_heatmap(stats: list[DailyStats], agents: list[str] | None = Non
         tokens_by_date[s.date] = tokens_by_date.get(s.date, 0) + s.total_tokens
 
     with forced_color_console():
-        _render_summary(stats, agents)
+        # 顶部单一 Panel 内拼三段：Last 12 months / This Month / This Week（粗→细），
+        # 共享一个品牌行 + 红 Rule；段间用 dim Rule 区分；This Month / This Week 各只一行 Tokens/Cost/Avg/Cost
+        _render_summary(stats, agents, weekly, monthly)
         _render_grid(tokens_by_date)
         _render_legend()
 
 
-def _render_summary(stats: list[DailyStats], agents: list[str] | None) -> None:
+def _render_summary(stats: list[DailyStats], agents: list[str] | None,
+                    weekly: list[WeeklyStats] | None,
+                    monthly: list[MonthlyStats] | None) -> None:
     today = datetime.now(UTC).date()
     year_ago = (today - timedelta(days=365)).isoformat()
     rows = [s for s in stats if s.date >= year_ago]  # 过去一年（与热力图范围一致）
 
-    # 品牌行（Token Tracker + agent 暗红）+ 红分割线 + 过去一年汇总（同 weekly 顶部样式）
+    # 品牌行（Token Tracker + agent 暗红）+ 红分割线
     brand = brand_line(agents or ["Claude Code"])
-
     avail = max(40, get_console().width - 6)  # 卡片可用内容宽 = 终端 - 缩进2 - 边框2 - padding2
-    body = Text()
-    body.append("Last 12 months", style=f"bold {_S.good}")
-    body.append(f"  {year_ago} ~ {today.isoformat()}", style=f"dim {_S.good}")
-    body.append("\n")
+
+    # --- Section 1：Last 12 months（保留原 3 行指标） ---
+    body_year = Text()
+    body_year.append("Last 12 months", style=f"bold {_S.good}")
+    body_year.append(f"  {year_ago} ~ {today.isoformat()}", style=f"dim {_S.good}")
+    body_year.append("\n")
     days = len({s.date for s in rows})
     total_cost = sum(s.cost_usd for s in rows)
     # 第一行（橙）：Tokens / Cost / Sessions / Avg/Cost / Active Days（Avg/Cost = 总成本 ÷ 活跃天数）
-    emit_metrics(body, [
+    emit_metrics(body_year, [
         ("Tokens", _fmt_tokens(sum(s.total_tokens for s in rows))),
         ("Cost", _fmt_cost(total_cost)),
         ("Sessions", str(sum(s.session_count for s in rows))),
         ("Avg/Cost", _fmt_cost(total_cost / days if days else 0)),
         (t("active_days"), str(days)),
     ], _S.peach, avail)
-    body.append("\n")
+    body_year.append("\n")
     # 第二行（蓝）：单日峰值 token / 当前·最长连续活跃天数
     peak = max(rows, key=lambda s: s.total_tokens)
     dts = sorted(date.fromisoformat(d) for d in {s.date for s in rows})
@@ -78,28 +85,65 @@ def _render_summary(stats: list[DailyStats], agents: list[str] | None) -> None:
         longest_streak = max(longest_streak, cur_streak)
     if dts and (today - dts[-1]).days > 1:  # 最近活跃日距今 > 1 天，当前连续已断
         cur_streak = 0
-    emit_metrics(body, [
+    emit_metrics(body_year, [
         (t("daily_peak"), f"{peak.date[5:]} ({_fmt_tokens(peak.total_tokens)})"),
         (t("daily_streak"), f"{cur_streak}/{longest_streak}{t('unit_day')}"),
     ], _S.blue, avail)
-    body.append("\n")
-    # 第三行（粉）：最忙星期几 / Top Model
-    wd_tokens: dict[int, int] = defaultdict(int)
-    model_tokens: dict[str, int] = defaultdict(int)
-    for s in rows:
-        wd_tokens[date.fromisoformat(s.date).weekday()] += s.total_tokens
-        for m, tk in s.models.items():
-            model_tokens[m] += tk
-    weekdays = t("weekday_full").split(",")  # Mon 开头，跟随语言
-    busiest = weekdays[max(wd_tokens.items(), key=lambda x: x[1])[0]] if wd_tokens else "-"
-    top_model = _model_short(max(model_tokens.items(), key=lambda x: x[1])[0]) if model_tokens else "-"
-    emit_metrics(body, [
-        (t("daily_busiest"), busiest), ("Top Model", top_model),
-    ], _S.pink, avail)
 
-    get_console().print(Padding(Panel(Group(brand, Rule(style=f"bold {_S.red}"), body),
+    parts: list = [brand, Rule(style=f"bold {_S.red}"), body_year]
+
+    # --- Section 2：This Month（Tokens / Cost / Avg/Cost 带环比 + 活跃天数 X/月总天数） ---
+    if monthly:
+        months = _merge_months(monthly)
+        cur_m = months[-1]
+        prev_m = months[-2] if len(months) >= 2 else None
+        days_in_m, elapsed_m = _month_span(cur_m.month)
+        cur_m_avg = cur_m.cost_usd / max(1, elapsed_m)
+        prev_m_avg = prev_m.cost_usd / max(1, _month_span(prev_m.month)[0]) if prev_m else None
+        active_m = len({s.date for s in stats if s.date.startswith(cur_m.month)})
+        body_m = Text()
+        body_m.append("This Month", style=f"bold {_S.good}")
+        body_m.append(f"  {cur_m.month}", style=f"dim {_S.good}")
+        body_m.append("\n")
+        append_metric(body_m, "Tokens", _fmt_tokens(cur_m.total_tokens), _S.peach,
+                      cur_m.total_tokens, prev_m.total_tokens if prev_m else None)
+        body_m.append("   ")
+        append_metric(body_m, "Cost", _fmt_cost(cur_m.cost_usd), _S.peach,
+                      cur_m.cost_usd, prev_m.cost_usd if prev_m else None)
+        body_m.append("   ")
+        append_metric(body_m, "Avg/Cost", _fmt_cost(cur_m_avg), _S.peach, cur_m_avg, prev_m_avg)
+        body_m.append("   ")
+        append_metric(body_m, t("active_days"), f"{active_m}/{days_in_m}", _S.peach, active_m, None)
+        parts.extend([Rule(style=_S.dim), body_m])
+
+    # --- Section 3：This Week（Tokens / Cost / Avg/Cost 带环比 + 活跃天数 X/7） ---
+    if weekly:
+        weeks_list = _merge_weeks(weekly)
+        cur_w = weeks_list[-1]
+        prev_w = weeks_list[-2] if len(weeks_list) >= 2 else None
+        this_monday = datetime.fromisoformat(cur_w.week).date()
+        days_w = max(1, min(7, (today - this_monday).days + 1))
+        cur_w_avg = cur_w.cost_usd / days_w
+        prev_w_avg = prev_w.cost_usd / 7 if prev_w else None
+        active_w = len({s.date for s in stats if s.date >= cur_w.week})
+        body_w = Text()
+        body_w.append("This Week", style=f"bold {_S.good}")
+        body_w.append(f"  {cur_w.week_start} ~ {cur_w.week_end}", style=f"dim {_S.good}")
+        body_w.append("\n")
+        append_metric(body_w, "Tokens", _fmt_tokens(cur_w.total_tokens), _S.peach,
+                      cur_w.total_tokens, prev_w.total_tokens if prev_w else None)
+        body_w.append("   ")
+        append_metric(body_w, "Cost", _fmt_cost(cur_w.cost_usd), _S.peach,
+                      cur_w.cost_usd, prev_w.cost_usd if prev_w else None)
+        body_w.append("   ")
+        append_metric(body_w, "Avg/Cost", _fmt_cost(cur_w_avg), _S.peach, cur_w_avg, prev_w_avg)
+        body_w.append("   ")
+        append_metric(body_w, t("active_days"), f"{active_w}/7", _S.peach, active_w, None)
+        parts.extend([Rule(style=_S.dim), body_w])
+
+    get_console().print(Padding(Panel(Group(*parts),
                                       expand=False, border_style=_S.blue, padding=(0, 1)),
-                                (0, 0, 0, 2), expand=False))
+                                (0, 0, 0, _INDENT), expand=False))
     get_console().print()
 
 
