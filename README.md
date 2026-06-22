@@ -46,9 +46,13 @@
 
 通过 `Stop` hook 注入 `systemMessage` 实现，渲染 24-bit 真彩色、**不进模型上下文**（实测），**配色跟随当前主题**（与 CLI 报表 / CC 状态栏同源，`tt theme` 切换三者一起变）。`tt unsetup` 一并移除。
 
-## Status 实时面板和 日/周/月 数据报表分析
+## Daily 概览和 日/周/月 数据报表分析
 
-`tt`（无参）/ `tt status`：聚焦**过去 5 小时**的实时面板——顶部多 Agent **合并**概览（Token / Cost / Sessions / Messages / Top Model），中间 **5h / 7d 订阅额度**进度条（Claude Code / Codex 分开；都没订阅额度时换成 per-agent 的 token/cost/sessions/messages 统计），底部**近期会话**列表（CC + Codex 合并、带 Agent 列、按 Cost 倒序、Cost 前三名高亮）。所有时间按**系统时区**显示，配色跟随当前主题。
+`tt`（无参）/ `tt daily`：默认入口，GitHub 风格 token 贡献热力图 + 顶部**单一卡片**内拼三段概览（**Last 12 months / This Month / This Week**，粗→细）。
+- Last 12 months：橙色 Tokens / Cost / Sessions / Avg/Cost / 活跃天数 + 蓝色 单日峰值 / 当前·最长连续活跃天数
+- This Month / This Week：橙色 Tokens / Cost / Avg/Cost / 活跃天数，**带环比**（↑/↓ 上月 / 上周）
+
+`tt status`：聚焦**过去 5 小时**的实时面板——顶部多 Agent **合并**概览（Token / Cost / Sessions / Messages / Top Model），中间 **5h / 7d 订阅额度**进度条（Claude Code / Codex 分开；都没订阅额度时换成 per-agent 的 token/cost/sessions/messages 统计），底部**近期会话**列表（CC + Codex 合并、带 Agent 列、按 Cost 倒序、Cost 前三名高亮）。所有时间按**系统时区**显示，配色跟随当前主题。
 
 ![Token Tracker Status](assets/screenshot.png)
 
@@ -93,9 +97,9 @@ pip install --user token-tracker && tt setup   # 都没有时
 
 ```bash
 tt setup          # 交互配置向导（终端：上下键选语言 / 主题 / 各组件）；非 tty 环境自动全装
-tt                # 过去 5h 实时面板（合并概览 + 5h/7d 额度 + 近期会话，= tt status）
-tt status         # 同上（tt 无参即进 status）
-tt daily          # 过去一年 token 贡献热力图（GitHub 风格）+ 年度分析卡片
+tt                # 过去一年 token 热力图 + 顶部三段概览（Last 12 months / This Month / This Week，= tt daily）
+tt daily          # 同上（tt 无参即进 daily）
+tt status         # 过去 5h 实时面板（合并概览 + 5h/7d 额度 + 近期会话）
 tt weekly         # 周报：本周分析卡片 + 每日趋势柱状图 + 周 / 项目 / 模型趋势
 tt monthly        # 按月汇总（多 Agent 分组展示）
 tt sessions       # 最近 20 条会话明细（按 cost 倒序展示；tt sessions <n> 改条数、--sort 改排序）

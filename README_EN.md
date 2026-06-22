@@ -46,9 +46,13 @@ The status line has four rows, left to right:
 
 Implemented via a `Stop` hook returning `systemMessage` — renders 24-bit truecolor, **does not enter the model context** (verified), and **follows the current theme** (same source as the CLI reports / CC status line; `tt theme` switches all three together). `tt unsetup` removes it.
 
-## Status Panel & Daily / Weekly / Monthly Reports
+## Daily Overview & Daily / Weekly / Monthly Reports
 
-`tt` (no args) / `tt status`: a **last-5-hours** real-time panel — top: multi-agent **merged** overview (Token / Cost / Sessions / Messages / Top Model); middle: **5h / 7d subscription quota** bars (Claude Code / Codex separately; when neither has a subscription quota, shows per-agent token/cost/sessions/messages instead); bottom: **recent sessions** (CC + Codex merged, with an Agent column, sorted by Cost desc, top-3 cost highlighted). All times use the **system timezone**; colors follow the current theme.
+`tt` (no args) / `tt daily`: the default entrypoint — GitHub-style token contribution heatmap + a top **single card** containing three stacked sections (**Last 12 months / This Month / This Week**, coarse → fine).
+- Last 12 months: orange Tokens / Cost / Sessions / Avg/Cost / Active Days + blue Daily Peak / Current·Longest Streak
+- This Month / This Week: orange Tokens / Cost / Avg/Cost / Active Days, with **delta vs prev month / week** (↑/↓)
+
+`tt status`: a **last-5-hours** real-time panel — top: multi-agent **merged** overview (Token / Cost / Sessions / Messages / Top Model); middle: **5h / 7d subscription quota** bars (Claude Code / Codex separately; when neither has a subscription quota, shows per-agent token/cost/sessions/messages instead); bottom: **recent sessions** (CC + Codex merged, with an Agent column, sorted by Cost desc, top-3 cost highlighted). All times use the **system timezone**; colors follow the current theme.
 
 ![Token Tracker Status](assets/screenshot.png)
 
@@ -93,9 +97,9 @@ pip install --user token-tracker && tt setup   # otherwise
 
 ```bash
 tt setup          # interactive setup wizard (terminal: language / theme / components); auto full-install on non-tty
-tt                # last-5h real-time panel (merged overview + 5h/7d quota + recent sessions, = tt status)
-tt status         # same (tt with no args enters status)
-tt daily          # last-12-months token contribution heatmap (GitHub-style) + yearly analysis card
+tt                # last-12-months heatmap + top tri-section overview (Last 12 months / This Month / This Week, = tt daily)
+tt daily          # same (tt with no args enters daily)
+tt status         # last-5h real-time panel (merged overview + 5h/7d quota + recent sessions)
 tt weekly         # weekly report: this-week card + daily-trend bars + weekly / project / model trends
 tt monthly        # monthly summary (per-agent grouping)
 tt sessions       # last 20 session details
