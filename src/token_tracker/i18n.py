@@ -66,9 +66,13 @@ _STRINGS = {
         "msg_count": "消息      {n} 条",
         "limit_7d": "7d 限额",
         "idle_panel_title": "限额数据面板",
-        # --- heatmap.py ---
-        "heat_less": "少",
-        "heat_more": "多",
+        # --- heatmap.py ---（图例 Less / More 不翻译、硬编码英文）
+        "daily_peak": "峰值",
+        "daily_streak": "连续/最长",
+        "daily_active_days": "活跃天数",
+        "daily_busiest": "最忙",
+        "weekday_full": "周一,周二,周三,周四,周五,周六,周日",  # busiest 值（Mon 开头）
+        "weekday_grid": "周日,周一,周二,周三,周四,周五,周六",  # 热力图左侧行标签（周日开头）
         # --- theme (cli.py) ---
         "theme_current": "当前主题: {name}{src}",
         "theme_src_env": "（来自环境变量 TT_THEME）",
@@ -184,9 +188,13 @@ _STRINGS = {
         "msg_count": "Messages  {n}",
         "limit_7d": "7d Limit",
         "idle_panel_title": "Rate Limits",
-        # --- heatmap.py ---
-        "heat_less": "Less",
-        "heat_more": "More",
+        # --- heatmap.py ---（图例 Less / More 不翻译、硬编码英文）
+        "daily_peak": "Peak",
+        "daily_streak": "Current/Longest Streak",
+        "daily_active_days": "Active Days",
+        "daily_busiest": "Busiest",
+        "weekday_full": "Mon,Tue,Wed,Thu,Fri,Sat,Sun",  # busiest 值（Mon 开头）
+        "weekday_grid": "Sun,Mon,Tue,Wed,Thu,Fri,Sat",  # 热力图左侧行标签（Sun 开头）
         # --- theme (cli.py) ---
         "theme_current": "Current theme: {name}{src}",
         "theme_src_env": " (from env TT_THEME)",

@@ -1,7 +1,6 @@
 import os
 import sys
-from collections import defaultdict
-from datetime import UTC, datetime, timedelta
+from datetime import datetime
 
 from rich.text import Text
 
@@ -446,16 +445,6 @@ def main():
         render_monthly(stats, agents=agent_names,
                        daily=_aggregate_per_agent(report_agents, aggregate_daily),
                        weekly=_aggregate_per_agent(report_agents, aggregate_weekly))
-    elif command == "daily":
-        d_entries = [e for a in report_agents for e in _load_entries(a.id)]
-        # 最活跃时段：过去一个月按小时聚合 token（24 小时分布），渲染层据此求活跃区间
-        month_ago = (datetime.now(UTC) - timedelta(days=30)).date()
-        tz = system_tz()  # Active Hour 按系统时区（绕过 CLI 的 TZ）
-        hourly: dict[int, int] = defaultdict(int)
-        for e in d_entries:
-            if e.timestamp.date() >= month_ago:
-                hourly[e.timestamp.astimezone(tz).hour] += e.total_tokens
-        render_daily_heatmap(stats, agents=agent_names, hourly=dict(hourly))
     else:
         render_fn(stats, agents=agent_names)
 

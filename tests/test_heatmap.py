@@ -44,7 +44,9 @@ def test_render_heatmap_outputs_truecolor(capsys):
     ]
     render_daily_heatmap(stats, ["Claude Code"])
     out = capsys.readouterr().out
-    assert "Su" in out and "Sa" in out  # 星期标签
+    from token_tracker.i18n import t
+    wk = t("weekday_grid").split(",")
+    assert wk[0] in out and wk[-1] in out  # 星期标签（跟随语言）
     colors = set(re.findall(r"38;2;\d+;\d+;\d+", out))
     assert len(colors) >= 2  # 空格档 + 至少一档绿，验证 24-bit truecolor 多档
     assert any(m and m in out for m in _MONTHS)  # 月份表头存在
