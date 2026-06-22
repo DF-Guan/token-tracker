@@ -192,7 +192,7 @@ def _render_daily_barchart(by_date: dict[str, int], days_back: int = 30, height:
 
 def _render_weekly_barchart(weeks: list[WeeklyStats], weeks_back: int = 20, height: int = 6) -> None:
     """最近 weeks_back 周的每周 token 垂直柱状图（▁-█ sub-cell，列间留白），橙色，仿 Daily Trend 但按周；
-    峰值柱上方标周起始、底部两端标起止周。周数据连续，无需 daily 的稀疏 gap 压缩。"""
+    峰值柱上方标该周起止日期、底部两端标起止周。周数据连续，无需 daily 的稀疏 gap 压缩。"""
     recent = weeks[-weeks_back:]
     if not recent:
         return
@@ -209,8 +209,10 @@ def _render_weekly_barchart(weeks: list[WeeklyStats], weeks_back: int = 20, heig
     title.append(f" (last {len(recent)} weeks)", style=f"dim {_S.peach}")
     lines: list[Text] = [title, Text()]
     top = [" "] * width
-    pos = max(0, min(width - len(labels[peak_k]), peak_k * 2 - len(labels[peak_k]) // 2))
-    for jx, ch in enumerate(labels[peak_k]):
+    pw = recent[peak_k]  # 峰值周：标该周起止日期（如 6/15-6/21）
+    peak_label = f"{int(pw.week_start[:2])}/{pw.week_start[3:]}-{int(pw.week_end[:2])}/{pw.week_end[3:]}"
+    pos = max(0, min(width - len(peak_label), peak_k * 2 - len(peak_label) // 2))
+    for jx, ch in enumerate(peak_label):
         if pos + jx < width:  # 周数很少时 width 可能短于标签，越界部分丢弃
             top[pos + jx] = ch
     lines.append(Text("".join(top), style=_S.peach))
