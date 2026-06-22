@@ -1,7 +1,7 @@
 """首次运行交互配置向导：选主题 + 选增强项，再落地状态栏 + 选择的组件。
 
 仅在「首次运行 + tty + 非会话内」时进入（判定在 cli.py），其它场景（CI / 脚本 /
-`!tt` / report hook 子进程 / AI 会话内）一律降级到静默 `setup(auto=True)`。
+`!tt` / AI 会话内）一律降级到静默 `setup(auto=True)`。
 用 questionary 提供上下键选择体验；agent 由 setup 自动检测、语言跟随系统。
 """
 
@@ -176,28 +176,21 @@ def _ask_yes_no(message: str, default: bool = True) -> bool:
 
 
 def ask_components(step_prefix_fn: Callable[[int], str] | None = None) -> SetupComponents:
-    """按检测到的 agent 问 1-2 个增强项；返回 SetupComponents。说明压进问题一行、选完直接下一项。
+    """按检测到的 agent 问增强项；返回 SetupComponents。说明压进问题一行、选完直接下一项。
 
     step_prefix_fn(i) 返回第 i 个问题的步骤前缀（i 从 1 开始）；不传则无前缀。
     语言由调用方（wizard）在更早的步骤问过，这里不重复。
     """
-    has_cc = _has_cc()
     has_codex = _has_codex()
     qi = 1
-    report_hooks = True
     codex_faux = True
     prefix = step_prefix_fn or (lambda i: "")
 
-    # Q1: 会话内彩色报表 hook（至少检测到一个 agent 才问）
-    if has_cc or has_codex:
-        report_hooks = _ask_yes_no(f"{prefix(qi)}{t('wizard_q_report_hooks')}")
-        qi += 1
-
-    # Q2: Codex 伪 statusline（仅 Codex 存在）
+    # Q1: Codex 伪 statusline（仅 Codex 存在）
     if has_codex:
         codex_faux = _ask_yes_no(f"{prefix(qi)}{t('wizard_q_codex_statusline')}")
 
-    return SetupComponents(report_hooks=report_hooks, codex_faux_statusline=codex_faux)
+    return SetupComponents(codex_faux_statusline=codex_faux)
 
 
 def _print_summary(console, choice: str, components: SetupComponents) -> None:
@@ -207,8 +200,6 @@ def _print_summary(console, choice: str, components: SetupComponents) -> None:
     on, off = t("wizard_summary_on"), t("wizard_summary_off")
     lang_name = "中文" if i18n.LANG == "zh" else "English"  # 语言名本身不翻译
     items = [f"{t('wizard_summary_lang')} {lang_name}", f"{t('wizard_summary_theme')} {choice}"]
-    if _has_cc() or _has_codex():
-        items.append(f"{t('wizard_summary_report')} {on if components.report_hooks else off}")
     if _has_codex():
         items.append(f"{t('wizard_summary_statusline')} {on if components.codex_faux_statusline else off}")
 
@@ -225,11 +216,10 @@ def run_wizard() -> None:
     from .cli import _get_version
 
     console = get_console()
-    has_cc = _has_cc()
     has_codex = _has_codex()
 
     # 总步数：语言 + 主题 + 增强项问题数（按检测到的 agent 决定）
-    enhancement_q = (1 if (has_cc or has_codex) else 0) + (1 if has_codex else 0)
+    enhancement_q = 1 if has_codex else 0
     total = 2 + enhancement_q
 
     # 欢迎行（品牌 + 版本 + 作者，缩进 2）固定英文不随语言、前段绿署名 dim；下一行显示检测到的 agent

@@ -55,16 +55,6 @@ def test_statusline_script_bakes_theme_colors(monkeypatch):
     compile(rendered, "<statusline>", "exec")  # 注入后语法正确
 
 
-def test_report_hooks_render_inject_version_and_python():
-    # CC / Codex 报表 hook 模板：版本号 + 解释器都注入、占位符不残留、用 -m 调 tt。
-    for render in (hooks._render_cc_report_hook, hooks._render_codex_report_hook):
-        rendered = render()
-        assert f'__version__ = "{hooks.REPORT_HOOK_VERSION}"' in rendered
-        assert "__REPORT_HOOK_VERSION__" not in rendered
-        assert "__TT_PYTHON__" not in rendered
-        assert "token_tracker.cli" in rendered
-
-
 def test_codex_statusline_render_injects_version():
     # Codex 伪 statusline 脚本：版本号注入、占位符不残留、语法正确（无 __TT_PYTHON__ 需求）。
     rendered = hooks._render_codex_statusline_hook()
@@ -101,12 +91,12 @@ def test_codex_statusline_version_roundtrip(tmp_path, monkeypatch):
 def test_setup_components_defaults_all_on():
     # 不传 components 时 setup() 应等价于全装；SetupComponents 默认值也是全开。
     c = hooks.SetupComponents()
-    assert c.report_hooks is True and c.codex_faux_statusline is True
+    assert c.codex_faux_statusline is True
     assert hooks.SetupComponents.all_on() == c
 
 
 def test_setup_components_off_skips_install(tmp_path, monkeypatch):
-    # components.report_hooks=False → CC report hook 不装；codex_faux_statusline=False → Codex 伪 statusline 不装。
+    # codex_faux_statusline=False → Codex 伪 statusline 不装。
     # 隔离 HOME，避免污染主人真实 ~/.claude / ~/.codex
     home = tmp_path / "home"
     (home / ".claude").mkdir(parents=True)
@@ -117,23 +107,18 @@ def test_setup_components_off_skips_install(tmp_path, monkeypatch):
     codex_config.write_text("[tui]\nstatus_line = []\n", encoding="utf-8")
     monkeypatch.setattr(hooks, "CLAUDE_SETTINGS", str(settings_path))
     monkeypatch.setattr(hooks, "HOOK_SCRIPT_PATH", str(home / ".claude" / "tt-statusline.py"))
-    monkeypatch.setattr(hooks, "CC_REPORT_HOOK_PATH", str(home / ".claude" / "tt-report-hook.py"))
-    monkeypatch.setattr(hooks, "CC_COMMANDS_DIR", str(home / ".claude" / "commands"))
     monkeypatch.setattr(hooks, "CODEX_DIR", str(home / ".codex"))
     monkeypatch.setattr(hooks, "CODEX_CONFIG", str(codex_config))
-    monkeypatch.setattr(hooks, "CODEX_REPORT_HOOK_PATH", str(home / ".codex" / "tt-report-hook.py"))
     monkeypatch.setattr(hooks, "CODEX_STATUSLINE_HOOK_PATH", str(home / ".codex" / "tt-statusline.py"))
 
-    hooks.setup(components=hooks.SetupComponents(report_hooks=False, codex_faux_statusline=False))
+    hooks.setup(components=hooks.SetupComponents(codex_faux_statusline=False))
 
-    # CC statusline 仍装；CC report hook 不装
+    # CC statusline 仍装
     assert json.loads(settings_path.read_text())["statusLine"]["command"].endswith("tt-statusline.py")
-    assert not os.path.exists(str(home / ".claude" / "tt-report-hook.py"))
     # Codex status_line 仍写、但 Stop hook（tt-statusline）不在 config 里
     codex_content = codex_config.read_text()
     assert "five-hour-limit" in codex_content
     assert "tt-statusline" not in codex_content   # Codex 伪 statusline hook 段未追加
-    assert "tt-report-hook" not in codex_content  # report hook 段未追加
 
 
 def test_cli_setup_wizard_or_auto(monkeypatch):
@@ -185,40 +170,6 @@ def test_codex_statusline_uninstall_keeps_other_stop_hooks(tmp_path, monkeypatch
     removed = hooks._uninstall_codex_statusline(installed)
     assert "tt-statusline" not in removed
     assert "/usr/bin/my-other-stop" in removed  # 用户的 Stop 完整保留
-
-
-def test_is_tt_report_entry():
-    tt = {"matcher": "tt-daily", "hooks": [{"type": "command", "command": "py /x/tt-report-hook.py"}]}
-    other = {"matcher": "x", "hooks": [{"type": "command", "command": "echo hi"}]}
-    assert hooks._is_tt_report_entry(tt)
-    assert not hooks._is_tt_report_entry(other)
-
-
-def test_install_cc_report_merges_and_idempotent(tmp_path, monkeypatch):
-    # 合并进 UserPromptExpansion：保留用户项、追加 tt 两项；重复装不翻倍。
-    monkeypatch.setattr(hooks, "CC_REPORT_HOOK_PATH", str(tmp_path / "tt-report-hook.py"))
-    monkeypatch.setattr(hooks, "CC_COMMANDS_DIR", str(tmp_path / "commands"))
-    mine = {"matcher": "mine", "hooks": [{"type": "command", "command": "echo hi"}]}
-    settings = {"hooks": {"UserPromptExpansion": [mine]}}
-    hooks._install_cc_report(settings, "python3")
-    assert [e["matcher"] for e in settings["hooks"]["UserPromptExpansion"]] == ["mine", "tt-daily", "tt-weekly"]
-    hooks._install_cc_report(settings, "python3")  # 幂等
-    assert [e["matcher"] for e in settings["hooks"]["UserPromptExpansion"]] == ["mine", "tt-daily", "tt-weekly"]
-    # 卸载只移除 tt，保留用户项
-    hooks._uninstall_cc_report(settings)
-    assert settings["hooks"]["UserPromptExpansion"] == [mine]
-
-
-def test_codex_report_install_uninstall_roundtrip(tmp_path, monkeypatch):
-    # 末尾追加 tt 段、保留用户已有 hook；幂等；卸载删净 tt 段、留用户项。
-    monkeypatch.setattr(hooks, "CODEX_REPORT_HOOK_PATH", str(tmp_path / "tt-report-hook.py"))
-    base = ('[tui]\nstatus_line = ["project"]\n\n[[hooks.UserPromptSubmit]]\n\n'
-            '[[hooks.UserPromptSubmit.hooks]]\ntype = "command"\ncommand = "mine"\n')
-    installed = hooks._install_codex_report(base, "python3")
-    assert "tt-report-hook" in installed and 'command = "mine"' in installed
-    assert hooks._install_codex_report(installed, "python3") == installed  # 幂等
-    removed = hooks._uninstall_codex_report(installed)
-    assert "tt-report-hook" not in removed and 'command = "mine"' in removed
 
 
 @pytest.mark.skipif(not shutil.which("git"), reason="需要 git")
@@ -400,7 +351,6 @@ def test_setup_codex_creates_missing_config(tmp_path, monkeypatch):
     monkeypatch.setattr(hooks, "CODEX_DIR", str(home / ".codex"))
     monkeypatch.setattr(hooks, "CODEX_CONFIG", str(codex_config))
     monkeypatch.setattr(hooks, "CODEX_BACKUP", str(home / ".codex" / "tt-backup.json"))
-    monkeypatch.setattr(hooks, "CODEX_REPORT_HOOK_PATH", str(home / ".codex" / "tt-report-hook.py"))
     monkeypatch.setattr(hooks, "CODEX_STATUSLINE_HOOK_PATH", str(home / ".codex" / "tt-statusline.py"))
 
     assert not codex_config.exists()
@@ -409,7 +359,6 @@ def test_setup_codex_creates_missing_config(tmp_path, monkeypatch):
     content = codex_config.read_text()
     assert "five-hour-limit" in content      # status_line 写入
     assert "tt-statusline" in content        # 伪 statusline Stop hook 写入
-    assert "tt-report-hook" in content       # report hook 写入
 
 
 def test_detect_system_lang_non_darwin_falls_back_to_env(monkeypatch):

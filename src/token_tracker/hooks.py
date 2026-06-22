@@ -18,14 +18,12 @@ _CODEX = codex_home()    # CODEX_HOME 覆盖 / ~/.codex
 
 @dataclass
 class SetupComponents:
-    """组件开关。状态栏总装（不可关，是 setup 的核心目的）；可选项为会话内彩色报表 hook
-    （CC /tt-daily·/tt-weekly + Codex ttdaily·ttweekly）+ Codex 伪 statusline（Stop hook）。"""
-    report_hooks: bool = True
+    """组件开关。状态栏总装（不可关，是 setup 的核心目的）；可选项为 Codex 伪 statusline（Stop hook）。"""
     codex_faux_statusline: bool = True
 
     @classmethod
     def all_on(cls) -> "SetupComponents":
-        return cls(report_hooks=True, codex_faux_statusline=True)
+        return cls(codex_faux_statusline=True)
 
 CLAUDE_SETTINGS = os.path.join(_CLAUDE, "settings.json")
 HOOK_SCRIPT_PATH = os.path.join(_CLAUDE, "tt-statusline.py")
@@ -33,17 +31,8 @@ CODEX_DIR = _CODEX
 CODEX_CONFIG = os.path.join(CODEX_DIR, "config.toml")
 CODEX_BACKUP = os.path.join(CODEX_DIR, "tt-backup.json")
 HOOK_VERSION = "1.20"
-REPORT_HOOK_VERSION = "1.0"
 STATUSLINE_HOOK_VERSION = "1.3"
-CC_REPORT_HOOK_PATH = os.path.join(_CLAUDE, "tt-report-hook.py")
-CC_COMMANDS_DIR = os.path.join(_CLAUDE, "commands")
-CODEX_REPORT_HOOK_PATH = os.path.join(_CODEX, "tt-report-hook.py")
 CODEX_STATUSLINE_HOOK_PATH = os.path.join(_CODEX, "tt-statusline.py")
-# 会话内彩色报表命令：CC 斜杠命令名 → 命令说明（生成 commands/*.md 用；matcher 用其 key）
-_CC_REPORT_CMDS = {
-    "tt-daily": "tt daily 真彩色热力图（会话内直接渲染，不发模型）",
-    "tt-weekly": "tt weekly 真彩色周报（会话内直接渲染，不发模型）",
-}
 _BACKUP_KEY = "tokenTracker"
 _PREV_SL_KEY = "previousStatusLine"
 _SL_REGEX = re.compile(r'status_line\s*=\s*\[.*?\]', re.DOTALL)
@@ -420,136 +409,6 @@ if __name__ == "__main__":
 '''
 
 
-# 会话内彩色报表 hook 脚本（落盘 ~/.claude/tt-report-hook.py）；占位在 _render_cc_report_hook() 注入。
-# 不用 f-string：含 \033 与 \0 的字面，f-string 会破坏。
-CC_REPORT_HOOK_SCRIPT = r'''#!/usr/bin/env python3
-"""token-tracker 会话内彩色报表 hook（Claude Code / UserPromptExpansion）。
-输入 /tt-daily、/tt-weekly 时拦截 → 跑 tt 子命令 → block + reason 渲染真彩色、不发模型、不污染上下文。
-由 `tt setup` 生成，勿手改。"""
-__version__ = "__REPORT_HOOK_VERSION__"
-import json
-import os
-import subprocess
-import sys
-
-_CMD = {"tt-daily": "daily", "tt-weekly": "weekly"}
-_MARGIN = 14  # CC reason 显示区比真实终端窄，收窄 COLUMNS 防热力图 grid 折行
-
-
-def _cols():
-    if os.name == "nt":
-        return None
-    try:
-        import fcntl
-        import struct
-        import termios
-    except ImportError:
-        return None
-    for var in ("_P9K_TTY", "_P9K_SSH_TTY", "SSH_TTY"):
-        path = os.environ.get(var)
-        if not path:
-            continue
-        try:
-            fd = os.open(path, os.O_RDONLY)
-            try:
-                cols = struct.unpack("HHHH", fcntl.ioctl(fd, termios.TIOCGWINSZ, b"\0" * 8))[1]
-            finally:
-                os.close(fd)
-            if cols > 0:
-                return cols
-        except OSError:
-            continue
-    return None
-
-
-try:
-    data = json.load(sys.stdin)
-except Exception:
-    sys.exit(0)
-sub = _CMD.get((data.get("command_name") or "").strip())
-if not sub:
-    sys.exit(0)
-env = dict(os.environ)
-cols = _cols()
-if cols:
-    env["COLUMNS"] = str(max(40, cols - _MARGIN))
-try:
-    out = subprocess.run(
-        ["__TT_PYTHON__", "-m", "token_tracker.cli", sub],
-        capture_output=True, text=True, env=env, timeout=60,
-    ).stdout or ("tt " + sub + " no output")
-except Exception as e:
-    out = "tt " + sub + " failed: " + str(e)
-print(json.dumps({"decision": "block", "reason": out}))
-sys.exit(0)
-'''
-
-
-# 会话内彩色报表 hook（Codex / UserPromptSubmit）；占位在 _render_codex_report_hook() 注入
-CODEX_REPORT_HOOK_SCRIPT = r'''#!/usr/bin/env python3
-"""token-tracker 会话内彩色报表 hook（Codex / UserPromptSubmit）。
-输入 ttdaily、ttweekly 时拦截 → 跑 tt 子命令 → block + reason 渲染真彩色、不发模型。
-Codex 无 UserPromptExpansion，用纯文本触发词；reason 开头加 \n 让 Codex 包裹行与内容分开。
-由 `tt setup` 生成，勿手改。"""
-__version__ = "__REPORT_HOOK_VERSION__"
-import json
-import os
-import subprocess
-import sys
-
-_CMD = {"ttdaily": "daily", "ttweekly": "weekly"}
-_MARGIN = 14  # Codex reason 显示区比真实终端窄，收窄 COLUMNS 防热力图 grid 折行
-
-
-def _cols():
-    if os.name == "nt":
-        return None
-    try:
-        import fcntl
-        import struct
-        import termios
-    except ImportError:
-        return None
-    for var in ("_P9K_TTY", "_P9K_SSH_TTY", "SSH_TTY"):
-        path = os.environ.get(var)
-        if not path:
-            continue
-        try:
-            fd = os.open(path, os.O_RDONLY)
-            try:
-                cols = struct.unpack("HHHH", fcntl.ioctl(fd, termios.TIOCGWINSZ, b"\0" * 8))[1]
-            finally:
-                os.close(fd)
-            if cols > 0:
-                return cols
-        except OSError:
-            continue
-    return None
-
-
-try:
-    data = json.load(sys.stdin)
-except Exception:
-    sys.exit(0)
-sub = _CMD.get((data.get("prompt") or "").strip())
-if not sub:
-    sys.exit(0)
-env = dict(os.environ)
-cols = _cols()
-if cols:
-    env["COLUMNS"] = str(max(40, cols - _MARGIN))
-try:
-    out = subprocess.run(
-        ["__TT_PYTHON__", "-m", "token_tracker.cli", sub],
-        capture_output=True, text=True, env=env, timeout=60,
-    ).stdout or ("tt " + sub + " no output")
-except Exception as e:
-    out = "tt " + sub + " failed: " + str(e)
-print(json.dumps({"decision": "block", "reason": "\n" + out}))
-sys.exit(0)
-'''
-
-
 # Codex 伪 statusline（Stop hook + systemMessage）；每次回答后追加一行彩色 status。
 # 实测：Stop 的 systemMessage 渲染 24-bit 真彩色 + 不进模型上下文（2026-06-19）。
 # 配色暂 mocha 硬编码（CC statusline 烘焙值），未接主题系统——TUI 渲染区与 CC statusline 解耦。
@@ -794,134 +653,6 @@ def _render_hook_script() -> str:
     )
 
 
-def _render_cc_report_hook() -> str:
-    """注入版本号 + 当前解释器路径，得到要落盘的 CC 报表 hook 脚本。"""
-    python = sys.executable or "python3"
-    return (CC_REPORT_HOOK_SCRIPT
-            .replace("__REPORT_HOOK_VERSION__", REPORT_HOOK_VERSION)
-            .replace("__TT_PYTHON__", python))
-
-
-def _installed_report_version() -> str | None:
-    """读已落盘的 CC 报表 hook 脚本版本（与 statusline 版本独立）。"""
-    try:
-        with open(CC_REPORT_HOOK_PATH, encoding="utf-8") as f:
-            for line in f:
-                if line.startswith("__version__"):
-                    return line.split("=", 1)[1].strip().strip('"\'')
-    except OSError:
-        pass
-    return None
-
-
-def _is_tt_report_entry(entry: dict) -> bool:
-    """判断一个 UserPromptExpansion 数组项是不是 tt 装的（按 hook command 特征码）。"""
-    hooks = entry.get("hooks") or []
-    return any("tt-report-hook" in (h.get("command") or "") for h in hooks if isinstance(h, dict))
-
-
-def _write_cc_report_script() -> None:
-    """渲染并落盘 CC 报表 hook 脚本（+ 执行权限）。setup 与版本同步都用。"""
-    with open(CC_REPORT_HOOK_PATH, "w", encoding="utf-8") as f:
-        f.write(_render_cc_report_hook())
-    if os.name != "nt":
-        os.chmod(CC_REPORT_HOOK_PATH,
-                 os.stat(CC_REPORT_HOOK_PATH).st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-
-
-def _install_cc_report(settings: dict, python: str) -> None:
-    """落盘脚本 + commands/*.md，并把 UserPromptExpansion matcher 合并进 settings（幂等、不动用户其它项）。"""
-    _write_cc_report_script()
-    os.makedirs(CC_COMMANDS_DIR, exist_ok=True)
-    for name, desc in _CC_REPORT_CMDS.items():
-        with open(os.path.join(CC_COMMANDS_DIR, name + ".md"), "w", encoding="utf-8") as f:
-            f.write(f"---\ndescription: {desc}\n---\n\n"
-                    "此命令由 token-tracker 的 UserPromptExpansion hook 拦截并直接渲染，正常不发给模型。\n")
-    expansion = settings.setdefault("hooks", {}).setdefault("UserPromptExpansion", [])
-    expansion[:] = [e for e in expansion if not (isinstance(e, dict) and _is_tt_report_entry(e))]
-    cmd = f"{python} {CC_REPORT_HOOK_PATH}"
-    for name in _CC_REPORT_CMDS:
-        expansion.append({"matcher": name, "hooks": [{"type": "command", "command": cmd}]})
-
-
-def _uninstall_cc_report(settings: dict) -> None:
-    """删 report 脚本 + commands/*.md，从 settings 移除 tt 的 UserPromptExpansion 项（不动用户其它）。"""
-    if os.path.exists(CC_REPORT_HOOK_PATH):
-        os.remove(CC_REPORT_HOOK_PATH)
-    for name in _CC_REPORT_CMDS:
-        p = os.path.join(CC_COMMANDS_DIR, name + ".md")
-        if os.path.exists(p):
-            os.remove(p)
-    hooks_cfg = settings.get("hooks")
-    if isinstance(hooks_cfg, dict):
-        expansion = hooks_cfg.get("UserPromptExpansion")
-        if isinstance(expansion, list):
-            expansion[:] = [e for e in expansion if not (isinstance(e, dict) and _is_tt_report_entry(e))]
-            if not expansion:
-                hooks_cfg.pop("UserPromptExpansion", None)
-        if not hooks_cfg:
-            settings.pop("hooks", None)
-
-
-def _render_codex_report_hook() -> str:
-    """注入版本号 + 当前解释器路径，得到要落盘的 Codex 报表 hook 脚本。"""
-    python = sys.executable or "python3"
-    return (CODEX_REPORT_HOOK_SCRIPT
-            .replace("__REPORT_HOOK_VERSION__", REPORT_HOOK_VERSION)
-            .replace("__TT_PYTHON__", python))
-
-
-def _write_codex_report_script() -> None:
-    with open(CODEX_REPORT_HOOK_PATH, "w", encoding="utf-8") as f:
-        f.write(_render_codex_report_hook())
-    if os.name != "nt":
-        os.chmod(CODEX_REPORT_HOOK_PATH,
-                 os.stat(CODEX_REPORT_HOOK_PATH).st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-
-
-def _installed_codex_report_version() -> str | None:
-    try:
-        with open(CODEX_REPORT_HOOK_PATH, encoding="utf-8") as f:
-            for line in f:
-                if line.startswith("__version__"):
-                    return line.split("=", 1)[1].strip().strip('"\'')
-    except OSError:
-        pass
-    return None
-
-
-# 卸载时定位 tt 追加的整段 [[hooks.UserPromptSubmit]]（按 command 含特征码 tt-report-hook）
-_CODEX_HOOK_REGEX = re.compile(
-    r'\n*\[\[hooks\.UserPromptSubmit\]\]\s*'
-    r'\[\[hooks\.UserPromptSubmit\.hooks\]\]\s*'
-    r'type = "command"\s*'
-    r'command = "[^"]*tt-report-hook[^"]*"\s*'
-    r'timeout = 60\s*'
-)
-
-
-def _install_codex_report(content: str, python: str) -> str:
-    """落盘 Codex report 脚本 + 在 config.toml 末尾追加 hook 段（幂等：已含特征码则不重复）。返回新 content。"""
-    _write_codex_report_script()
-    if "tt-report-hook" in content:
-        return content
-    cmd = f"{python} {CODEX_REPORT_HOOK_PATH}"
-    return content.rstrip() + (
-        "\n\n[[hooks.UserPromptSubmit]]\n\n"
-        "[[hooks.UserPromptSubmit.hooks]]\n"
-        'type = "command"\n'
-        f'command = "{cmd}"\n'
-        "timeout = 60\n"
-    )
-
-
-def _uninstall_codex_report(content: str) -> str:
-    """删 Codex report 脚本 + 从 content 移除 tt 追加的 hook 段（不动用户其它）。返回新 content。"""
-    if os.path.exists(CODEX_REPORT_HOOK_PATH):
-        os.remove(CODEX_REPORT_HOOK_PATH)
-    return _CODEX_HOOK_REGEX.sub("\n", content)
-
-
 def _render_codex_statusline_hook() -> str:
     """注入版本号，得到要落盘的 Codex 伪 statusline 脚本（不需 __TT_PYTHON__：脚本无 subprocess 调 tt）。"""
     return CODEX_STATUSLINE_HOOK_SCRIPT.replace(
@@ -1030,16 +761,10 @@ def _installed_hook_version() -> str | None:
 
 
 def needs_update() -> bool:
-    # report / statusline hook 都只在已安装时纳入版本判断（未装不主动装）
+    # statusline hook 只在已安装时纳入版本判断（未装不主动装）
     if os.path.isdir(os.path.dirname(HOOK_SCRIPT_PATH)):
         if _installed_hook_version() != HOOK_VERSION:
             return True
-        rv = _installed_report_version()
-        if rv is not None and rv != REPORT_HOOK_VERSION:
-            return True
-    cv = _installed_codex_report_version()
-    if cv is not None and cv != REPORT_HOOK_VERSION:
-        return True
     sv = _installed_codex_statusline_version()
     return sv is not None and sv != STATUSLINE_HOOK_VERSION
 
@@ -1051,10 +776,6 @@ def update_hook() -> None:
         if os.name != "nt":
             os.chmod(HOOK_SCRIPT_PATH,
                      os.stat(HOOK_SCRIPT_PATH).st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-        if _installed_report_version() is not None:  # 仅当已装才同步（不主动装）
-            _write_cc_report_script()
-    if _installed_codex_report_version() is not None:
-        _write_codex_report_script()
     if _installed_codex_statusline_version() is not None:
         _write_codex_statusline_script()
 
@@ -1079,7 +800,7 @@ def setup(auto: bool = False, components: SetupComponents | None = None, quiet: 
         p(f"[dim]{t('first_setup')}[/dim]")
 
     if has_cc:
-        _setup_claude(components, quiet)
+        _setup_claude(quiet)
     else:
         if not auto:
             p(f"[dim]{t('cc_not_found')}[/dim]")
@@ -1091,7 +812,7 @@ def setup(auto: bool = False, components: SetupComponents | None = None, quiet: 
             p(f"[dim]{t('codex_not_found')}[/dim]")
 
 
-def _setup_claude(components: SetupComponents, quiet: bool = False) -> None:
+def _setup_claude(quiet: bool = False) -> None:
     p = (lambda *a, **k: None) if quiet else get_console().print
     update_hook()
 
@@ -1107,17 +828,11 @@ def _setup_claude(components: SetupComponents, quiet: bool = False) -> None:
 
     python = sys.executable or "python3"
     settings["statusLine"] = {"type": "command", "command": f"{python} {HOOK_SCRIPT_PATH}"}
-    if components.report_hooks:
-        _install_cc_report(settings, python)
-    else:
-        _uninstall_cc_report(settings)  # 用户关掉时，清掉旧的（如果之前装过）
 
     with open(CLAUDE_SETTINGS, "w", encoding="utf-8") as f:
         json.dump(settings, f, indent=2, ensure_ascii=False)
 
     p(f"[green]✓[/green] {t('cc_configured')}")
-    if components.report_hooks:
-        p(f"[dim]{t('cc_report_hint')}[/dim]")
     p(f"[dim]{t('restart_cc')}[/dim]")
 
 
@@ -1133,7 +848,7 @@ def _setup_codex(components: SetupComponents, quiet: bool = False) -> None:
 
     python = sys.executable or "python3"
 
-    # status_line（已是目标则跳过这部分，但仍继续装 report hook）
+    # status_line（已是目标则跳过这部分，但仍继续装伪 statusline hook）
     old = parsed.get("tui", {}).get("status_line")
     if old != CODEX_STATUS_LINE:
         if old is not None:
@@ -1145,11 +860,7 @@ def _setup_codex(components: SetupComponents, quiet: bool = False) -> None:
         else:
             content += f"\n[tui]\n{_status_line_toml(CODEX_STATUS_LINE)}\n"
 
-    # report hook + 伪 statusline hook（均末尾追加，幂等）；按 components 开关
-    if components.report_hooks:
-        content = _install_codex_report(content, python)
-    else:
-        content = _uninstall_codex_report(content)
+    # 伪 statusline hook（末尾追加，幂等）；按 components 开关
     if components.codex_faux_statusline:
         content = _install_codex_statusline(content, python)
     else:
@@ -1161,8 +872,6 @@ def _setup_codex(components: SetupComponents, quiet: bool = False) -> None:
     p(f"[green]✓[/green] {t('codex_configured')}")
     if old is not None and old != CODEX_STATUS_LINE:
         p(f"[dim]{t('codex_backup', path=CODEX_BACKUP)}[/dim]")
-    if components.report_hooks:
-        p(f"[dim]{t('codex_report_hint')}[/dim]")
     if components.codex_faux_statusline:
         p(f"[dim]{t('codex_statusline_hint')}[/dim]")
     p(f"[dim]{t('restart_codex')}[/dim]")
@@ -1193,9 +902,6 @@ def _unsetup_claude() -> None:
     with open(CLAUDE_SETTINGS, encoding="utf-8") as f:
         settings = json.load(f)
 
-    # 先独立清理 report hook（脚本 + commands + hooks 数组里的 tt 项），不受 statusLine 检查影响
-    _uninstall_cc_report(settings)
-
     sl = settings.get("statusLine")
     if isinstance(sl, dict) and "tt-statusline" in (sl.get("command") or ""):
         previous = settings.get(_BACKUP_KEY, {}).get(_PREV_SL_KEY)
@@ -1225,8 +931,7 @@ def _unsetup_codex() -> None:
         return
     content, parsed = result
 
-    # 先独立清 report + 伪 statusline（脚本 + hook 段），不受 status_line 检查阻断
-    content = _uninstall_codex_report(content)
+    # 先独立清伪 statusline（脚本 + hook 段），不受 status_line 检查阻断
     content = _uninstall_codex_statusline(content)
 
     if parsed.get("tui", {}).get("status_line") is not None:
