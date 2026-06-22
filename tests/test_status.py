@@ -98,7 +98,9 @@ def test_render_status_with_limits(monkeypatch):
     assert "Cost:" in out and "$12" in out     # 当天 cost
     assert "Model:" in out and "Opus 4.8" in out  # model（去掉 (1M context) 后缀）
     assert "Claude" in out and "Codex" in out  # session Agent 列（短名 Claude / Codex）
-    assert "1.1h / 1.1h" in out                # Duration 组合：活跃 / 跨度（65min 连续会话，小数小时）
+    from token_tracker.i18n import t
+    h = t("unit_hour")  # 单位跟随语言
+    assert f"1.1{h} / 1.1{h}" in out           # Duration 组合：活跃 / 跨度（65min 连续会话，小数小时）
 
 
 def test_render_status_no_limits_shows_agent_stats(monkeypatch):

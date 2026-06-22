@@ -73,6 +73,9 @@ _STRINGS = {
         "daily_busiest": "最忙",
         "weekday_full": "周一,周二,周三,周四,周五,周六,周日",  # busiest 值（Mon 开头）
         "weekday_grid": "周日,周一,周二,周三,周四,周五,周六",  # 热力图左侧行标签（周日开头）
+        "month_short": "1月,2月,3月,4月,5月,6月,7月,8月,9月,10月,11月,12月",  # 热力图月份表头
+        "unit_day": "天",   # 时长 / 连续天数单位
+        "unit_hour": "小时",  # 时长单位
         # --- theme (cli.py) ---
         "theme_current": "当前主题: {name}{src}",
         "theme_src_env": "（来自环境变量 TT_THEME）",
@@ -188,6 +191,9 @@ _STRINGS = {
         "daily_busiest": "Busiest",
         "weekday_full": "Mon,Tue,Wed,Thu,Fri,Sat,Sun",  # busiest 值（Mon 开头）
         "weekday_grid": "Sun,Mon,Tue,Wed,Thu,Fri,Sat",  # 热力图左侧行标签（Sun 开头）
+        "month_short": "Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec",  # 热力图月份表头
+        "unit_day": "d",   # 时长 / 连续天数单位
+        "unit_hour": "h",  # 时长单位
         # --- theme (cli.py) ---
         "theme_current": "Current theme: {name}{src}",
         "theme_src_env": " (from env TT_THEME)",

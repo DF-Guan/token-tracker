@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 
 from rich.text import Text
 
+from ..i18n import t
 from .console import get_console
 from .theme import _S
 
@@ -81,14 +82,15 @@ def _fmt_cost(usd: float) -> str:
 
 
 def _fmt_session_duration(active_minutes: float, span_minutes: float) -> str:
-    """组合显示「活跃 / 跨度」：活跃恒用小数小时（9.4h）；跨度 ≥1 天用 天d时h（22d14h，整天省为 22d），<1 天用小数小时（6.0h）。"""
-    active = f"{active_minutes / 60:.1f}h"
+    """组合显示「活跃 / 跨度」：活跃恒用小数小时（9.4h）；跨度 ≥1 天用 天d时h（22d14h，整天省为 22d），<1 天用小数小时（6.0h）。单位 d/h 跟随语言。"""
+    hour, day = t("unit_hour"), t("unit_day")
+    active = f"{active_minutes / 60:.1f}{hour}"
     if span_minutes >= 1440:
         d, rem = divmod(int(span_minutes), 1440)
         h = rem // 60
-        span = f"{d}d{h}h" if h else f"{d}d"
+        span = f"{d}{day}{h}{hour}" if h else f"{d}{day}"
     else:
-        span = f"{span_minutes / 60:.1f}h"
+        span = f"{span_minutes / 60:.1f}{hour}"
     return f"{active} / {span}"
 
 

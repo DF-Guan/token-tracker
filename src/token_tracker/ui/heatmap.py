@@ -24,7 +24,6 @@ from .theme import _S, _heat_level, _heat_thresholds, heat_greens
 
 _WEEKS = 53
 _CELL_W = 2  # 每格显示宽：方块(1) + 间隔(1)；■ 在多数终端按 1 列渲染
-_MONTHS = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 _INDENT = 2       # 整面板左缩进
 _LABEL_COL = 6    # 星期标签列显示宽（含间隔），容纳「周日」/「Sun」全称
 _BLOCK_X = _INDENT + _LABEL_COL  # 方块起始列偏移（月份表头 / 图例对齐它）
@@ -81,7 +80,7 @@ def _render_summary(stats: list[DailyStats], agents: list[str] | None) -> None:
         cur_streak = 0
     emit_metrics(body, [
         (t("daily_peak"), f"{peak.date[5:]} ({_fmt_tokens(peak.total_tokens)})"),
-        (t("daily_streak"), f"{cur_streak}/{longest_streak}d"),
+        (t("daily_streak"), f"{cur_streak}/{longest_streak}{t('unit_day')}"),
     ], _S.blue, avail)
     body.append("\n")
     # 第三行（粉）：最忙星期几 / Top Model
@@ -122,21 +121,19 @@ def _render_grid(tokens_by_date: dict[str, int]) -> None:
 
     thresholds = _heat_thresholds(list(tokens_by_date.values()))
 
-    # 月份表头：每列 _CELL_W 显示宽，在月份变化处标月名缩写。
-    # prev_month 预设为首列月 → 跳过左端不完整的部分月；last_end 保证月名间留间隔。
-    header = [" "] * (weeks * _CELL_W)
+    # 月份表头：月份变化处标月名（跟随语言；中文「1月」等 CJK 占 2 列也按 cell 宽对齐、不错位）。
+    # prev_month 预设为首列月 → 跳过左端不完整的部分月；按已渲染 cell 宽防月名相互重叠。
+    months = t("month_short").split(",")
+    header = ""
     prev_month = start_sunday.month
-    last_end = -1
     for c in range(weeks):
         col_day = start_sunday + timedelta(weeks=c)
         if col_day.month != prev_month:
             prev_month = col_day.month
-            if c > last_end:
-                for i, ch in enumerate(_MONTHS[col_day.month]):
-                    if c * _CELL_W + i < len(header):
-                        header[c * _CELL_W + i] = ch
-                last_end = c + 1
-    get_console().print(Text(" " * _BLOCK_X + "".join(header).rstrip(), style=_S.dim), soft_wrap=True)
+            start = c * _CELL_W
+            if cell_len(header) <= start:  # 不与上一个月名重叠才标
+                header += " " * (start - cell_len(header)) + months[col_day.month - 1]
+    get_console().print(Text(" " * _BLOCK_X + header, style=_S.dim), soft_wrap=True)
 
     # 7 行：星期标签 + 方块 + 间隔
     hg = heat_greens()
@@ -164,12 +161,4 @@ def _render_legend() -> None:
         line.append("■", style=color)
         line.append(" ")
     line.append("More", style=_S.dim)
-    footer = "tt · by stormzhang"
-    # 宽够把署名接图例右边（空 4 格）；窄了另起一行（缩进 2），避免终端硬折导致折行 + 掉色
-    if line.cell_len + 4 + len(footer) <= get_console().width:
-        line.append("    " + footer, style=_S.dim)
-        get_console().print(line, soft_wrap=True)
-    else:
-        get_console().print(line, soft_wrap=True)
-        get_console().print()                       # 空一行
-        get_console().print(Text("      " + footer, style=_S.dim))  # 缩进 6 对齐 Less
+    get_console().print(line, soft_wrap=True)

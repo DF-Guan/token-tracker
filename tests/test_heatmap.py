@@ -2,7 +2,7 @@ import re
 from datetime import UTC, datetime, timedelta
 
 from token_tracker.adapters.types import DailyStats
-from token_tracker.ui.heatmap import _MONTHS, render_daily_heatmap
+from token_tracker.ui.heatmap import render_daily_heatmap
 from token_tracker.ui.theme import _heat_level, _heat_thresholds
 
 
@@ -49,7 +49,9 @@ def test_render_heatmap_outputs_truecolor(capsys):
     assert wk[0] in out and wk[-1] in out  # 星期标签（跟随语言）
     colors = set(re.findall(r"38;2;\d+;\d+;\d+", out))
     assert len(colors) >= 2  # 空格档 + 至少一档绿，验证 24-bit truecolor 多档
-    assert any(m and m in out for m in _MONTHS)  # 月份表头存在
+    months = t("month_short").split(",")
+    assert any(m in out for m in months)  # 月份表头存在（跟随语言）
+    assert "by stormzhang" not in out  # daily 图例不再带署名
 
 
 def test_render_heatmap_empty(capsys):
