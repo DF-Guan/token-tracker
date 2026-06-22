@@ -34,27 +34,18 @@ CLAUDE_SETTINGS = os.path.join(_CLAUDE, "settings.json")  # 改 Claude Code 配�
 HOOK_SCRIPT_PATH = os.path.join(_TT, "claude-statusline.py")
 CODEX_DIR = _CODEX
 CODEX_CONFIG = os.path.join(CODEX_DIR, "config.toml")     # 改 Codex 配置，留 agent 目录
-CODEX_BACKUP = os.path.join(_TT, "codex-backup.json")
 CODEX_STATUSLINE_HOOK_PATH = os.path.join(_TT, "codex-statusline.py")
 STATUS_FILE = os.path.join(_TT, "tt-status.json")         # CC statusline 缓存（脚本写、tt status 读）
 HOOK_VERSION = "1.21"
 STATUSLINE_HOOK_VERSION = "1.4"
 
+CC_BACKUP_PATH = os.path.join(_TT, "cc-backup.json")
+CODEX_BACKUP_LEGACY = os.path.join(_TT, "codex-backup.json")  # 老用户残留，unsetup 时还能恢复
+
 # 旧位置（agent 根目录）文件，迁移时删——老用户从 ~/.claude/~/.codex 迁到 ~/.config/token-tracker
 _LEGACY_PATHS = [
     os.path.join(_CLAUDE, "tt-statusline.py"), os.path.join(_CLAUDE, "tt-status.json"),
     os.path.join(_CODEX, "tt-statusline.py"), os.path.join(_CODEX, "tt-backup.json"),
-]
-_BACKUP_KEY = "tokenTracker"
-_PREV_SL_KEY = "previousStatusLine"
-_SL_REGEX = re.compile(r'status_line\s*=\s*\[.*?\]', re.DOTALL)
-
-CODEX_STATUS_LINE = [
-    "project",
-    "five-hour-limit",
-    "weekly-limit",
-    "context-remaining",
-    "model-with-reasoning",
 ]
 
 # HOOK_VERSION 是唯一版本来源；__HOOK_VERSION__ 占位符在 _render_hook_script() 里注入。
@@ -730,11 +721,6 @@ def _uninstall_codex_statusline(content: str) -> str:
     return _CODEX_STATUSLINE_REGEX.sub("\n", content)
 
 
-def _status_line_toml(items: list[str]) -> str:
-    body = ",\n".join(f'  "{item}"' for item in items)
-    return f"status_line = [\n{body},\n]"
-
-
 def _read_codex_config() -> tuple[str, dict] | None:
     try:
         with open(CODEX_CONFIG, encoding="utf-8") as f:
@@ -744,7 +730,22 @@ def _read_codex_config() -> tuple[str, dict] | None:
         return None
 
 
+def codex_statusline_active() -> bool:
+    """双因素：用户意图（config）AND 实际装好（脚本文件 + config.toml 含特征码）。任一不满足 → False。"""
+    if config.codex_faux_statusline_intent() is not True:
+        return False
+    if not os.path.exists(CODEX_STATUSLINE_HOOK_PATH):
+        return False
+    try:
+        with open(CODEX_CONFIG, encoding="utf-8") as f:
+            return _has_tt_codex_statusline(f.read())
+    except OSError:
+        return False
+
+
 def is_setup() -> bool:
+    """已配置 = CC 端 statusLine 指我们脚本（如装了 CC）AND Codex 端意图明确（如装了 Codex）。
+    Codex 端意图为 True 时还要文件实装好；意图 False 则用户明确不要、不强求文件存在。"""
     has_cc = os.path.isdir(os.path.dirname(CLAUDE_SETTINGS))
     has_codex = os.path.isdir(CODEX_DIR)
     if not has_cc and not has_codex:
@@ -759,11 +760,11 @@ def is_setup() -> bool:
         except (OSError, json.JSONDecodeError):
             return False
     if has_codex:
-        result = _read_codex_config()
-        if not result:
+        intent = config.codex_faux_statusline_intent()
+        if intent is None:  # 没跑过 wizard、没表达意图 → 视为未配
             return False
-        _, parsed = result
-        if parsed.get("tui", {}).get("status_line") != CODEX_STATUS_LINE:
+        # intent True 时双因素都要满足；intent False 时用户明确不要、不强求文件
+        if intent and not codex_statusline_active():
             return False
     return True
 
@@ -854,6 +855,16 @@ def setup(auto: bool = False, components: SetupComponents | None = None, quiet: 
             p(f"[dim]{t('codex_not_found')}[/dim]")
 
 
+def _migrate_cc_legacy_backup(settings: dict) -> None:
+    """老用户的 statusLine 备份藏在 settings.json 的 `tokenTracker.previousStatusLine` 子字段——
+    挪到 ~/.config/token-tracker/cc-backup.json，同时清掉 settings 子字段（不污染 agent 配置）。"""
+    legacy = settings.pop("tokenTracker", None)
+    if isinstance(legacy, dict) and isinstance(legacy.get("previousStatusLine"), dict):
+        os.makedirs(_TT, exist_ok=True)
+        with open(CC_BACKUP_PATH, "w", encoding="utf-8") as f:
+            json.dump({"statusLine": legacy["previousStatusLine"]}, f, indent=2)
+
+
 def _setup_claude(quiet: bool = False) -> None:
     p = (lambda *a, **k: None) if quiet else get_console().print
     _write_cc_statusline_script()
@@ -863,10 +874,15 @@ def _setup_claude(quiet: bool = False) -> None:
         with open(CLAUDE_SETTINGS, encoding="utf-8") as f:
             settings = json.load(f)
 
+    _migrate_cc_legacy_backup(settings)  # 老用户：把藏在 settings 里的备份挪到 cc-backup.json
+
     existing = settings.get("statusLine")
     if existing and not _is_tt_cc_command(existing.get("command") or ""):
+        # 用户原 statusLine 备份到独立文件，不污染 agent 配置
         p(f"[yellow]{t('sl_backup_replace')}[/yellow]")
-        settings.setdefault(_BACKUP_KEY, {})[_PREV_SL_KEY] = existing
+        os.makedirs(_TT, exist_ok=True)
+        with open(CC_BACKUP_PATH, "w", encoding="utf-8") as f:
+            json.dump({"statusLine": existing}, f, indent=2)
 
     python = sys.executable or "python3"
     settings["statusLine"] = {"type": "command", "command": f"{python} {HOOK_SCRIPT_PATH}"}
@@ -879,30 +895,20 @@ def _setup_claude(quiet: bool = False) -> None:
 
 
 def _setup_codex(components: SetupComponents, quiet: bool = False) -> None:
+    """Codex 端只装/卸伪 statusline hook，**不再动 [tui].status_line**——伪 statusline 比官方更全。
+    用户意图（components.codex_faux_statusline）也写入 config.json，给 wizard 总结 / is_setup 用。"""
     p = (lambda *a, **k: None) if quiet else get_console().print
     result = _read_codex_config()
     if result:
-        content, parsed = result
+        content, _parsed = result
     elif os.path.isdir(CODEX_DIR):
-        content, parsed = "", {}  # 装了 Codex（~/.codex 在）但还没 config.toml → 新建
+        content = ""  # 装了 Codex 但还没 config.toml → 新建
     else:
-        return  # 没装 Codex
+        return
+
+    config.save_codex_faux_statusline(components.codex_faux_statusline)  # 写入意图
 
     python = sys.executable or "python3"
-
-    # status_line（已是目标则跳过这部分，但仍继续装伪 statusline hook）
-    old = parsed.get("tui", {}).get("status_line")
-    if old != CODEX_STATUS_LINE:
-        if old is not None:
-            with open(CODEX_BACKUP, "w", encoding="utf-8") as f:
-                json.dump({"status_line": old}, f)
-            content = _SL_REGEX.sub(_status_line_toml(CODEX_STATUS_LINE), content)
-        elif "[tui]" in content:
-            content = content.replace("[tui]", f"[tui]\n{_status_line_toml(CODEX_STATUS_LINE)}")
-        else:
-            content += f"\n[tui]\n{_status_line_toml(CODEX_STATUS_LINE)}\n"
-
-    # 伪 statusline hook（末尾追加，幂等）；按 components 开关
     if components.codex_faux_statusline:
         content = _install_codex_statusline(content, python)
     else:
@@ -912,8 +918,6 @@ def _setup_codex(components: SetupComponents, quiet: bool = False) -> None:
         f.write(content)
 
     p(f"[green]✓[/green] {t('codex_configured')}")
-    if old is not None and old != CODEX_STATUS_LINE:
-        p(f"[dim]{t('codex_backup', path=CODEX_BACKUP)}[/dim]")
     if components.codex_faux_statusline:
         p(f"[dim]{t('codex_statusline_hint')}[/dim]")
     p(f"[dim]{t('restart_codex')}[/dim]")
@@ -947,18 +951,18 @@ def _unsetup_claude() -> None:
 
     sl = settings.get("statusLine")
     if isinstance(sl, dict) and _is_tt_cc_command(sl.get("command") or ""):
-        previous = settings.get(_BACKUP_KEY, {}).get(_PREV_SL_KEY)
+        previous = None
+        if os.path.exists(CC_BACKUP_PATH):  # 新位置（独立文件）
+            with open(CC_BACKUP_PATH, encoding="utf-8") as f:
+                previous = json.load(f).get("statusLine")
+            os.remove(CC_BACKUP_PATH)
         if isinstance(previous, dict):
             settings["statusLine"] = previous
             get_console().print(f"[green]✓[/green] {t('cc_restored')}")
         else:
             settings.pop("statusLine", None)
             get_console().print(f"[green]✓[/green] {t('cc_removed')}")
-        backup = settings.get(_BACKUP_KEY)
-        if isinstance(backup, dict):
-            backup.pop(_PREV_SL_KEY, None)
-            if not backup:
-                del settings[_BACKUP_KEY]
+        settings.pop("tokenTracker", None)  # 顺手清掉老用户在 settings 里的子字段残留
         if os.path.exists(STATUS_FILE):
             os.remove(STATUS_FILE)
             get_console().print(f"[green]✓[/green] {t('deleted_cache', path=STATUS_FILE)}")
@@ -968,24 +972,31 @@ def _unsetup_claude() -> None:
 
 
 def _unsetup_codex() -> None:
+    """卸载 Codex 端：移除伪 statusline hook + 脚本。
+    老用户残留：如有 codex-backup.json（旧版我们改过 status_line），恢复原值；新版不再动 status_line。"""
     result = _read_codex_config()
     if not result:
         return
-    content, parsed = result
+    content, _parsed = result
 
-    # 先独立清伪 statusline（脚本 + hook 段），不受 status_line 检查阻断
+    # 清伪 statusline（脚本 + hook 段）
     content = _uninstall_codex_statusline(content)
 
-    if parsed.get("tui", {}).get("status_line") is not None:
-        if os.path.exists(CODEX_BACKUP):
-            with open(CODEX_BACKUP, encoding="utf-8") as f:
-                old_items = json.load(f).get("status_line", [])
-            content = _SL_REGEX.sub(_status_line_toml(old_items), content)
-            os.remove(CODEX_BACKUP)
+    # 兼容老用户：旧版我们曾接管 status_line + 写 codex-backup.json。这里恢复 + 删 backup。
+    if os.path.exists(CODEX_BACKUP_LEGACY):
+        try:
+            with open(CODEX_BACKUP_LEGACY, encoding="utf-8") as f:
+                old_items = json.load(f).get("status_line")
+            if isinstance(old_items, list):
+                body = ",\n".join(f'  "{item}"' for item in old_items)
+                new_sl = f"status_line = [\n{body},\n]"
+                content = re.sub(r'status_line\s*=\s*\[.*?\]', new_sl, content, flags=re.DOTALL)
+            elif old_items is None:
+                content = re.sub(r'status_line\s*=\s*\[.*?\]\n?', '', content, flags=re.DOTALL)
+            os.remove(CODEX_BACKUP_LEGACY)
             get_console().print(f"[green]✓[/green] {t('codex_restored')}")
-        else:
-            content = re.sub(r'status_line\s*=\s*\[.*?\]\n?', '', content, flags=re.DOTALL)
-            get_console().print(f"[green]✓[/green] {t('codex_removed')}")
+        except (OSError, json.JSONDecodeError):
+            pass
 
     with open(CODEX_CONFIG, "w", encoding="utf-8") as f:
         f.write(content)

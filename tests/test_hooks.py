@@ -115,9 +115,9 @@ def test_setup_components_off_skips_install(tmp_path, monkeypatch):
 
     # CC statusline 仍装
     assert json.loads(settings_path.read_text())["statusLine"]["command"].endswith("tt-statusline.py")
-    # Codex status_line 仍写、但 Stop hook（tt-statusline）不在 config 里
+    # Codex 端：不再动 [tui].status_line（保持用户原配置）；Stop hook（tt-statusline）也不在 config 里
     codex_content = codex_config.read_text()
-    assert "five-hour-limit" in codex_content
+    assert "status_line = []" in codex_content  # 用户原 status_line 没被动
     assert "tt-statusline" not in codex_content   # Codex 伪 statusline hook 段未追加
 
 
@@ -344,20 +344,21 @@ def test_statusline_progress_bar_empty_grid_tinted(tmp_path):
 
 
 def test_setup_codex_creates_missing_config(tmp_path, monkeypatch):
-    # 装了 Codex（~/.codex 目录在）但还没 config.toml → setup 应创建该文件并写入 status_line + hooks。
+    # 装了 Codex（~/.codex 目录在）但还没 config.toml → setup 应创建该文件并写入伪 statusline hook。
+    # 新版不再动 [tui].status_line（伪 statusline 比官方更全）。
     home = tmp_path / "home"
     (home / ".codex").mkdir(parents=True)  # 只有目录、无 config.toml
     codex_config = home / ".codex" / "config.toml"
     monkeypatch.setattr(hooks, "CODEX_DIR", str(home / ".codex"))
     monkeypatch.setattr(hooks, "CODEX_CONFIG", str(codex_config))
-    monkeypatch.setattr(hooks, "CODEX_BACKUP", str(home / ".codex" / "tt-backup.json"))
     monkeypatch.setattr(hooks, "CODEX_STATUSLINE_HOOK_PATH", str(home / ".codex" / "tt-statusline.py"))
+    monkeypatch.setattr(hooks.config, "CONFIG_PATH", str(tmp_path / "tt-config.json"))  # 隔离 config.json
 
     assert not codex_config.exists()
     hooks._setup_codex(hooks.SetupComponents(), quiet=True)
     assert codex_config.exists()  # 已创建
     content = codex_config.read_text()
-    assert "five-hour-limit" in content      # status_line 写入
+    assert "five-hour-limit" not in content  # 新版不接管 status_line
     assert "tt-statusline" in content        # 伪 statusline Stop hook 写入
 
 

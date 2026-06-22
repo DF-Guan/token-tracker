@@ -64,7 +64,7 @@ def test_get_theme_unknown_falls_back_to_mocha():
 
 
 def test_resolve_env_alias_and_name(monkeypatch):
-    monkeypatch.setattr(config, "load_theme_config", lambda: {})
+    monkeypatch.setattr(config, "load_config", lambda: {})
     monkeypatch.delenv("COLORFGBG", raising=False)
     monkeypatch.setenv("TT_THEME", "light")
     assert config.resolve_theme() == "latte"
@@ -75,7 +75,7 @@ def test_resolve_env_alias_and_name(monkeypatch):
 
 
 def test_resolve_auto_uses_colorfgbg(monkeypatch):
-    monkeypatch.setattr(config, "load_theme_config", lambda: {})
+    monkeypatch.setattr(config, "load_config", lambda: {})
     monkeypatch.setenv("TT_THEME", "auto")
     monkeypatch.setenv("COLORFGBG", "0;15")
     assert config.resolve_theme() == "latte"
@@ -85,7 +85,7 @@ def test_resolve_auto_uses_colorfgbg(monkeypatch):
 
 def test_resolve_priority_env_over_config(monkeypatch):
     # env 显式主题应盖过配置文件。
-    monkeypatch.setattr(config, "load_theme_config", lambda: {"theme": "dracula"})
+    monkeypatch.setattr(config, "load_config", lambda: {"theme": "dracula"})
     monkeypatch.delenv("COLORFGBG", raising=False)
     monkeypatch.setenv("TT_THEME", "nord")
     assert config.resolve_theme() == "nord"
@@ -95,7 +95,7 @@ def test_resolve_priority_env_over_config(monkeypatch):
 
 
 def test_resolve_config_when_env_absent(monkeypatch):
-    monkeypatch.setattr(config, "load_theme_config", lambda: {"theme": "frappe"})
+    monkeypatch.setattr(config, "load_config", lambda: {"theme": "frappe"})
     monkeypatch.delenv("TT_THEME", raising=False)
     monkeypatch.delenv("COLORFGBG", raising=False)
     assert config.resolve_theme() == "frappe"
@@ -103,9 +103,11 @@ def test_resolve_config_when_env_absent(monkeypatch):
 
 def test_save_load_roundtrip(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "CONFIG_DIR", str(tmp_path / "cfg"))
-    monkeypatch.setattr(config, "CONFIG_PATH", str(tmp_path / "cfg" / "theme.json"))
+    monkeypatch.setattr(config, "CONFIG_PATH", str(tmp_path / "cfg" / "config.json"))
+    monkeypatch.setattr(config, "_LEGACY_THEME_PATH", str(tmp_path / "cfg" / "theme.json"))
+    monkeypatch.setattr(config, "_LEGACY_LANG_PATH", str(tmp_path / "cfg" / "lang.json"))
     config.save_theme("nord")
-    assert config.load_theme_config()["theme"] == "nord"
+    assert config.load_config()["theme"] == "nord"
 
 
 def test_s_proxy_follows_active_theme(monkeypatch):
@@ -145,7 +147,9 @@ def test_heat_greens_follows_theme(monkeypatch):
 
 def test_theme_set_writes_config(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "CONFIG_DIR", str(tmp_path))
-    monkeypatch.setattr(config, "CONFIG_PATH", str(tmp_path / "theme.json"))
+    monkeypatch.setattr(config, "CONFIG_PATH", str(tmp_path / "config.json"))
+    monkeypatch.setattr(config, "_LEGACY_THEME_PATH", str(tmp_path / "theme.json"))
+    monkeypatch.setattr(config, "_LEGACY_LANG_PATH", str(tmp_path / "lang.json"))
     monkeypatch.setattr(cli, "is_setup", lambda: False)  # 不触发 update_hook
     monkeypatch.delenv("TT_THEME", raising=False)
     monkeypatch.setattr(theme, "_ACTIVE_NAME", None)
@@ -161,7 +165,9 @@ def test_theme_set_unknown_exits(monkeypatch):
 
 
 def test_cmd_theme_show_and_list_run(tmp_path, monkeypatch, capsys):
-    monkeypatch.setattr(config, "CONFIG_PATH", str(tmp_path / "theme.json"))
+    monkeypatch.setattr(config, "CONFIG_PATH", str(tmp_path / "config.json"))
+    monkeypatch.setattr(config, "_LEGACY_THEME_PATH", str(tmp_path / "theme.json"))
+    monkeypatch.setattr(config, "_LEGACY_LANG_PATH", str(tmp_path / "lang.json"))
     monkeypatch.delenv("TT_THEME", raising=False)
     monkeypatch.delenv("COLORFGBG", raising=False)
     cli.cmd_theme([])  # show
@@ -173,7 +179,9 @@ def test_cmd_theme_show_and_list_run(tmp_path, monkeypatch, capsys):
 def test_cmd_theme_shorthand_set(tmp_path, monkeypatch):
     # `tt theme frappe` 简写 = set frappe
     monkeypatch.setattr(config, "CONFIG_DIR", str(tmp_path))
-    monkeypatch.setattr(config, "CONFIG_PATH", str(tmp_path / "theme.json"))
+    monkeypatch.setattr(config, "CONFIG_PATH", str(tmp_path / "config.json"))
+    monkeypatch.setattr(config, "_LEGACY_THEME_PATH", str(tmp_path / "theme.json"))
+    monkeypatch.setattr(config, "_LEGACY_LANG_PATH", str(tmp_path / "lang.json"))
     monkeypatch.setattr(cli, "is_setup", lambda: False)
     monkeypatch.delenv("TT_THEME", raising=False)
     monkeypatch.setattr(theme, "_ACTIVE_NAME", None)
@@ -196,7 +204,9 @@ def test_should_run_wizard(monkeypatch):
 def test_save_resolve_lang_roundtrip(tmp_path, monkeypatch):
     # 写入 zh / en 都能读回；非法值 / 未配置都返回 None（由 i18n 走环境变量兜底）。
     monkeypatch.setattr(config, "CONFIG_DIR", str(tmp_path))
-    monkeypatch.setattr(config, "LANG_CONFIG_PATH", str(tmp_path / "lang.json"))
+    monkeypatch.setattr(config, "CONFIG_PATH", str(tmp_path / "config.json"))
+    monkeypatch.setattr(config, "_LEGACY_THEME_PATH", str(tmp_path / "theme.json"))
+    monkeypatch.setattr(config, "_LEGACY_LANG_PATH", str(tmp_path / "lang.json"))
     assert config.resolve_lang() is None  # 未配置
     config.save_lang("zh")
     assert config.resolve_lang() == "zh"
@@ -233,7 +243,9 @@ def test_detect_system_lang_win32_falls_back_when_ctypes_unavailable(monkeypatch
 def test_detect_lang_prefers_config_over_env(tmp_path, monkeypatch):
     # 用户配置文件优先于 LANG 环境变量（防止终端 LANG=en_US 但用户在 wizard 选了 zh）。
     monkeypatch.setattr(config, "CONFIG_DIR", str(tmp_path))
-    monkeypatch.setattr(config, "LANG_CONFIG_PATH", str(tmp_path / "lang.json"))
+    monkeypatch.setattr(config, "CONFIG_PATH", str(tmp_path / "config.json"))
+    monkeypatch.setattr(config, "_LEGACY_THEME_PATH", str(tmp_path / "theme.json"))
+    monkeypatch.setattr(config, "_LEGACY_LANG_PATH", str(tmp_path / "lang.json"))
     monkeypatch.setenv("LANG", "en_US.UTF-8")
     monkeypatch.delenv("TT_LANG", raising=False)
     from token_tracker import i18n
@@ -253,8 +265,9 @@ def test_run_wizard_saves_theme(tmp_path, monkeypatch):
             return self._v
 
     monkeypatch.setattr(config, "CONFIG_DIR", str(tmp_path))
-    monkeypatch.setattr(config, "CONFIG_PATH", str(tmp_path / "theme.json"))
-    monkeypatch.setattr(config, "LANG_CONFIG_PATH", str(tmp_path / "lang.json"))
+    monkeypatch.setattr(config, "CONFIG_PATH", str(tmp_path / "config.json"))
+    monkeypatch.setattr(config, "_LEGACY_THEME_PATH", str(tmp_path / "theme.json"))
+    monkeypatch.setattr(config, "_LEGACY_LANG_PATH", str(tmp_path / "lang.json"))
 
     # 顺序：选语言（zh）→ 选主题（nord）→ 增强项 Yes/No（按检测到的 agent 数量）
     # has_cc / has_codex 固定，问题数稳定；多余 mock 序列不会被消耗。
@@ -266,6 +279,6 @@ def test_run_wizard_saves_theme(tmp_path, monkeypatch):
     monkeypatch.delenv("TT_THEME", raising=False)
     monkeypatch.setattr(theme, "_ACTIVE_NAME", None)
     wizard.run_wizard()
-    assert config.load_theme_config()["theme"] == "nord"
-    assert config.load_lang_config()["lang"] == "zh"  # 语言也被保存
+    assert config.load_config()["theme"] == "nord"
+    assert config.load_config()["lang"] == "zh"  # 语言也被保存
     assert i18n.LANG == "zh"  # i18n 即时切换

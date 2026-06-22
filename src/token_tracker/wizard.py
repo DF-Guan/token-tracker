@@ -183,25 +183,30 @@ def ask_components(step_prefix_fn: Callable[[int], str] | None = None) -> SetupC
     """
     has_codex = _has_codex()
     qi = 1
-    codex_faux = True
+    # 默认用上次意图（修「每次都重问」）；首次为 True
+    saved_intent = config.codex_faux_statusline_intent()
+    codex_faux = saved_intent if saved_intent is not None else True
     prefix = step_prefix_fn or (lambda i: "")
 
     # Q1: Codex 伪 statusline（仅 Codex 存在）
     if has_codex:
-        codex_faux = _ask_yes_no(f"{prefix(qi)}{t('wizard_q_codex_statusline')}")
+        codex_faux = _ask_yes_no(f"{prefix(qi)}{t('wizard_q_codex_statusline')}", default=codex_faux)
 
     return SetupComponents(codex_faux_statusline=codex_faux)
 
 
 def _print_summary(console, choice: str, components: SetupComponents) -> None:
     """选完所有项后的综合简洁总结：一行配置汇总 + 重启提示 + 下一步（不再渲染配色面板，
-    选主题时每个选项右边已内联色板）。"""
+    选主题时每个选项右边已内联色板）。Codex 伪 statusline 显示用双因素（意图 AND 文件存在）。"""
+    from .hooks import codex_statusline_active  # 延迟 import 避免循环
     pink = themes.get_theme("mocha")["base"]["pink"]
     on, off = t("wizard_summary_on"), t("wizard_summary_off")
     lang_name = "中文" if i18n.LANG == "zh" else "English"  # 语言名本身不翻译
     items = [f"{t('wizard_summary_lang')} {lang_name}", f"{t('wizard_summary_theme')} {choice}"]
     if _has_codex():
-        items.append(f"{t('wizard_summary_statusline')} {on if components.codex_faux_statusline else off}")
+        # 双因素：意图为 True AND 实际装好（脚本 + config.toml 特征码）
+        active = components.codex_faux_statusline and codex_statusline_active()
+        items.append(f"{t('wizard_summary_statusline')} {on if active else off}")
 
     console.print()
     console.print(f"[green]✓[/green] {t('wizard_done')}")

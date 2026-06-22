@@ -1,7 +1,12 @@
-"""主题持久化与解析：~/.config/token-tracker/theme.json（XDG 中立，不绑 Claude Code）。
+"""统一配置存储：~/.config/token-tracker/config.json（XDG，不绑 Claude Code）。
 
-解析优先级：`TT_THEME` 环境变量（兼容旧 light/dark 别名）> 配置文件 > `COLORFGBG` 自动
-> mocha 默认。`auto` 仅在 Catppuccin mocha↔latte 间按终端深浅切，其它主题选了即锁定。
+包含所有 tt 自身偏好——主题、语言、组件意图。schema_version 用于未来格式迁移。
+
+主题解析优先级：`TT_THEME` 环境变量（兼容旧 light/dark 别名）> 配置文件 > `COLORFGBG` 自动
+> mocha 默认。`auto` 仅在 Catppuccin mocha↔latte 间按终端深浅切。
+
+字段读取一律 fallback + 严格类型校验——config 可能被用户手改 / JSON 损坏 / 缺字段，
+任何不一致都视为"没表达意图"，避免 stale config 导致 is_setup 假装"已配"。
 """
 
 import json
@@ -10,30 +15,79 @@ import os
 from .ui import themes
 
 CONFIG_DIR = os.path.expanduser("~/.config/token-tracker")
-CONFIG_PATH = os.path.join(CONFIG_DIR, "theme.json")
-LANG_CONFIG_PATH = os.path.join(CONFIG_DIR, "lang.json")
+CONFIG_PATH = os.path.join(CONFIG_DIR, "config.json")
+SCHEMA_VERSION = 1
 
-# 旧 TT_THEME 值兼容映射。
+# 旧位置（独立 theme.json / lang.json），老用户首次读 config.json 不存在时自动合并迁移
+_LEGACY_THEME_PATH = os.path.join(CONFIG_DIR, "theme.json")
+_LEGACY_LANG_PATH = os.path.join(CONFIG_DIR, "lang.json")
+
+# 旧 TT_THEME 值兼容映射
 _ALIASES = {"light": "latte", "dark": "mocha"}
 
 
-def load_theme_config() -> dict:
-    """读配置文件，缺失/损坏都返回空 dict（不抛）。"""
+def _read_json(path: str) -> dict:
+    """读 JSON 文件，缺失/损坏/非 dict 都返回空 dict（不抛）。"""
     try:
-        with open(CONFIG_PATH, encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             data = json.load(f)
         return data if isinstance(data, dict) else {}
     except (OSError, json.JSONDecodeError):
         return {}
 
 
-def save_theme(name: str) -> None:
-    """把主题名写入配置文件（保留其它字段）。"""
+def _migrate_legacy_if_needed() -> dict | None:
+    """老用户首次读 config.json 不存在 → 从 theme.json/lang.json 合并迁移；返回迁移后的 data，否则 None。"""
+    if os.path.exists(CONFIG_PATH):
+        return None
+    theme_data = _read_json(_LEGACY_THEME_PATH)
+    lang_data = _read_json(_LEGACY_LANG_PATH)
+    if not theme_data and not lang_data:
+        return None  # 旧文件也没有，纯新用户
+    data: dict = {"schema_version": SCHEMA_VERSION}
+    if "theme" in theme_data:
+        data["theme"] = theme_data["theme"]
+    if "lang" in lang_data:
+        data["lang"] = lang_data["lang"]
+    _write(data)
+    # 删旧文件
+    for p in (_LEGACY_THEME_PATH, _LEGACY_LANG_PATH):
+        try:
+            os.remove(p)
+        except OSError:
+            pass
+    return data
+
+
+def _write(data: dict) -> None:
     os.makedirs(CONFIG_DIR, exist_ok=True)
-    data = load_theme_config()
-    data["theme"] = name
     with open(CONFIG_PATH, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
+
+
+def load_config() -> dict:
+    """读 config.json，缺失时自动从老文件迁移；schema_version 不对走迁移；坏数据返回空 dict。"""
+    migrated = _migrate_legacy_if_needed()
+    if migrated is not None:
+        return migrated
+    data = _read_json(CONFIG_PATH)
+    # 这里以后可加 schema 迁移：if data.get("schema_version") != SCHEMA_VERSION: data = migrate(data)
+    return data
+
+
+def _save_field(key: str, value) -> None:
+    """更新 config.json 一个字段（保留其它字段，写入 schema_version）。"""
+    data = load_config()
+    data[key] = value
+    data["schema_version"] = SCHEMA_VERSION
+    _write(data)
+
+
+# --- theme ---
+
+
+def save_theme(name: str) -> None:
+    _save_field("theme", name)
 
 
 def _normalize(name: str) -> str:
@@ -54,29 +108,6 @@ def _auto_theme() -> str:
     return "mocha"
 
 
-def load_lang_config() -> dict:
-    """读语言配置，缺失/损坏都返回空 dict。"""
-    try:
-        with open(LANG_CONFIG_PATH, encoding="utf-8") as f:
-            data = json.load(f)
-        return data if isinstance(data, dict) else {}
-    except (OSError, json.JSONDecodeError):
-        return {}
-
-
-def save_lang(lang: str) -> None:
-    """把语言写入配置文件（wizard 选完调）。"""
-    os.makedirs(CONFIG_DIR, exist_ok=True)
-    with open(LANG_CONFIG_PATH, "w", encoding="utf-8") as f:
-        json.dump({"lang": lang}, f, indent=2, ensure_ascii=False)
-
-
-def resolve_lang() -> str | None:
-    """读用户保存的语言偏好，仅返回受支持值（zh/en）；未配置 / 非法返回 None。"""
-    val = load_lang_config().get("lang")
-    return val if val in ("zh", "en") else None
-
-
 def resolve_theme() -> str:
     """按优先级链解析出当前生效的主题名（保证是 themes.THEMES 里的合法键）。"""
     env = _normalize(os.environ.get("TT_THEME", ""))
@@ -84,11 +115,48 @@ def resolve_theme() -> str:
         return _auto_theme()
     if env in themes.THEMES:
         return env
-
-    cfg = _normalize(load_theme_config().get("theme", ""))
+    cfg_val = load_config().get("theme")
+    cfg = _normalize(cfg_val) if isinstance(cfg_val, str) else ""
     if cfg == "auto":
         return _auto_theme()
     if cfg in themes.THEMES:
         return cfg
-
     return _auto_theme()
+
+
+# --- lang ---
+
+
+def save_lang(lang: str) -> None:
+    _save_field("lang", lang)
+
+
+def resolve_lang() -> str | None:
+    """读用户保存的语言偏好，严格校验类型 + 取值。无效返回 None（让 i18n 走环境变量兜底）。"""
+    val = load_config().get("lang")
+    return val if val in ("zh", "en") else None
+
+
+# --- components 意图（双因素之一：is_setup / wizard 总结读这个 + 看文件） ---
+
+
+def save_codex_faux_statusline(enabled: bool) -> None:
+    """wizard 选完后写入意图。"""
+    _save_field("codex_faux_statusline", bool(enabled))
+
+
+def codex_faux_statusline_intent() -> bool | None:
+    """读用户对 Codex 伪 statusline 的意图。严格 bool；非 bool / 缺字段 → None（视为没表达）。"""
+    val = load_config().get("codex_faux_statusline")
+    return val if isinstance(val, bool) else None
+
+
+# --- 向后兼容：保留旧 API 别名，供尚未迁移的代码用 ---
+
+
+def load_theme_config() -> dict:
+    return load_config()
+
+
+def load_lang_config() -> dict:
+    return load_config()

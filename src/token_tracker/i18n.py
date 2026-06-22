@@ -106,9 +106,7 @@ _STRINGS = {
         "sl_backup_replace": "检测到已有 statusLine，备份后替换",
         "cc_configured": "Claude Code statusLine 已配置",
         "restart_cc": "重启 Claude Code 后生效",
-        "codex_already": "Codex status_line 已是目标配置，跳过",
-        "codex_configured": "Codex status_line 已配置",
-        "codex_backup": "原配置已备份到: {path}",
+        "codex_configured": "Codex 已配置",
         "codex_statusline_hint": "已启用伪 statusline（每次回答后追加一行 5h/7d/Ctx，tt unsetup 可移除）",
         "restart_codex": "重启 Codex 后生效",
         "no_agent_detected": "未检测到 Claude Code 或 Codex",
@@ -117,8 +115,7 @@ _STRINGS = {
         "cc_restored": "Claude Code statusLine 已恢复原配置",
         "cc_removed": "Claude Code statusLine 已移除",
         "deleted_cache": "已删除缓存: {path}",
-        "codex_restored": "Codex status_line 已恢复原配置",
-        "codex_removed": "Codex status_line 已移除",
+        "codex_restored": "Codex status_line 已恢复原配置（老用户备份）",
     },
     "en": {
         # --- cli.py ---
@@ -225,9 +222,7 @@ _STRINGS = {
         "sl_backup_replace": "Existing statusLine detected, backing up and replacing",
         "cc_configured": "Claude Code statusLine configured",
         "restart_cc": "Restart Claude Code to take effect",
-        "codex_already": "Codex status_line already configured, skipping",
-        "codex_configured": "Codex status_line configured",
-        "codex_backup": "Previous config backed up to: {path}",
+        "codex_configured": "Codex configured",
         "codex_statusline_hint": "Faux statusline enabled (appends 5h/7d/Ctx line after each turn, remove via tt unsetup)",
         "restart_codex": "Restart Codex to take effect",
         "no_agent_detected": "Claude Code or Codex not detected",
@@ -236,8 +231,7 @@ _STRINGS = {
         "cc_restored": "Claude Code statusLine restored",
         "cc_removed": "Claude Code statusLine removed",
         "deleted_cache": "Deleted cache: {path}",
-        "codex_restored": "Codex status_line restored",
-        "codex_removed": "Codex status_line removed",
+        "codex_restored": "Codex status_line restored (legacy backup)",
     },
 }
 
