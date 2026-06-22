@@ -11,6 +11,18 @@ SESSIONS_DIR = os.path.join(CODEX_DIR, "sessions")
 STATE_DB = os.path.join(CODEX_DIR, "state_5.sqlite")
 _RATE_LIMIT_SCAN_FILES = 5  # 只扫最近改动的 N 个 session 文件找限额信息
 
+# Codex 内部虚拟 model 改写到背后真实 model，避免它们在 Model Trend / sessions 等报表里独占行；
+# 同时让 cost 走真实 model 的精确定价（cost.py 的 codex- 系列兜底是双保险）。
+# 已知虚拟 model：
+#   codex-auto-review —— stop-time auto-review gate，背后跑当前主 codex 模型（gpt-5.5）
+_VIRTUAL_MODEL_REWRITE = {
+    "codex-auto-review": "gpt-5.5",
+}
+
+
+def _rewrite_virtual_model(model: str) -> str:
+    return _VIRTUAL_MODEL_REWRITE.get(model, model)
+
 
 def detect() -> AgentInfo | None:
     # 以 ~/.codex 目录判断是否安装（与 hooks._has_codex 一致；不要求已产生 sessions/）
@@ -46,7 +58,7 @@ def _load_thread_models() -> dict[str, str]:
         conn = sqlite3.connect(f"file:{STATE_DB}?mode=ro", uri=True)
         rows = conn.execute("SELECT id, model FROM threads WHERE model IS NOT NULL").fetchall()
         conn.close()
-        return {row[0]: row[1] for row in rows}
+        return {row[0]: _rewrite_virtual_model(row[1]) for row in rows}
     except (sqlite3.Error, OSError):
         return {}
 

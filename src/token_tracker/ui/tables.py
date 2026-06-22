@@ -119,7 +119,7 @@ def render_weekly(stats: list[WeeklyStats], agents: list[str] | None = None,
             _render_daily_barchart(by_date)
         _render_weekly_trend(weeks)
         _render_distribution("Project Trend", "Project", cur.projects, _project_short, _S.pink, min_pct=2)
-        _render_distribution("Model Trend", "Model", cur.models, _model_short, _S.blue)
+        _render_distribution("Model Trend", "Model", cur.models, _model_short, _S.blue, min_pct=2)
         get_console().print(Text("  tt · by stormzhang", style=_S.dim))
 
 
@@ -326,7 +326,7 @@ def _render_weekly_trend(weeks: list[WeeklyStats], limit: int = 8) -> None:
 def _render_distribution(title: str, name_col: str, data: dict[str, int],
                          short_fn: Callable[[str], str], accent: str, min_pct: float = 0.0) -> None:
     """通用分布表（Project / Model）：标题、名称列、进度条统一用模块主色 accent，按 token 降序。
-    min_pct>0 时过滤掉占比 ≤min_pct% 的项（如 Project 取 >2%），=0 则全部显示；Token/Ratio 数值保持中性。"""
+    min_pct>0 时过滤掉占比 ≤min_pct% 的项（Project / Model 都取 >2%），=0 则全部显示；Token/Ratio 数值保持中性。"""
     if not data:
         return
     total = sum(data.values())
@@ -339,7 +339,7 @@ def _render_distribution(title: str, name_col: str, data: dict[str, int],
     table.add_column("", justify="right", style=f"dim {accent}")
     for idx, (name, tokens) in enumerate(items):
         pct = tokens / total * 100 if total else 0
-        if min_pct and pct <= min_pct:  # 过滤长尾小项（如 Project 只留 >2%）
+        if min_pct and pct <= min_pct:  # 过滤长尾小项（Project / Model 只留 >2%）
             continue
         fill = accent if idx == 0 else _darken(accent)
         table.add_row(short_fn(name), _fmt_tokens(tokens),
@@ -448,5 +448,5 @@ def render_monthly(stats: list[MonthlyStats], agents: list[str] | None = None,
             _render_weekly_barchart(_merge_weeks(weekly))
         _render_monthly_trend(months)
         _render_distribution("Project Trend", "Project", cur.projects, _project_short, _S.pink, min_pct=2)
-        _render_distribution("Model Trend", "Model", cur.models, _model_short, _S.blue)
+        _render_distribution("Model Trend", "Model", cur.models, _model_short, _S.blue, min_pct=2)
         get_console().print(Text("  tt · by stormzhang", style=_S.dim))

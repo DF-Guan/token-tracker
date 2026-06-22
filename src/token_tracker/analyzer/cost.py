@@ -20,12 +20,14 @@ _INSECURE_TLS_ENV = "TT_PRICING_INSECURE_TLS"
 _pricing: dict | None = None
 _warned_insecure = False
 
-# 未知的新 Claude 模型按系列退回最新已知价（这些 key 由 _fallback_pricing 保证存在）
+# 未知的新模型按系列退回最新已知价（这些 key 由 _fallback_pricing 保证存在）。
+# codex- 兜底覆盖 Codex 内部虚拟 model（如 codex-auto-review，stop-time auto-review gate 用）
 _FAMILY_FALLBACK = (
     ("claude-opus", "claude-opus-4-8"),
     ("claude-sonnet", "claude-sonnet-4-6"),
     ("claude-haiku", "claude-haiku-4-5-20251001"),
     ("claude-fable", "claude-fable-5"),
+    ("codex-", "gpt-5.5"),
 )
 
 # 解析不到定价的模型只提示一次，避免聚合时每条 entry 刷屏
@@ -217,6 +219,11 @@ def _fallback_pricing() -> dict:
             "input_cost_per_token": 1.25e-6,
             "output_cost_per_token": 10e-6,
             "cache_read_input_token_cost": 0.125e-6,
+        },
+        "gpt-5.5": {
+            "input_cost_per_token": 5e-6,
+            "output_cost_per_token": 30e-6,
+            "cache_read_input_token_cost": 0.5e-6,
         },
         "gpt-5-codex": {
             "input_cost_per_token": 1.25e-6,

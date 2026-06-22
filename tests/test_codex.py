@@ -27,6 +27,15 @@ def _token_count_event(rate_limits: dict, context_window: int | None = 258400) -
     }
 
 
+def test_virtual_model_rewritten_to_real_model():
+    # codex-auto-review 是 Codex stop-time auto-review gate 的虚拟 model name，
+    # 应改写为背后真实模型（gpt-5.5），避免在 Model Trend 等报表里独占一行
+    assert codex._rewrite_virtual_model("codex-auto-review") == "gpt-5.5"
+    assert codex._rewrite_virtual_model("gpt-5.5") == "gpt-5.5"
+    assert codex._rewrite_virtual_model("gpt-5-codex") == "gpt-5-codex"
+    assert codex._rewrite_virtual_model("unknown") == "unknown"
+
+
 def test_free_plan_7d_bucket_routed_correctly(tmp_path):
     # Free plan: primary is the 7-day window (10080 min), secondary is null.
     # Old code put primary into the 5h slot, leaving 7d empty.

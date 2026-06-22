@@ -109,9 +109,23 @@ def test_base_name_resolves_to_dated_pricing(openai_pricing, monkeypatch):
 
 def test_fallback_pricing_includes_openai_models():
     pricing = cost._fallback_pricing()
-    for k in ("gpt-5", "gpt-5-codex", "gpt-5-mini", "gpt-5-nano", "gpt-5-pro", "codex-mini-latest"):
+    for k in ("gpt-5", "gpt-5.5", "gpt-5-codex", "gpt-5-mini", "gpt-5-nano", "gpt-5-pro", "codex-mini-latest"):
         assert k in pricing, f"fallback pricing missing {k}"
         assert pricing[k].get("input_cost_per_token", 0) > 0
+
+
+def test_gpt55_priced_4x_gpt5(monkeypatch):
+    # gpt-5.5 价格是 gpt-5 的 4 倍，不可走 gpt-5 系列兜底，必须有专属内置价
+    monkeypatch.setattr(cost, "_pricing", cost._fallback_pricing())
+    entry = make_entry(model="gpt-5.5", input_tokens=1_000_000, output_tokens=1_000_000)
+    assert cost.calculate_cost(entry) == pytest.approx(35.0)  # 5 + 30
+
+
+def test_codex_auto_review_falls_back_to_gpt55(monkeypatch):
+    # Codex stop-time auto-review 用虚拟 model name codex-auto-review，按 gpt-5.5 价兜底（不归零）
+    monkeypatch.setattr(cost, "_pricing", cost._fallback_pricing())
+    entry = make_entry(model="codex-auto-review", input_tokens=1_000_000, output_tokens=1_000_000)
+    assert cost.calculate_cost(entry) == pytest.approx(35.0)
 
 
 def test_fallback_pricing_includes_fable():
