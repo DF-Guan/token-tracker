@@ -3,9 +3,9 @@ import os
 from datetime import UTC, datetime
 
 from .types import RateLimits, normalize_pct
-from .util import claude_home
 
-STATUS_FILE = os.path.join(claude_home(), "tt-status.json")
+# 与 hooks.STATUS_FILE 一致：tt 自己的产物集中放 ~/.config/token-tracker（XDG）
+STATUS_FILE = os.path.join(os.path.expanduser("~/.config/token-tracker"), "tt-status.json")
 
 
 def load_rate_limits() -> RateLimits | None:

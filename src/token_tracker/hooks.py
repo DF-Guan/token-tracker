@@ -25,14 +25,26 @@ class SetupComponents:
     def all_on(cls) -> "SetupComponents":
         return cls(codex_faux_statusline=True)
 
-CLAUDE_SETTINGS = os.path.join(_CLAUDE, "settings.json")
-HOOK_SCRIPT_PATH = os.path.join(_CLAUDE, "tt-statusline.py")
+# tt 自己的产物（statusline 脚本 + 缓存 + 备份）集中放 ~/.config/token-tracker（XDG，跟 theme/lang 同处）；
+# settings.json / config.toml 是「改 agent 自己的配置」、必须留 agent 目录。statusLine/hook 的 command
+# 是绝对路径，脚本放 agent 目录外照样跑（实测 + ccstatusline 等业界用 npx 全局脚本同理）。
+_TT = config.CONFIG_DIR  # ~/.config/token-tracker
+
+CLAUDE_SETTINGS = os.path.join(_CLAUDE, "settings.json")  # 改 Claude Code 配置，留 agent 目录
+HOOK_SCRIPT_PATH = os.path.join(_TT, "claude-statusline.py")
 CODEX_DIR = _CODEX
-CODEX_CONFIG = os.path.join(CODEX_DIR, "config.toml")
-CODEX_BACKUP = os.path.join(CODEX_DIR, "tt-backup.json")
-HOOK_VERSION = "1.20"
-STATUSLINE_HOOK_VERSION = "1.3"
-CODEX_STATUSLINE_HOOK_PATH = os.path.join(_CODEX, "tt-statusline.py")
+CODEX_CONFIG = os.path.join(CODEX_DIR, "config.toml")     # 改 Codex 配置，留 agent 目录
+CODEX_BACKUP = os.path.join(_TT, "codex-backup.json")
+CODEX_STATUSLINE_HOOK_PATH = os.path.join(_TT, "codex-statusline.py")
+STATUS_FILE = os.path.join(_TT, "tt-status.json")         # CC statusline 缓存（脚本写、tt status 读）
+HOOK_VERSION = "1.21"
+STATUSLINE_HOOK_VERSION = "1.4"
+
+# 旧位置（agent 根目录）文件，迁移时删——老用户从 ~/.claude/~/.codex 迁到 ~/.config/token-tracker
+_LEGACY_PATHS = [
+    os.path.join(_CLAUDE, "tt-statusline.py"), os.path.join(_CLAUDE, "tt-status.json"),
+    os.path.join(_CODEX, "tt-statusline.py"), os.path.join(_CODEX, "tt-backup.json"),
+]
 _BACKUP_KEY = "tokenTracker"
 _PREV_SL_KEY = "previousStatusLine"
 _SL_REGEX = re.compile(r'status_line\s*=\s*\[.*?\]', re.DOTALL)
@@ -53,9 +65,7 @@ __version__ = "__HOOK_VERSION__"
 import json, os, re, subprocess, sys, tempfile
 from datetime import datetime, timezone
 
-STATUS_FILE = os.path.join(
-    os.environ.get("CLAUDE_CONFIG_DIR", "").split(",")[0].strip() or os.path.expanduser("~/.claude"),
-    "tt-status.json")
+STATUS_FILE = os.path.join(os.path.expanduser("~/.config/token-tracker"), "tt-status.json")
 ANSI_RE = re.compile(r'\033\[[0-9;]*m')
 # 配色在 tt setup / update_hook 烘焙时由 themes.theme_to_statusline_ansi(当前主题) 注入：
 # THEME_COLORS 为当前主题 truecolor，THEME_COLORS_256 为同主题的 256 色近似（兜底不支持
@@ -174,6 +184,7 @@ def save_data(data, now):
     data["_received_at"] = now.isoformat()
     tmp = None
     try:
+        os.makedirs(os.path.dirname(STATUS_FILE), exist_ok=True)
         fd, tmp = tempfile.mkstemp(dir=os.path.dirname(STATUS_FILE), suffix=".tmp")
         with os.fdopen(fd, "w") as f:
             json.dump(data, f)
@@ -661,6 +672,7 @@ def _render_codex_statusline_hook() -> str:
 
 
 def _write_codex_statusline_script() -> None:
+    os.makedirs(_TT, exist_ok=True)
     with open(CODEX_STATUSLINE_HOOK_PATH, "w", encoding="utf-8") as f:
         f.write(_render_codex_statusline_hook())
     if os.name != "nt":
@@ -679,21 +691,28 @@ def _installed_codex_statusline_version() -> str | None:
     return None
 
 
-# 卸载时定位 tt 追加的整段 [[hooks.Stop]]（按 command 含特征码 tt-statusline）
+# 卸载时定位 tt 追加的整段 [[hooks.Stop]]——同时认新（codex-statusline）/ 旧（tt-statusline）两种特征码
 _CODEX_STATUSLINE_REGEX = re.compile(
     r'\n*\[\[hooks\.Stop\]\]\s*'
     r'\[\[hooks\.Stop\.hooks\]\]\s*'
     r'type = "command"\s*'
-    r'command = "[^"]*tt-statusline[^"]*"\s*'
+    r'command = "[^"]*(?:codex-statusline|tt-statusline)[^"]*"\s*'
     r'timeout = \d+\s*'
 )
 
 
+def _has_tt_codex_statusline(content: str) -> bool:
+    return "codex-statusline" in content or "tt-statusline" in content
+
+
 def _install_codex_statusline(content: str, python: str) -> str:
-    """落盘 Codex statusline 脚本 + 在 config.toml 末尾追加 Stop hook 段（幂等：已含特征码则不重复）。"""
+    """落盘 Codex statusline 脚本 + 在 config.toml 末尾追加 Stop hook 段。
+    新名（codex-statusline）已存在 → 幂等返回；只存在旧名（tt-statusline）→ 清掉后追加（迁移）。"""
     _write_codex_statusline_script()
-    if "tt-statusline" in content:
+    if "codex-statusline" in content:
         return content
+    if "tt-statusline" in content:  # 旧路径残留 → 清掉，下面追加新路径段
+        content = _CODEX_STATUSLINE_REGEX.sub("\n", content)
     cmd = f"{python} {CODEX_STATUSLINE_HOOK_PATH}"
     return content.rstrip() + (
         "\n\n[[hooks.Stop]]\n\n"
@@ -735,7 +754,7 @@ def is_setup() -> bool:
             with open(CLAUDE_SETTINGS, encoding="utf-8") as f:
                 settings = json.load(f)
             sl = settings.get("statusLine")
-            if not isinstance(sl, dict) or "tt-statusline" not in (sl.get("command") or ""):
+            if not isinstance(sl, dict) or not _is_tt_cc_command(sl.get("command") or ""):
                 return False
         except (OSError, json.JSONDecodeError):
             return False
@@ -760,22 +779,42 @@ def _installed_hook_version() -> str | None:
     return None
 
 
+def _is_tt_cc_command(cmd: str) -> bool:
+    """命令是否为 tt 的 CC statusline——认新 `claude-statusline` 与旧 `tt-statusline`（迁移识别用）。"""
+    return "claude-statusline" in cmd or "tt-statusline" in cmd
+
+
+def _write_cc_statusline_script() -> None:
+    """渲染并落盘 CC statusline 脚本（mkdir + 执行权限）。"""
+    os.makedirs(_TT, exist_ok=True)
+    with open(HOOK_SCRIPT_PATH, "w", encoding="utf-8") as f:
+        f.write(_render_hook_script())
+    if os.name != "nt":
+        os.chmod(HOOK_SCRIPT_PATH,
+                 os.stat(HOOK_SCRIPT_PATH).st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+
+def _migrate_legacy() -> None:
+    """删旧位置（agent 根目录）的 tt 脚本 / 缓存 / 备份——迁到 ~/.config/token-tracker 后清残留。"""
+    for p in _LEGACY_PATHS:
+        if os.path.exists(p):
+            try:
+                os.remove(p)
+            except OSError:
+                pass
+
+
 def needs_update() -> bool:
-    # statusline hook 只在已安装时纳入版本判断（未装不主动装）
-    if os.path.isdir(os.path.dirname(HOOK_SCRIPT_PATH)):
-        if _installed_hook_version() != HOOK_VERSION:
-            return True
+    # 只在已安装（新位置脚本文件存在）时纳入版本判断，未装不主动装
+    if os.path.exists(HOOK_SCRIPT_PATH) and _installed_hook_version() != HOOK_VERSION:
+        return True
     sv = _installed_codex_statusline_version()
     return sv is not None and sv != STATUSLINE_HOOK_VERSION
 
 
 def update_hook() -> None:
-    if os.path.isdir(os.path.dirname(HOOK_SCRIPT_PATH)):
-        with open(HOOK_SCRIPT_PATH, "w", encoding="utf-8") as f:
-            f.write(_render_hook_script())
-        if os.name != "nt":
-            os.chmod(HOOK_SCRIPT_PATH,
-                     os.stat(HOOK_SCRIPT_PATH).st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    if os.path.exists(HOOK_SCRIPT_PATH):  # 已装才同步（未装不主动装）
+        _write_cc_statusline_script()
     if _installed_codex_statusline_version() is not None:
         _write_codex_statusline_script()
 
@@ -799,6 +838,9 @@ def setup(auto: bool = False, components: SetupComponents | None = None, quiet: 
     if auto:
         p(f"[dim]{t('first_setup')}[/dim]")
 
+    os.makedirs(_TT, exist_ok=True)  # tt 自己的目录
+    _migrate_legacy()                # 删旧位置（agent 根目录）残留，迁到 ~/.config/token-tracker
+
     if has_cc:
         _setup_claude(quiet)
     else:
@@ -814,7 +856,7 @@ def setup(auto: bool = False, components: SetupComponents | None = None, quiet: 
 
 def _setup_claude(quiet: bool = False) -> None:
     p = (lambda *a, **k: None) if quiet else get_console().print
-    update_hook()
+    _write_cc_statusline_script()
 
     settings: dict = {}
     if os.path.exists(CLAUDE_SETTINGS):
@@ -822,7 +864,7 @@ def _setup_claude(quiet: bool = False) -> None:
             settings = json.load(f)
 
     existing = settings.get("statusLine")
-    if existing and "tt-statusline" not in (existing.get("command") or ""):
+    if existing and not _is_tt_cc_command(existing.get("command") or ""):
         p(f"[yellow]{t('sl_backup_replace')}[/yellow]")
         settings.setdefault(_BACKUP_KEY, {})[_PREV_SL_KEY] = existing
 
@@ -892,6 +934,7 @@ def unsetup() -> None:
 
 
 def _unsetup_claude() -> None:
+    _migrate_legacy()  # 顺手清旧位置残留（老用户 unsetup 时也清）
     if os.path.exists(HOOK_SCRIPT_PATH):
         os.remove(HOOK_SCRIPT_PATH)
         get_console().print(f"[green]✓[/green] {t('deleted_file', path=HOOK_SCRIPT_PATH)}")
@@ -903,7 +946,7 @@ def _unsetup_claude() -> None:
         settings = json.load(f)
 
     sl = settings.get("statusLine")
-    if isinstance(sl, dict) and "tt-statusline" in (sl.get("command") or ""):
+    if isinstance(sl, dict) and _is_tt_cc_command(sl.get("command") or ""):
         previous = settings.get(_BACKUP_KEY, {}).get(_PREV_SL_KEY)
         if isinstance(previous, dict):
             settings["statusLine"] = previous
@@ -916,10 +959,9 @@ def _unsetup_claude() -> None:
             backup.pop(_PREV_SL_KEY, None)
             if not backup:
                 del settings[_BACKUP_KEY]
-        status_file = os.path.join(_CLAUDE, "tt-status.json")
-        if os.path.exists(status_file):
-            os.remove(status_file)
-            get_console().print(f"[green]✓[/green] {t('deleted_cache', path=status_file)}")
+        if os.path.exists(STATUS_FILE):
+            os.remove(STATUS_FILE)
+            get_console().print(f"[green]✓[/green] {t('deleted_cache', path=STATUS_FILE)}")
 
     with open(CLAUDE_SETTINGS, "w", encoding="utf-8") as f:
         json.dump(settings, f, indent=2, ensure_ascii=False)
