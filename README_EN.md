@@ -35,23 +35,16 @@ The status line has four rows, left to right:
 
 > When terminal width is limited, the display auto-degrades: first hides reset countdowns, then simplifies progress bars to plain percentages. **API mode** has no subscription quota, so row 2 shows only Ctx.
 
-**Codex**: Custom StatusLine rendering is not yet supported by Codex, so the official default style is reused (top `status_line`, configured by `tt setup`). `tt setup` also enables a **faux statusline** — a colored status line appended after each turn completes, to make up for Codex having no real custom status bar:
+**Codex**: Custom StatusLine rendering is not yet supported by Codex, so `tt setup` installs a **faux statusline** via a Codex `Stop` hook — **two** colored status lines appended after each turn completes, mirroring the Claude Code status line (it no longer touches Codex's official `status_line`; the faux statusline carries more than the official fields):
 
 ![Codex StatusLine](assets/screenshot-statusline-codex.png)
 
-**Official `status_line` fields**:
+**Faux statusline layout (two lines)**:
 
-| Field | Meaning |
-|------|------|
-| `project` | Current project directory name |
-| `five-hour-limit` | 5-hour rolling-window quota usage |
-| `weekly-limit` | 7-day rolling-window quota usage |
-| `context-remaining` | Remaining percentage of the context window |
-| `model-with-reasoning` | Model name + reasoning level (e.g. `gpt-5-codex/high`) |
+- **L1** `[project](branch +A -D) | Total: <session tokens> | Model: <model reasoning>` — Total in orange, Model in red
+- **L2** `Limit: 5h <bar> % (reset <ttl>) | 7d <bar> % (reset <ttl>) | <window> Ctx <bar> %`
 
-**Faux statusline layout**: `[project](branch +A -D) | 5h: <%> (reset <ttl>) | 7d: <%> (reset <ttl>) | Ctx: <%>`
-
-Implemented via a Codex `Stop` hook returning `systemMessage` — renders 24-bit truecolor and **does not enter the model context** (verified). `tt unsetup` removes it.
+Implemented via a `Stop` hook returning `systemMessage` — renders 24-bit truecolor, **does not enter the model context** (verified), and **follows the current theme** (same source as the CLI reports / CC status line; `tt theme` switches all three together). `tt unsetup` removes it.
 
 ## Status Panel & Daily / Weekly / Monthly Reports
 
@@ -68,12 +61,12 @@ Implemented via a Codex `Stop` hook returning `systemMessage` — renders 24-bit
 ## Features
 
 - **Multi-agent tracking** — Claude Code + Codex in one place, interactive tab switching
-- **Status line integration** — Claude Code statusLine + Codex status_line, auto-configured on first run, auto-upgraded on script updates
+- **Status line integration** — Claude Code statusLine + Codex faux statusline, auto-configured on first run, auto-upgraded on script updates
 - **Rate limit monitoring** — real-time 5h / 7d quota usage with reset countdown
 - **Cost analysis** — per-session, daily, weekly, monthly cost breakdown with per-agent grouping
 - **Pricing resolution** — litellm live pricing with built-in official-price fallback; new models in a known family are priced automatically (incl. Claude Fable 5 / Opus 4.8), and unknown models trigger an explicit warning instead of silently counting as $0
 - **Session insights** — project, model, duration, message count per session
-- **Unified multi-theme** — 6 themes (Catppuccin Mocha/Latte/Frappe/Macchiato + Nord + Dracula) shared across CLI reports and the status line; switch/preview with `tt theme`, auto-pick Catppuccin by terminal light/dark, first-run wizard guides selection (override with `TT_THEME`); falls back to 256-color approximation when the terminal lacks truecolor
+- **Unified multi-theme** — 6 themes (Catppuccin Mocha/Latte/Frappe/Macchiato + Nord + Dracula) shared across CLI reports, the CC status line, and the Codex faux statusline; switch/preview with `tt theme`, auto-pick Catppuccin by terminal light/dark, first-run wizard guides selection (override with `TT_THEME`); falls back to 256-color approximation when the terminal lacks truecolor
 - **Zero config** — auto-detects installed agents, reads local data directly
 - **Privacy first** — all data stays local, no collection or upload of any user information, lightweight and worry-free
 
@@ -109,15 +102,15 @@ tt unsetup        # uninstall and restore previous config
 
 The first time you run `tt` (or right after the curl one-liner installer finishes), an **interactive wizard** kicks in — arrow keys to move, Enter to confirm:
 
-1. **Pick a language** — 中文 / English (saved to `~/.config/token-tracker/lang.json`, applied to all commands)
+1. **Pick a language** — 中文 / English (saved to `~/.config/token-tracker/config.json`, applied to all commands)
 2. **Pick a color theme** — 6 themes with an inline color swatch on each option
-3. **Enable Codex faux statusline** — Yes/No (only when Codex is detected)
+3. **Enable Codex faux statusline** — Yes/No, Yes by default (only when Codex is detected)
 
-A one-line summary follows. CI / non-tty environments (Docker, scripts) auto-install with defaults: **language follows the system setting** (reads the OS language, not misled by the CLI's `LANG`), theme mocha, all components on. To change anything later, just run `tt setup` again (in a terminal, every `tt setup` enters the wizard).
+A key-value config summary follows, with restart / next-step hints. CI / non-tty environments (Docker, scripts) auto-install with defaults: **language follows the system setting** (reads the OS language, not misled by the CLI's `LANG`), theme mocha, all components on. To change anything later, just run `tt setup` again (in a terminal, every `tt setup` enters the wizard).
 
 ### Color Themes
 
-6 built-in themes, **shared** across CLI reports and the status line (switching changes both):
+6 built-in themes, **shared** across CLI reports, the CC status line, and the Codex faux statusline (switching changes all three):
 
 | Theme | Notes |
 |-------|-------|
@@ -134,7 +127,7 @@ tt monthly --theme nord  # render any report in a theme temporarily (no persist,
 ```
 
 - **First run** (in a terminal, not inside an AI session) opens an interactive wizard to pick a theme; CI / scripts / in-session runs skip it silently and use the default.
-- Choice persists to `~/.config/token-tracker/theme.json` ; priority: `--theme` flag > `TT_THEME` env var > config file > auto (both `--theme` and `TT_THEME` are temporary and never written to config).
+- Choice persists to `~/.config/token-tracker/config.json` (theme + language + component intent all in this one file); priority: `--theme` flag > `TT_THEME` env var > config file > auto (both `--theme` and `TT_THEME` are temporary and never written to config).
 - Truecolor terminals get exact colors; terminals without truecolor (e.g. macOS Terminal.app) fall back to a **256-color approximation** of the current theme; 8-color terminals are no longer targeted.
 
 ### Report Sorting
