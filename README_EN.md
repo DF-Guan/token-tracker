@@ -111,21 +111,9 @@ The first time you run `tt` (or right after the curl one-liner installer finishe
 
 1. **Pick a language** — 中文 / English (saved to `~/.config/token-tracker/lang.json`, applied to all commands)
 2. **Pick a color theme** — 6 themes with an inline color swatch on each option
-3. **Enable in-session color commands** — Yes/No (`/tt-daily`, `ttdaily`, etc.; asked only when the matching agent is detected)
-4. **Enable Codex faux statusline** — Yes/No (only when Codex is detected)
+3. **Enable Codex faux statusline** — Yes/No (only when Codex is detected)
 
 A one-line summary follows. CI / non-tty environments (Docker, scripts) auto-install with defaults: **language follows the system setting** (reads the OS language, not misled by the CLI's `LANG`), theme mocha, all components on. To change anything later, just run `tt setup` again (in a terminal, every `tt setup` enters the wizard).
-
-### In-session color commands (auto-registered by `tt setup`)
-
-`tt setup` also registers a set of in-session color commands so you can render full-color daily / weekly reports right inside an AI session — **without going through the model or spending context tokens**:
-
-- **Claude Code**: type `/tt-daily`, `/tt-weekly`
-- **Codex**: type `ttdaily`, `ttweekly` (Codex has no slash-command interception, so plain-text triggers are used)
-
-How it works: a Claude Code `UserPromptExpansion` / Codex `UserPromptSubmit` hook intercepts the command, runs the matching `tt` subcommand, and echoes the colored output back directly — never sent to the model. `tt unsetup` removes them.
-
-> ⚠️ **Terminal CLI only**: the desktop app / web versions are GUIs and don't render terminal ANSI, so these commands show up garbled / as plain text there. On desktop, use plain `tt daily` instead.
 
 ### Color Themes
 

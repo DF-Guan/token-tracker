@@ -111,21 +111,9 @@ tt unsetup        # 卸载并恢复安装前的配置
 
 1. **选语言** — 中文 / English（落 `~/.config/token-tracker/lang.json`，之后所有命令跟随）
 2. **选配色主题** — 6 套主题上下键选择，每个选项右侧内联色板预览
-3. **启用会话内彩色命令** — Yes/No（`/tt-daily`、`ttdaily` 等，仅检测到对应 Agent 时问）
-4. **启用 Codex 伪 statusline** — Yes/No（仅检测到 Codex 时）
+3. **启用 Codex 伪 statusline** — Yes/No（仅检测到 Codex 时）
 
 选完给一行综合总结。CI / 非 tty 环境（Docker / 脚本）自动按默认全装：**语言跟随系统设置**（读系统语言、不被 CLI 的 `LANG` 误导）、主题 mocha、组件全开。装好后想改任何一项，再跑一次 `tt setup` 即可（终端里每次 `tt setup` 都进向导）。
-
-### 会话内彩色命令（`tt setup` 自动注册）
-
-`tt setup` 会顺带注册一组「会话内彩色命令」，让你在 AI 会话里直接渲染真彩色 daily / weekly 报表，**不经过模型、不占上下文 token**：
-
-- **Claude Code**：输入 `/tt-daily`、`/tt-weekly`
-- **Codex**：输入 `ttdaily`、`ttweekly`（Codex 无斜杠命令拦截，用纯文本触发词）
-
-原理：通过 Claude Code 的 `UserPromptExpansion` / Codex 的 `UserPromptSubmit` hook 拦截命令、跑对应 `tt` 子命令、把彩色输出直接回显，全程不发给模型。`tt unsetup` 会一并移除。
-
-> ⚠️ **仅终端 CLI 支持彩色**：桌面 app / web 版是 GUI、不渲染终端 ANSI，这些命令会显示异常（乱码 / 纯文本）。桌面端请改用普通 `tt daily`。
 
 ### 配色主题
 
