@@ -72,15 +72,22 @@
 
 ## 安装
 
+一键安装（脚本自动选 uv / pipx / 私有 venv，绕开 PEP 668、不污染系统 Python）：
+
 ```bash
 curl -sSL https://raw.githubusercontent.com/stormzhang/token-tracker/main/install.sh | bash
 ```
 
-或者通过 pip：
+也可手动安装（CLI 工具推荐用 uv / pipx，自动隔离环境）：
 
 ```bash
-pip install --force-reinstall token-tracker && tt setup
+uv tool install token-tracker && tt setup      # 有 uv
+pipx install token-tracker && tt setup         # 或有 pipx
+pip install --user token-tracker && tt setup   # 都没有时
 ```
+
+> **升级**：重跑上面任一安装命令即可（curl 脚本幂等、自动升到最新）。
+> **卸载**：先 `tt unsetup` 还原状态栏，再 `uv tool uninstall token-tracker` / `pipx uninstall token-tracker`（私有 venv 装的删 `~/.local/share/token-tracker` + `~/.local/bin/tt`）。
 
 ## 使用
 
