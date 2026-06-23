@@ -5,7 +5,7 @@
 
 ## 当前阶段
 
-`0.4.0` 已开发完成并全部提交，**等待发布**（打 `v0.4.0` tag + 发 PyPI）。
+`0.4.1` 已开发完成、版本号已 bump，**等待发布**（打 `v0.4.1` tag + push + 发 PyPI）。`0.4.0` 之前打过 tag 但从未真正发出去——本次直接跳过，把 0.4.0 标签之后的所有改动合并进 `0.4.1` 一次性出。
 项目整体进入「功能完整、维护迭代」阶段。
 
 ## 已完成（均已发布并验证）
@@ -25,7 +25,8 @@
 **近期版本迭代**
 - `0.3.7`：修复 Opus 4.8 成本估算为 0
 - `0.3.8`：识别 Claude Fable 5 定价 + 未知模型显形（不再静默归零）
-- `0.4.0`：包目录迁移标准 src layout（导入名 `src` → `token_tracker`）+ CI 适配新包名 + README 双语同步
+- `0.4.0`：包目录迁移标准 src layout（导入名 `src` → `token_tracker`）+ CI 适配新包名 + README 双语同步（**实际未发布**，并入 0.4.1 一起出）
+- `0.4.1`：大批量功能与重构合并发布——`tt` 默认走 `daily`、daily 顶部三段单 Panel 概览（Last 12 months / This Month / This Week）；老用户升级自动重新引导（SETUP_VERSION 机制）；六套主题统一系统 + `tt theme` 命令 + 首次运行交互向导；Codex 伪 statusline 接入主题、两行布局；CC statusline 四行布局 + git diff + TPS + Code 行数；`tt status` 替代旧 dashboard、过去 5h 三段实时面板；`tt sessions` 取最近 N 条再按 cost 排（修「史上高 cost 霸榜」）；柱状图全窗口 + 暗色基线；activty_minutes 维度；config 文件统一 `config.json`；Codex 不再接管 `status_line`；产物全集中放 `~/.config/token-tracker`；install.sh 多安装方式阶梯（uv / pipx / venv / pip）绕开 PEP 668；i18n 完善（月份表头、d/h 单位、Active Days）；codex-auto-review 改写为 gpt-5.5 + 补 gpt-5.5 定价。完整改动见 `git log v0.4.0..HEAD`（约 100 commit）
 
 ## 进行中（已实现并验证，待发布）
 
@@ -67,7 +68,7 @@
 
 ## 待办 / 计划
 
-- **发布 `0.4.0`**：打 `v0.4.0` tag 并 push → 发 PyPI（属红线操作，待主人确认）
+- **发布 `0.4.1`**：打 `v0.4.1` tag → push tag + main → `uv build` → `twine upload`（每步属红线操作，主人逐步确认）
 - 桌面版（Tauri）规划：图表可视化、数据钻取、实时监控、多 Agent 多模型监控（仅规划，未启动）
 - **会话内彩色报表 hook — 桌面多形态适配**（终端部分已落地，见「进行中」）：桌面 app / web GUI 不吃 ANSI（实测乱码），需按形态输出 HTML/markdown（`tt` 加 `--format`、hook 检测形态）。详见本地 `docs/cc-hook-tt-真彩色.md`。
 - **远程下发通知通道**（📝 规划，新分支 `feature/broadcast` 做）：纯下行——读本地 `~/.claude/tt-broadcast.json`，在 **statusline 第 5 行**（未过期里优先级最高一条、按 level 着色）+ **`tt status` 头图上方横幅**（全部未过期）展示远程下发的公告/告警/进度；level 分流 `urgent`/`info`/`progress` + `expires_at` 自动过期；配 `tt broadcast` 写入命令自测。**只接收不上传、不碰隐私定位**。同步链路（远程→文件）+ 排行榜 PK（需上行、必 opt-in + 脱敏）留后续。详见 `docs/broadcast-plan.md`。
@@ -75,7 +76,7 @@
 
 ## 阻塞
 
-- 无技术阻塞。`0.4.0` 发布需主人确认（红线）。
+- 无技术阻塞。`0.4.1` 发布需主人逐步确认（红线：tag push / main push / PyPI 上传）。
 
 ## 最近验证
 
