@@ -76,22 +76,14 @@ Implemented via a `Stop` hook returning `systemMessage` — renders 24-bit truec
 
 ## Install
 
-One-liner (the script auto-picks uv / pipx / a private venv — sidesteps PEP 668, never pollutes system Python):
-
 ```bash
 curl -sSL https://raw.githubusercontent.com/stormzhang/token-tracker/main/install.sh | bash
 ```
 
-Or install manually (for a CLI tool, uv / pipx is recommended — isolated env):
+The script auto-picks the best install method (uv / pipx / private venv), sidesteps PEP 668, and never pollutes system Python.
 
-```bash
-uv tool install token-tracker && tt setup      # if you have uv
-pipx install token-tracker && tt setup         # or pipx
-pip install --user token-tracker && tt setup   # otherwise
-```
-
-> **Upgrade**: re-run any install command above (the curl script is idempotent and pulls the latest).
-> **Uninstall**: run `tt unsetup` first to restore the status bar, then `uv tool uninstall token-tracker` / `pipx uninstall token-tracker` (for the private-venv install, remove `~/.local/share/token-tracker` and `~/.local/bin/tt`).
+> **Upgrade**: re-run the command above (the script is idempotent and pulls the latest).
+> **Uninstall**: run `tt unsetup` first to restore the status bar, then remove according to install method (`uv tool uninstall token-tracker` / `pipx uninstall token-tracker` / delete `~/.local/share/token-tracker` and `~/.local/bin/tt`).
 
 ## Usage
 
