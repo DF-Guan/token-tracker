@@ -57,9 +57,11 @@ case ":$PATH:" in
 esac
 
 # 跑配置向导：用 tt 绝对路径调，避免 PATH 尚未更新时 command not found。
-# 有 tty 接 /dev/tty 进交互向导（curl|bash 下 stdin 是 curl 输出）；无 tty（CI/Docker）非交互全装。
+# 判定改用 `/dev/tty` 可读可写（真终端必然有、CI/Docker 没有），不依赖 `[ -t 1 ]`——
+# 后者在某些 shell / iTerm / 集成终端 + curl|bash 下会被误判为 false，导致 setup 收不到
+# tty stdin 走静默 _auto_setup、wizard 弹不起。
 say ""
-if [ -t 1 ] && [ -e /dev/tty ]; then
+if [ -r /dev/tty ] && [ -w /dev/tty ]; then
     "$TT_BIN" setup < /dev/tty
 else
     say "Configuring status bar..."
