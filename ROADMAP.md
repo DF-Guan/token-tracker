@@ -5,8 +5,9 @@
 
 ## 当前阶段
 
-`0.4.1` 已开发完成、版本号已 bump，**等待发布**（打 `v0.4.1` tag + push + 发 PyPI）。`0.4.0` 之前打过 tag 但从未真正发出去——本次直接跳过，把 0.4.0 标签之后的所有改动合并进 `0.4.1` 一次性出。
-项目整体进入「功能完整、维护迭代」阶段。
+`0.4.1` 已发布 PyPI（2026-06-23，https://pypi.org/project/token-tracker/0.4.1/ ），打了 `v0.4.1` tag（本地、未 push）。**注**：`0.4.0` 之前打过 tag 但实际上**已上 PyPI**（之前 ROADMAP 写错）。
+
+正在为 `0.4.2` 攒改动：① `install.sh` tty 判定脆弱性 fix（`[ -t 1 ]` → `/dev/tty` 可读可写，已本地 commit）。后续若再有需要发版的小修复，一并打 `v0.4.2` + push + 发 PyPI。
 
 ## 已完成（均已发布并验证）
 
@@ -68,7 +69,7 @@
 
 ## 待办 / 计划
 
-- **发布 `0.4.1`**：打 `v0.4.1` tag → push tag + main → `uv build` → `twine upload`（每步属红线操作，主人逐步确认）
+- **发布 `0.4.2`**：合并 install.sh tty 判定 fix（已本地 commit `400fb70`） + 其它累积小修复 → bump 版本号 → 打 `v0.4.2` tag → push tag + main → `uv build` → `twine upload`
 - 桌面版（Tauri）规划：图表可视化、数据钻取、实时监控、多 Agent 多模型监控（仅规划，未启动）
 - **会话内彩色报表 hook — 桌面多形态适配**（终端部分已落地，见「进行中」）：桌面 app / web GUI 不吃 ANSI（实测乱码），需按形态输出 HTML/markdown（`tt` 加 `--format`、hook 检测形态）。详见本地 `docs/cc-hook-tt-真彩色.md`。
 - **远程下发通知通道**（📝 规划，新分支 `feature/broadcast` 做）：纯下行——读本地 `~/.claude/tt-broadcast.json`，在 **statusline 第 5 行**（未过期里优先级最高一条、按 level 着色）+ **`tt status` 头图上方横幅**（全部未过期）展示远程下发的公告/告警/进度；level 分流 `urgent`/`info`/`progress` + `expires_at` 自动过期；配 `tt broadcast` 写入命令自测。**只接收不上传、不碰隐私定位**。同步链路（远程→文件）+ 排行榜 PK（需上行、必 opt-in + 脱敏）留后续。详见 `docs/broadcast-plan.md`。
