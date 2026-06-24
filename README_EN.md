@@ -116,6 +116,8 @@ A key-value config summary follows, with restart / next-step hints. CI / non-tty
 
 6 built-in themes, **shared** across CLI reports, the CC status line, and the Codex faux statusline (switching changes all three):
 
+![Supported themes](assets/screenshot-themes.png)
+
 | Theme | Notes |
 |-------|-------|
 | `mocha` / `latte` / `frappe` / `macchiato` | Full Catppuccin (mocha/latte auto-picked by dark/light terminal) |

@@ -116,6 +116,8 @@ tt --version      # 查看版本（-v / -V 同义）
 
 内置 6 套主题，CLI 报表、CC 状态栏与 Codex 伪 statusline **统一同源**（切主题三者一起变）：
 
+![支持的主题](assets/screenshot-themes.png)
+
 | 主题 | 说明 |
 |------|------|
 | `mocha` / `latte` / `frappe` / `macchiato` | Catppuccin 全家（暗 / 亮终端自动选 mocha / latte） |
