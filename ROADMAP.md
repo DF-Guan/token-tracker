@@ -5,9 +5,9 @@
 
 ## 当前阶段
 
-`0.4.1` 已发布 PyPI（2026-06-23，https://pypi.org/project/token-tracker/0.4.1/ ），打了 `v0.4.1` tag（本地、未 push）。**注**：`0.4.0` 之前打过 tag 但实际上**已上 PyPI**（之前 ROADMAP 写错）。
+`0.4.2` 已发布 PyPI（2026-06-24，https://pypi.org/project/token-tracker/0.4.2/ ），commit `2ec41d5` + 打了 `v0.4.2` tag（本地、未 push）。含三批改动：① `install.sh` tty 判定 fix（`400fb70`）；② 升级引导改「自动走一遍 setup」+ `SETUP_VERSION` bump 到 2（`da670e7`）；③ 国产模型识别 + cost（七家：Kimi/GLM/Qwen/Doubao/DeepSeek/MiniMax/MiMo）+ 国外补强（Grok 定价、Gemini 短名，`bceb903`）。**待 push**：main + `v0.4.1` / `v0.4.2` tag 均本地未 push（主人统一管控）。
 
-正在为 `0.4.2` 攒改动：① `install.sh` tty 判定脆弱性 fix（`[ -t 1 ]` → `/dev/tty` 可读可写，commit `400fb70`）；② 升级引导改为「自动走一遍 setup」+ `SETUP_VERSION` bump 到 2（commit `da670e7`，详见最近验证）；③ 国产模型识别 + cost（七家：Kimi/GLM/Qwen/Doubao/DeepSeek/MiniMax/MiMo）+ 国外补强（Grok 定价、Gemini 短名），2026-06-24，详见进行中 + 最近验证。后续若再有需要发版的小修复，一并 bump 版本号 + 打 `v0.4.2` + push + 发 PyPI。
+`0.4.1` 已发布 PyPI（2026-06-23，https://pypi.org/project/token-tracker/0.4.1/ ），打了 `v0.4.1` tag（本地、未 push）。**注**：`0.4.0` 之前打过 tag 但实际上**已上 PyPI**（之前 ROADMAP 写错）。
 
 ## 已完成（均已发布并验证）
 
@@ -29,7 +29,7 @@
 - `0.4.0`：包目录迁移标准 src layout（导入名 `src` → `token_tracker`）+ CI 适配新包名 + README 双语同步（**实际未发布**，并入 0.4.1 一起出）
 - `0.4.1`：大批量功能与重构合并发布——`tt` 默认走 `daily`、daily 顶部三段单 Panel 概览（Last 12 months / This Month / This Week）；老用户升级自动重新引导（SETUP_VERSION 机制）；六套主题统一系统 + `tt theme` 命令 + 首次运行交互向导；Codex 伪 statusline 接入主题、两行布局；CC statusline 四行布局 + git diff + TPS + Code 行数；`tt status` 替代旧 dashboard、过去 5h 三段实时面板；`tt sessions` 取最近 N 条再按 cost 排（修「史上高 cost 霸榜」）；柱状图全窗口 + 暗色基线；activty_minutes 维度；config 文件统一 `config.json`；Codex 不再接管 `status_line`；产物全集中放 `~/.config/token-tracker`；install.sh 多安装方式阶梯（uv / pipx / venv / pip）绕开 PEP 668；i18n 完善（月份表头、d/h 单位、Active Days）；codex-auto-review 改写为 gpt-5.5 + 补 gpt-5.5 定价。完整改动见 `git log v0.4.0..HEAD`（约 100 commit）
 
-## 进行中（已实现并验证，待发布）
+## 已随 `0.4.1` / `0.4.2` 发布（已实现并验证）
 
 - **`tt daily` 重构为 GitHub 风格 token 贡献热力图**（2026-06-16）：全角 ■ 深浅绿方格（5 档）+ 月份表头 + 紧凑总览 + 图例，替换原逐日表格。
   - 新增 `ui/heatmap.py`（渲染 + 自带紧凑总览）；`ui/theme.py` 加 5 档 GitHub 绿 + 分位分档；`ui/console.py` 加 `forced_color_console()` 强制 24-bit truecolor。
@@ -70,7 +70,7 @@
 
 ## 待办 / 计划
 
-- **发布 `0.4.2`**：合并 install.sh tty 判定 fix（已本地 commit `400fb70`） + 其它累积小修复 → bump 版本号 → 打 `v0.4.2` tag → push tag + main → `uv build` → `twine upload`
+- **push `0.4.2`（待主人确认）**：本地已 commit（`2ec41d5`）+ tag `v0.4.2` + PyPI 已上传，待 `git push origin main` + push tag（`v0.4.1` / `v0.4.2` 两个历史 tag 一起）
 - 桌面版（Tauri）规划：图表可视化、数据钻取、实时监控、多 Agent 多模型监控（仅规划，未启动）
 - **会话内彩色报表 hook — 桌面多形态适配**（终端部分已落地，见「进行中」）：桌面 app / web GUI 不吃 ANSI（实测乱码），需按形态输出 HTML/markdown（`tt` 加 `--format`、hook 检测形态）。详见本地 `docs/cc-hook-tt-真彩色.md`。
 - **远程下发通知通道**（📝 规划，新分支 `feature/broadcast` 做）：纯下行——读本地 `~/.claude/tt-broadcast.json`，在 **statusline 第 5 行**（未过期里优先级最高一条、按 level 着色）+ **`tt status` 头图上方横幅**（全部未过期）展示远程下发的公告/告警/进度；level 分流 `urgent`/`info`/`progress` + `expires_at` 自动过期；配 `tt broadcast` 写入命令自测。**只接收不上传、不碰隐私定位**。同步链路（远程→文件）+ 排行榜 PK（需上行、必 opt-in + 脱敏）留后续。详见 `docs/broadcast-plan.md`。
