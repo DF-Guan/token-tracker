@@ -410,63 +410,38 @@ def test_setup_writes_setup_version(tmp_path, monkeypatch):
     assert config.setup_version() == config.SETUP_VERSION  # setup 完成后被打上当前版本
 
 
-def test_cli_outdated_setup_triggers_wizard_in_tty(monkeypatch, tmp_path):
-    # 老用户 is_setup=True 且 setup_version < SETUP_VERSION 且双 tty 非会话内 → 直接弹 wizard。
-    from token_tracker import cli, config, wizard
+def test_cli_outdated_setup_triggers_setup_flow(monkeypatch, tmp_path):
+    # 老用户 is_setup=True 且 setup_version < SETUP_VERSION → 自动走 _run_setup_flow
+    # （内部分流真终端 wizard / 会话内 _auto_setup，这里只验触发、不管分流）。
+    from token_tracker import cli, config
     _isolate_config(monkeypatch, tmp_path)
     calls: dict = {}
 
-    def fake_wizard():
-        calls["wizard"] = True
+    def fake_flow():
+        calls["flow"] = True
         raise SystemExit(0)  # 短路 cli.main 后续数据命令逻辑
 
-    monkeypatch.setattr(wizard, "run_wizard", fake_wizard)
+    monkeypatch.setattr(cli, "_run_setup_flow", fake_flow)
     monkeypatch.setattr(cli, "is_setup", lambda: True)
     monkeypatch.setattr(cli, "needs_update", lambda: False)
-    monkeypatch.setattr(cli, "_should_run_wizard", lambda: True)
     # setup_version 字段缺失 → 读出 0 < SETUP_VERSION
-    monkeypatch.setattr(config, "SETUP_VERSION", 1)
+    monkeypatch.setattr(config, "SETUP_VERSION", 2)
     monkeypatch.setattr("sys.argv", ["tt", "status"])
 
     with pytest.raises(SystemExit):
         cli.main()
-    assert calls == {"wizard": True}
+    assert calls == {"flow": True}
 
 
-def test_cli_outdated_setup_non_tty_prints_hint_only(monkeypatch, tmp_path, capsys):
-    # 老用户但非 tty / 会话内 → 不进 wizard，只打印一行 setup_outdated_hint 提示。
-    from token_tracker import cli, config, wizard
+def test_cli_setup_up_to_date_skips_flow(monkeypatch, tmp_path):
+    # setup_version 已是当前 → 不触发 _run_setup_flow，正常往下跑。
+    from token_tracker import cli, config
     _isolate_config(monkeypatch, tmp_path)
     calls: dict = {}
 
-    monkeypatch.setattr(wizard, "run_wizard", lambda: calls.__setitem__("wizard", True))
+    monkeypatch.setattr(cli, "_run_setup_flow", lambda: calls.__setitem__("flow", True))
     monkeypatch.setattr(cli, "is_setup", lambda: True)
     monkeypatch.setattr(cli, "needs_update", lambda: False)
-    monkeypatch.setattr(cli, "_should_run_wizard", lambda: False)
-    monkeypatch.setattr(cli, "_build_status_data", lambda _agents: {})  # 走 "no data" 早返回
-    from types import SimpleNamespace
-    monkeypatch.setattr(cli, "detect_agents",
-                        lambda: [SimpleNamespace(name="Claude Code", id="claude-code")])
-    monkeypatch.setattr(config, "SETUP_VERSION", 1)
-    monkeypatch.setattr("sys.argv", ["tt", "status"])
-
-    cli.main()
-    assert calls == {}  # wizard 没被调
-    out = capsys.readouterr().out
-    # 中英任一命中即可（取决于运行环境系统语言）
-    assert "tt setup" in out
-
-
-def test_cli_setup_up_to_date_skips_wizard(monkeypatch, tmp_path):
-    # setup_version 已是当前 → 不触发 wizard 也不打印提示，正常往下跑。
-    from token_tracker import cli, config, wizard
-    _isolate_config(monkeypatch, tmp_path)
-    calls: dict = {}
-
-    monkeypatch.setattr(wizard, "run_wizard", lambda: calls.__setitem__("wizard", True))
-    monkeypatch.setattr(cli, "is_setup", lambda: True)
-    monkeypatch.setattr(cli, "needs_update", lambda: False)
-    monkeypatch.setattr(cli, "_should_run_wizard", lambda: True)
     monkeypatch.setattr(cli, "_build_status_data", lambda _agents: {})
     from types import SimpleNamespace
     monkeypatch.setattr(cli, "detect_agents",

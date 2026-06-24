@@ -386,18 +386,15 @@ def main():
         update_hook()
 
     # 升级感知：新版若新增了值得重配的选项（SETUP_VERSION bump），老用户跑任意命令时
-    # 真终端直接弹一次 wizard；非 tty / 会话内只打印一行提示、不打断。
-    # wizard 内部最终会调 setup() → save_setup_version()，下次启动不再触发。
+    # 自动走一遍 setup——_run_setup_flow 内部分流：真终端弹 wizard、会话内 / 非 tty 静默
+    # _auto_setup 用默认值全装（语言跟随系统 / mocha / 组件全开）。两者最终都 save_setup_version()，
+    # 下次启动 setup_version 已是最新、不再触发。
     if (
         command not in ("setup", "unsetup")
         and is_setup()
         and config.setup_version() < config.SETUP_VERSION
     ):
-        if _should_run_wizard():
-            from .wizard import run_wizard
-            run_wizard()
-        else:
-            get_console().print(f"[dim]{t('setup_outdated_hint')}[/dim]")
+        _run_setup_flow()
 
     if command == "setup":
         _run_setup_flow()

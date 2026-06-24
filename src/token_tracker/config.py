@@ -18,10 +18,11 @@ CONFIG_DIR = os.path.expanduser("~/.config/token-tracker")
 CONFIG_PATH = os.path.join(CONFIG_DIR, "config.json")
 SCHEMA_VERSION = 1
 
-# 引导版本：每次新增"值得让老用户重新走一遍 wizard"的配置项时手动 +1。
-# 老用户 config 里没这字段 → 读出 0 → 触发重新引导（真终端弹 wizard、非 tty 仅提示）。
+# 引导版本：每次新增"值得让老用户重新走一遍 setup"的配置项时手动 +1（只能整数、一次 +1）。
+# 老用户 config 里没这字段 / 旧版本号 < 当前 → 触发重新引导（真终端弹 wizard、非 tty 静默 _auto_setup）。
 # 跟 SCHEMA_VERSION 解耦：那是数据格式版本，这是用户引导版本，bump 节奏完全不同。
-SETUP_VERSION = 1
+# 2（0.4.2）：强制所有现存用户（0.3.8/0.4.0=无字段=0、0.4.1=1，全 < 2）升级后重走一遍 setup。
+SETUP_VERSION = 2
 
 # 旧位置（独立 theme.json / lang.json），老用户首次读 config.json 不存在时自动合并迁移
 _LEGACY_THEME_PATH = os.path.join(CONFIG_DIR, "theme.json")
