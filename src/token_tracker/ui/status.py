@@ -19,7 +19,6 @@ from .format import (
     AGENT_LABEL,
     AGENT_SHORT,
     _fmt_cost,
-    _fmt_session_duration,
     _fmt_tokens,
     _model_short,
     _project_short,
@@ -142,7 +141,7 @@ def _render_agent_stats(per_agent: dict) -> None:
 
 def _render_sessions(sessions) -> None:
     """合并 session 列表：按 cost 倒序；Time 蓝 / Project 绿 / Tokens 橙 / Cost 黄；
-    Tokens·Cost 各自前三（第一红、二三粉）；列序 Time·Project·Tokens·Cost·Msgs·Duration·Model·Agent。"""
+    Tokens·Cost 各自前三（第一红、二三粉）；列序 Time·Project·Tokens·Cost·Msgs·Model·Agent。"""
     mode = _width_mode()
     table = Table(title=f"{t('recent_sessions')} ({len(sessions)})", box=box.SIMPLE_HEAVY,
                   header_style="bold", padding=(0, 1), expand=False)
@@ -151,7 +150,6 @@ def _render_sessions(sessions) -> None:
     table.add_column(t("col_total_tokens"), justify="right", style=_S.peach)
     table.add_column(t("col_cost"), justify="right", style=_S.warn)
     table.add_column(t("col_messages"), justify="right")
-    table.add_column(t("col_duration"), justify="right")
     if mode != "compact":
         table.add_column(t("col_model"), no_wrap=True)
     table.add_column(t("col_agent"), no_wrap=True)
@@ -173,11 +171,10 @@ def _render_sessions(sessions) -> None:
             tok_cell,
             cost_cell,
             str(s.message_count),
-            _fmt_session_duration(s.active_minutes, s.duration_minutes),
         ]
         if mode != "compact":
             names = list(s.models) or [s.model]
-            row.append(", ".join(_model_short(n) for n in names[:2]))
+            row.append(_model_short(names[0]))
         row.append(AGENT_SHORT.get(s.agent_id, s.agent_id))
         table.add_row(*row)
     get_console().print(Padding(table, (0, 0, 0, 2), expand=False))

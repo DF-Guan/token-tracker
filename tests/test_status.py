@@ -74,7 +74,7 @@ def test_build_status_data_empty(monkeypatch):
 
 
 def test_render_status_with_limits(monkeypatch):
-    # 有订阅额度 → 额度段（weekly 样式）；session 强制 source 列 + Duration。
+    # 有订阅额度 → 额度段（weekly 样式）；session 强制 source 列。
     monkeypatch.setattr("token_tracker.ui.status.forced_color_console", contextlib.nullcontext)
     now = datetime.now(UTC)
     summary = StatusSummary(total_tokens=1000, cost_usd=1.5, message_count=5, session_count=2,
@@ -98,9 +98,6 @@ def test_render_status_with_limits(monkeypatch):
     assert "Cost:" in out and "$12" in out     # 当天 cost
     assert "Model:" in out and "Opus 4.8" in out  # model（去掉 (1M context) 后缀）
     assert "Claude" in out and "Codex" in out  # session Agent 列（短名 Claude / Codex）
-    from token_tracker.i18n import t
-    h = t("unit_hour")  # 单位跟随语言
-    assert f"1.1{h} / 1.1{h}" in out           # Duration 组合：活跃 / 跨度（65min 连续会话，小数小时）
 
 
 def test_render_status_no_limits_shows_agent_stats(monkeypatch):

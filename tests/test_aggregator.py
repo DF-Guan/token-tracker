@@ -119,17 +119,6 @@ def test_aggregate_sessions_active_minutes_drops_large_gaps():
     assert s.duration_minutes == round((3 * 24 * 60) + 10, 1)
 
 
-def test_fmt_session_duration_combines_active_and_span():
-    from token_tracker.i18n import t
-    from token_tracker.ui.format import _fmt_session_duration
-    h, d = t("unit_hour"), t("unit_day")  # 单位跟随语言，断言保持语言无关
-    # 活跃恒小数小时；跨度 ≥1 天用 天d时h（整天省略小时），<1 天用小数小时
-    assert _fmt_session_duration(564, 32520) == f"9.4{h} / 22{d}14{h}"        # 主例：活跃 9h24m / 跨度 22d14h
-    assert _fmt_session_duration(9 * 60, 22 * 24 * 60) == f"9.0{h} / 22{d}"   # 整天跨度省略小时
-    assert _fmt_session_duration(5 * 60, 6 * 60) == f"5.0{h} / 6.0{h}"        # 跨度 <1 天用小数小时
-    assert _fmt_session_duration(45, 90) == f"0.8{h} / 1.5{h}"               # 活跃/跨度均不足 1h/1 天
-
-
 def test_aggregate_fills_projects_by_token():
     # projects 维度（weekly 项目分布用）：按 project 累加 token，与 models 同机制
     d = datetime(2026, 1, 1, 10, tzinfo=UTC)
