@@ -64,11 +64,11 @@ Implemented via a `Stop` hook returning `systemMessage` — renders 24-bit truec
 
 ## Features
 
-- **Multi-agent tracking** — Claude Code + Codex in one place, interactive tab switching
+- **Multi-agent tracking** — Claude Code + Codex unified, grouped by source
 - **Status line integration** — Claude Code statusLine + Codex faux statusline, auto-configured on first run, auto-upgraded on script updates
 - **Rate limit monitoring** — real-time 5h / 7d quota usage with reset countdown
 - **Cost analysis** — per-session, daily, weekly, monthly cost breakdown with per-agent grouping
-- **Pricing resolution** — litellm live pricing with built-in official-price fallback; new models in a known family are priced automatically (incl. Claude Fable 5 / Opus 4.8), and unknown models trigger an explicit warning instead of silently counting as $0
+- **Pricing resolution** — litellm live pricing with built-in official-price fallback, covering Claude / OpenAI / Gemini / Grok and major Chinese models (Kimi / GLM / Qwen / Doubao / DeepSeek / MiniMax / MiMo); new models in a known family are priced automatically (incl. Claude Fable 5 / Opus 4.8), and unknown models trigger an explicit warning instead of silently counting as $0
 - **Session insights** — project, model, duration, message count per session
 - **Unified multi-theme** — 6 themes (Catppuccin Mocha/Latte/Frappe/Macchiato + Nord + Dracula) shared across CLI reports, the CC status line, and the Codex faux statusline; switch/preview with `tt theme`, auto-pick Catppuccin by terminal light/dark, first-run wizard guides selection (override with `TT_THEME`); falls back to 256-color approximation when the terminal lacks truecolor
 - **Zero config** — auto-detects installed agents, reads local data directly
@@ -97,6 +97,7 @@ tt monthly        # monthly summary (per-agent grouping)
 tt sessions       # last 20 session details
 tt theme          # view / switch color theme (show / list / set / preview)
 tt unsetup        # uninstall and restore previous config
+tt --version      # show version (-v / -V)
 ```
 
 > 💡 `tt daily` is a GitHub-style token contribution heatmap (shaded green cells). In a Claude Code session, type `!tt daily` to see it in full color — commands you run yourself with `!` have their 24-bit true-color output rendered.
@@ -143,17 +144,6 @@ tt sessions --sort tokens --asc # sort by tokens, ascending
 ```
 
 Available sort fields: `tokens` / `cost` / `messages` / `time` / `input` / `output`
-
-### Dashboard Shortcuts
-
-| Key | Action |
-|-----|--------|
-| `←` `→` | Switch agent |
-| `↑` `↓` | Scroll content |
-| `s` | Cycle sort field (time → tokens → cost → messages) |
-| `r` | Reverse sort direction |
-| `+` / `-` | Adjust session count (±10, min 10) |
-| `q` | Quit |
 
 ## Data Sources
 

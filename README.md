@@ -64,11 +64,11 @@
 
 ## 功能
 
-- **多 Agent 追踪** — Claude Code + Codex 统一面板，左右键切换
-- **状态栏集成** — Claude Code statusLine + Codex status_line，首次运行自动配置，脚本更新自动升级
+- **多 Agent 追踪** — Claude Code + Codex 统一读取，多 Agent 按来源分组展示
+- **状态栏集成** — Claude Code statusLine + Codex 伪 statusline，首次运行自动配置，脚本更新自动升级
 - **限额监控** — 实时 5h / 7d 配额百分比 + 重置倒计时
 - **成本分析** — 按会话、日、周、月维度的等效成本统计，多 Agent 按来源分组展示
-- **定价识别** — litellm 在线定价 + 内置官方价双层兜底；同系列新模型自动套用本档定价（含 Claude Fable 5 / Opus 4.8），全新系列缺价时明确提示，不静默按 $0 统计
+- **定价识别** — litellm 在线定价 + 内置官方价双层兜底，覆盖 Claude / OpenAI / Gemini / Grok 及国产主流（Kimi / GLM / Qwen / 豆包 / DeepSeek / MiniMax / MiMo）；同系列新模型自动套用本档定价（含 Claude Fable 5 / Opus 4.8），全新系列缺价时明确提示，不静默按 $0 统计
 - **会话洞察** — 项目、模型、时长、消息数一览
 - **多主题统一配色** — 6 套主题（Catppuccin Mocha/Latte/Frappe/Macchiato + Nord + Dracula），CLI 报表、CC 状态栏与 Codex 伪 statusline **三者同源**；`tt theme` 一键切换 / 预览，暗 / 亮终端自动选 Catppuccin，首次运行交互向导引导选择，`TT_THEME` 可覆盖；终端不支持 truecolor 时自动降级到 256 色近似
 - **零配置** — 自动检测已安装的 Agent，直接读取本地数据
@@ -97,6 +97,7 @@ tt monthly        # 按月汇总（多 Agent 分组展示）
 tt sessions       # 最近 20 条会话明细（按 cost 倒序展示；tt sessions <n> 改条数、--sort 改排序）
 tt theme          # 查看 / 切换配色主题（show / list / set / preview）
 tt unsetup        # 卸载并恢复安装前的配置
+tt --version      # 查看版本（-v / -V 同义）
 ```
 
 > 💡 `tt daily` 是 GitHub 风格的 token 贡献热力图（深浅绿方格）。在 Claude Code 会话里输入 `!tt daily` 即可看到彩色热力图 —— 用户主动用 `!` 执行的命令，Claude Code 会渲染其 24-bit 真彩色输出。
@@ -143,17 +144,6 @@ tt sessions --sort tokens --asc # 按 token 升序
 ```
 
 可选排序字段：`tokens` / `cost` / `messages` / `time` / `input` / `output`
-
-### Dashboard 快捷键
-
-| 按键 | 功能 |
-|------|------|
-| `←` `→` | 切换 Agent |
-| `↑` `↓` | 滚动内容 |
-| `s` | 切换排序字段（时间 → Token → 等效成本 → 消息数） |
-| `r` | 反转排序方向 |
-| `+` / `-` | 调整会话显示条数（±10，最少 10 条） |
-| `q` | 退出 |
 
 ## 数据来源
 
