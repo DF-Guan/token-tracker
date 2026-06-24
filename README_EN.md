@@ -62,6 +62,8 @@ Implemented via a `Stop` hook returning `systemMessage` — renders 24-bit truec
 
 ![Token Tracker Monthly](assets/screenshot-monthly.png)
 
+![Token Tracker Sessions](assets/screenshot-sessions.png)
+
 ## Features
 
 - **Multi-agent tracking** — Claude Code + Codex unified, grouped by source

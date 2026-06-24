@@ -62,6 +62,8 @@
 
 ![Token Tracker Monthly](assets/screenshot-monthly.png)
 
+![Token Tracker Sessions](assets/screenshot-sessions.png)
+
 ## 功能
 
 - **多 Agent 追踪** — Claude Code + Codex 统一读取，多 Agent 按来源分组展示
