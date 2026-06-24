@@ -222,3 +222,121 @@ def test_stale_cache_survives_middownload_errors(tmp_path, monkeypatch, exc):
 
     monkeypatch.setattr(cost, "_fetch_and_cache", boom)
     assert cost._load_pricing() == {"gpt-5": {"input_cost_per_token": 7e-6}}
+
+
+# ---- 国产模型定价（2026-06 官方核实，详见 cost.py 注释）----
+
+
+def test_fallback_pricing_includes_chinese_models():
+    # 六家国产主力 model id 都要有内置价，不能因 litellm 未收录 bare key 而归零
+    pricing = cost._fallback_pricing()
+    for k in (
+        "kimi-k2.7-code", "kimi-k2.6", "kimi-k2.5", "moonshot-v1-128k",
+        "glm-4.6", "glm-4.5-air", "glm-5",
+        "qwen3-coder-plus", "qwen-max", "qwen-plus",
+        "doubao-seed-1-6", "doubao-seed-code", "doubao-1-5-pro-32k", "doubao-1-5-pro-256k",
+        "deepseek-v4-flash", "deepseek-v4-pro", "deepseek-chat", "deepseek-reasoner",
+        "MiniMax-M2", "MiniMax-M2.7", "MiniMax-M3",
+        "mimo-v2.5-pro", "mimo-v2.5",
+    ):
+        assert k in pricing, f"fallback pricing missing {k}"
+        assert pricing[k].get("input_cost_per_token", 0) > 0
+
+
+def test_glm_uses_intl_usd_pricing(monkeypatch):
+    # GLM 口径例外：用 z.ai 国际站官方 USD（$0.6/$2.2/$0.11），不折汇率
+    monkeypatch.setattr(cost, "_pricing", cost._fallback_pricing())
+    entry = make_entry(
+        model="glm-4.6", input_tokens=1_000_000, output_tokens=1_000_000, cache_read_tokens=1_000_000
+    )
+    assert cost.calculate_cost(entry) == pytest.approx(0.6 + 2.2 + 0.11)
+
+
+def test_kimi_cny_converted_to_usd(monkeypatch):
+    # Kimi K2.7 Code 中国站 ¥6.5/¥27/¥1.3 按 7.1 折 USD
+    monkeypatch.setattr(cost, "_pricing", cost._fallback_pricing())
+    entry = make_entry(
+        model="kimi-k2.7-code", input_tokens=1_000_000, output_tokens=1_000_000, cache_read_tokens=1_000_000
+    )
+    assert cost.calculate_cost(entry) == pytest.approx((6.5 + 27 + 1.3) / 7.1)
+
+
+def test_deepseek_and_qwen_cny_base_tier(monkeypatch):
+    # DeepSeek V4-Flash ¥1/¥2；Qwen3-Coder 取 0-32K 档 ¥4/¥16，均 ÷7.1
+    monkeypatch.setattr(cost, "_pricing", cost._fallback_pricing())
+    ds = make_entry(model="deepseek-v4-flash", input_tokens=1_000_000, output_tokens=1_000_000)
+    assert cost.calculate_cost(ds) == pytest.approx((1 + 2) / 7.1)
+    qw = make_entry(model="qwen3-coder-plus", input_tokens=1_000_000, output_tokens=1_000_000)
+    assert cost.calculate_cost(qw) == pytest.approx((4 + 16) / 7.1)
+
+
+def test_minimax_m2_usd_pricing(monkeypatch):
+    # MiniMax M2 官方 USD $0.3/$1.2（与中国站÷7 自洽）
+    monkeypatch.setattr(cost, "_pricing", cost._fallback_pricing())
+    entry = make_entry(model="MiniMax-M2", input_tokens=1_000_000, output_tokens=1_000_000)
+    assert cost.calculate_cost(entry) == pytest.approx(0.3 + 1.2)
+
+
+def test_mimo_cny_pricing(monkeypatch):
+    # 小米 MiMo 官方中国站人民币价（mimo.mi.com）：Pro ¥3/¥6、标准 ¥1/¥2，÷7.1；未来版本系列兜底
+    monkeypatch.setattr(cost, "_pricing", cost._fallback_pricing())
+    pro = make_entry(model="mimo-v2.5-pro", input_tokens=1_000_000, output_tokens=1_000_000)
+    assert cost.calculate_cost(pro) == pytest.approx((3 + 6) / 7.1)
+    std = make_entry(model="mimo-v2.5", input_tokens=1_000_000, output_tokens=1_000_000)
+    assert cost.calculate_cost(std) == pytest.approx((1 + 2) / 7.1)
+    # 未来 mimo-v3 → mimo-v2.5 系列兜底（¥1 input ÷7.1）
+    assert cost.calculate_cost(make_entry(model="mimo-v3", input_tokens=1_000_000)) == pytest.approx(1 / 7.1)
+
+
+def test_chinese_model_family_fallback(monkeypatch):
+    # 未知新版本 / 已下线旧 id 按系列兜底，不归零
+    monkeypatch.setattr(cost, "_pricing", cost._fallback_pricing())
+    # 未来 kimi-k3 → kimi-k2.6（¥6.5 input ÷7.1）
+    assert cost.calculate_cost(make_entry(model="kimi-k3-preview", input_tokens=1_000_000)) == pytest.approx(6.5 / 7.1)
+    # 已 EOL 的 kimi-k2-instruct → kimi 系列兜底，不归零
+    assert cost.calculate_cost(make_entry(model="kimi-k2-instruct", input_tokens=1_000_000)) == pytest.approx(6.5 / 7.1)
+    # 未来 glm-4.8 → glm-4.6（$0.6 input，不折汇率）
+    assert cost.calculate_cost(make_entry(model="glm-4.8", input_tokens=1_000_000)) == pytest.approx(0.6)
+    # 未来 minimax-m4 → MiniMax-M2（$0.3 input）
+    assert cost.calculate_cost(make_entry(model="minimax-m4", input_tokens=1_000_000)) == pytest.approx(0.3)
+
+
+def test_chinese_models_have_short_names():
+    # cost.py 内置的国产 key 都应在 MODEL_SHORT 有短名（报表 / 状态栏可读）
+    from token_tracker.ui.format import MODEL_SHORT
+    for k in (
+        "kimi-k2.7-code", "kimi-k2.6", "kimi-k2.5",
+        "moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k",
+        "glm-4.6", "glm-4.5", "glm-4.5-air", "glm-4.7", "glm-5",
+        "qwen3-coder-plus", "qwen-max", "qwen-plus",
+        "doubao-seed-1-6", "doubao-seed-code", "doubao-1-5-pro-32k", "doubao-1-5-pro-256k",
+        "deepseek-v4-flash", "deepseek-v4-pro", "deepseek-chat", "deepseek-reasoner",
+        "MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5", "MiniMax-M2.7", "MiniMax-M3",
+        "mimo-v2.5-pro", "mimo-v2.5",
+    ):
+        assert k in MODEL_SHORT, f"MODEL_SHORT missing {k}"
+
+
+def test_grok_pricing_and_retirement_routing(monkeypatch):
+    # xAI Grok 官方 USD（docs.x.ai）；2026-05-15 退役 slug 按官方路由到 grok-4.3 / grok-build-0.1
+    monkeypatch.setattr(cost, "_pricing", cost._fallback_pricing())
+    flagship = make_entry(model="grok-4.3", input_tokens=1_000_000, output_tokens=1_000_000)
+    assert cost.calculate_cost(flagship) == pytest.approx(1.25 + 2.5)
+    coding = make_entry(model="grok-build-0.1", input_tokens=1_000_000, output_tokens=1_000_000)
+    assert cost.calculate_cost(coding) == pytest.approx(1.0 + 2.0)
+    # 退役别名 grok-code-fast-1 → build-0.1 价（¥ 无关，纯 USD）
+    alias = make_entry(model="grok-code-fast-1", input_tokens=1_000_000, output_tokens=1_000_000)
+    assert cost.calculate_cost(alias) == pytest.approx(3.0)
+    # 退役 slug grok-4-fast / grok-3 → grok-4.3 价（官方就这么路由）
+    assert cost.calculate_cost(make_entry(model="grok-4-fast", input_tokens=1_000_000)) == pytest.approx(1.25)
+    assert cost.calculate_cost(make_entry(model="grok-3", input_tokens=1_000_000)) == pytest.approx(1.25)
+
+
+def test_gemini_and_grok_short_names():
+    # Gemini 不入 cost.py（litellm 价已对），只验短名在 MODEL_SHORT；Grok 短名同验
+    from token_tracker.ui.format import MODEL_SHORT
+    for k in (
+        "gemini-2.5-pro", "gemini-3-pro-preview", "gemini-3.5-flash",
+        "grok-4.3", "grok-build-0.1", "grok-code-fast-1",
+    ):
+        assert k in MODEL_SHORT, f"MODEL_SHORT missing {k}"

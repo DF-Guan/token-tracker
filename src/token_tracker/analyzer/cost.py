@@ -28,6 +28,21 @@ _FAMILY_FALLBACK = (
     ("claude-haiku", "claude-haiku-4-5-20251001"),
     ("claude-fable", "claude-fable-5"),
     ("codex-", "gpt-5.5"),
+    # 国产模型系列兜底：出新版本（如 GLM-4.8、Kimi K3）litellm 未收录时退回该系列最新已知价
+    ("kimi", "kimi-k2.6"),
+    ("moonshot-v", "moonshot-v1-128k"),
+    ("glm-4", "glm-4.6"),
+    ("qwen3-coder", "qwen3-coder-plus"),
+    ("qwen3-max", "qwen-max"),
+    ("doubao-seed", "doubao-seed-1-6"),
+    ("doubao-1-5-pro", "doubao-1-5-pro-256k"),
+    ("deepseek", "deepseek-v4-flash"),
+    ("minimax", "MiniMax-M2"),
+    ("mimo", "mimo-v2.5"),
+    # Grok：退役 slug 按官方路由兜底（grok-code-* → build-0.1；grok-4-fast/4.1-fast/grok-3 等 → grok-4.3）
+    ("grok-code", "grok-build-0.1"),
+    ("grok-4", "grok-4.3"),
+    ("grok", "grok-4.3"),
 )
 
 # 解析不到定价的模型只提示一次，避免聚合时每条 entry 刷屏
@@ -195,6 +210,31 @@ _FABLE_PRICING = {
     "cache_read_input_token_cost": 1.0e-6,
 }
 
+# 国产模型多以人民币计价，统一折 USD 入表，与 CC/Codex 同口径（2026-06 近似汇率）
+_CNY_PER_USD = 7.1
+
+
+def _cny(input_m: float, output_m: float, cache_read_m: float | None = None) -> dict:
+    """人民币「元 / 百万 tokens」→ USD per token（÷汇率 ÷1e6）。国产模型按中国站人民币价折算。"""
+    info = {
+        "input_cost_per_token": input_m / _CNY_PER_USD * 1e-6,
+        "output_cost_per_token": output_m / _CNY_PER_USD * 1e-6,
+    }
+    if cache_read_m is not None:
+        info["cache_read_input_token_cost"] = cache_read_m / _CNY_PER_USD * 1e-6
+    return info
+
+
+def _usd(input_m: float, output_m: float, cache_read_m: float | None = None) -> dict:
+    """美元「$ / 百万 tokens」→ USD per token（÷1e6）。用于只有官方国际站 USD 价的模型。"""
+    info = {
+        "input_cost_per_token": input_m * 1e-6,
+        "output_cost_per_token": output_m * 1e-6,
+    }
+    if cache_read_m is not None:
+        info["cache_read_input_token_cost"] = cache_read_m * 1e-6
+    return info
+
 
 def _fallback_pricing() -> dict:
     return {
@@ -249,4 +289,47 @@ def _fallback_pricing() -> dict:
             "output_cost_per_token": 6e-6,
             "cache_read_input_token_cost": 0.375e-6,
         },
+        # ---- 国产模型（2026-06 官方核实）。除 GLM 用 z.ai 国际站 USD 外，其余按各家中国站
+        # 人民币价 ÷7.1 折算；阶梯定价模型（Qwen3-Coder / Doubao）统一取 0-32K 基础档。----
+        # Kimi / Moonshot（platform.kimi.com 官方人民币价；老 kimi-k2-instruct 已 EOL，靠系列兜底）
+        "kimi-k2.7-code": _cny(6.5, 27, 1.3),
+        "kimi-k2.6": _cny(6.5, 27, 1.1),
+        "kimi-k2.5": _cny(4, 21, 0.7),
+        "moonshot-v1-8k": _cny(2, 10),
+        "moonshot-v1-32k": _cny(5, 20),
+        "moonshot-v1-128k": _cny(10, 30),
+        # 智谱 GLM（z.ai 国际站官方 USD；中国站按量完整价含缓存无法从官方 SPA 取得，国内口径可能偏高）
+        "glm-4.6": _usd(0.6, 2.2, 0.11),
+        "glm-4.5": _usd(0.6, 2.2, 0.11),
+        "glm-4.5-air": _usd(0.2, 1.1, 0.03),
+        "glm-4.7": _usd(0.6, 2.2, 0.11),
+        "glm-5": _usd(1.0, 3.2, 0.2),
+        # 阿里 Qwen（中国站百炼人民币价，0-32K 基础档）
+        "qwen3-coder-plus": _cny(4, 16, 0.4),
+        "qwen-max": _cny(2.5, 10),
+        "qwen-plus": _cny(0.8, 2),
+        # 火山方舟 Doubao（中国站人民币价，0-32K 基础档）
+        "doubao-seed-1-6": _cny(0.8, 8),
+        "doubao-seed-code": _cny(1.2, 8),
+        "doubao-1-5-pro-32k": _cny(0.8, 2, 0.16),
+        "doubao-1-5-pro-256k": _cny(5, 9),
+        # DeepSeek（官方中国站人民币价；chat/reasoner 现映射 V4-Flash，2026-07-24 弃用旧名）
+        "deepseek-v4-flash": _cny(1, 2, 0.02),
+        "deepseek-v4-pro": _cny(3, 6, 0.025),
+        "deepseek-chat": _cny(1, 2, 0.02),
+        "deepseek-reasoner": _cny(1, 2, 0.02),
+        # MiniMax（官方 USD，与中国站÷7 自洽；M2/M2.1/M2.5 同价 legacy）
+        "MiniMax-M2": _usd(0.3, 1.2, 0.03),
+        "MiniMax-M2.1": _usd(0.3, 1.2, 0.03),
+        "MiniMax-M2.5": _usd(0.3, 1.2, 0.03),
+        "MiniMax-M2.7": _usd(0.3, 1.2, 0.06),
+        "MiniMax-M3": _usd(0.3, 1.2, 0.06),
+        # 小米 MiMo（mimo.mi.com 官方中国站人民币价；与 DeepSeek 同价，V2.5-Pro 主攻 agentic 编程）
+        "mimo-v2.5-pro": _cny(3, 6, 0.025),
+        "mimo-v2.5": _cny(1, 2, 0.02),
+        # xAI Grok（docs.x.ai 官方 USD）。2026-05-15 退役潮：grok-4-fast/4.1-fast/grok-3 路由到 grok-4.3，
+        # grok-code-fast-1 退役为 grok-build-0.1 别名（退役 slug 靠 _FAMILY_FALLBACK 接住）。grok-4.3 取 ≤200K 默认档。
+        "grok-4.3": _usd(1.25, 2.5, 0.2),
+        "grok-build-0.1": _usd(1.0, 2.0, 0.2),
+        "grok-code-fast-1": _usd(1.0, 2.0, 0.2),
     }
