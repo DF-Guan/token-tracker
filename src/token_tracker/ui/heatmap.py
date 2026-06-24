@@ -101,19 +101,8 @@ def _render_summary(stats: list[DailyStats], agents: list[str] | None,
         cur_m_avg = cur_m.cost_usd / max(1, elapsed_m)
         prev_m_avg = prev_m.cost_usd / max(1, _month_span(prev_m.month)[0]) if prev_m else None
         active_m = len({s.date for s in stats if s.date.startswith(cur_m.month)})
-        body_m = Text()
-        body_m.append("This Month", style=f"bold {_S.good}")
-        body_m.append(f"  {cur_m.month}", style=f"dim {_S.good}")
-        body_m.append("\n")
-        append_metric(body_m, "Tokens", _fmt_tokens(cur_m.total_tokens), _S.peach,
-                      cur_m.total_tokens, prev_m.total_tokens if prev_m else None)
-        body_m.append("   ")
-        append_metric(body_m, "Cost", _fmt_cost(cur_m.cost_usd), _S.peach,
-                      cur_m.cost_usd, prev_m.cost_usd if prev_m else None)
-        body_m.append("   ")
-        append_metric(body_m, "Avg/Cost", _fmt_cost(cur_m_avg), _S.peach, cur_m_avg, prev_m_avg)
-        body_m.append("   ")
-        append_metric(body_m, t("active_days"), f"{active_m}/{days_in_m}", _S.peach, active_m, None)
+        body_m = _period_section("This Month", cur_m.month, cur_m, prev_m,
+                                 cur_m_avg, prev_m_avg, f"{active_m}/{days_in_m}")
         parts.extend([Rule(style=_S.dim), body_m])
 
     # --- Section 3：This Week（Tokens / Cost / Avg/Cost 带环比 + 活跃天数 X/7） ---
@@ -126,25 +115,35 @@ def _render_summary(stats: list[DailyStats], agents: list[str] | None,
         cur_w_avg = cur_w.cost_usd / days_w
         prev_w_avg = prev_w.cost_usd / 7 if prev_w else None
         active_w = len({s.date for s in stats if s.date >= cur_w.week})
-        body_w = Text()
-        body_w.append("This Week", style=f"bold {_S.good}")
-        body_w.append(f"  {cur_w.week_start} ~ {cur_w.week_end}", style=f"dim {_S.good}")
-        body_w.append("\n")
-        append_metric(body_w, "Tokens", _fmt_tokens(cur_w.total_tokens), _S.peach,
-                      cur_w.total_tokens, prev_w.total_tokens if prev_w else None)
-        body_w.append("   ")
-        append_metric(body_w, "Cost", _fmt_cost(cur_w.cost_usd), _S.peach,
-                      cur_w.cost_usd, prev_w.cost_usd if prev_w else None)
-        body_w.append("   ")
-        append_metric(body_w, "Avg/Cost", _fmt_cost(cur_w_avg), _S.peach, cur_w_avg, prev_w_avg)
-        body_w.append("   ")
-        append_metric(body_w, t("active_days"), f"{active_w}/7", _S.peach, active_w, None)
+        body_w = _period_section("This Week", f"{cur_w.week_start} ~ {cur_w.week_end}",
+                                 cur_w, prev_w, cur_w_avg, prev_w_avg, f"{active_w}/7")
         parts.extend([Rule(style=_S.dim), body_w])
 
     get_console().print(Padding(Panel(Group(*parts),
                                       expand=False, border_style=_S.blue, padding=(0, 1)),
                                 (0, 0, 0, _INDENT), expand=False))
     get_console().print()
+
+
+def _period_section(title: str, subtitle: str,
+                    cur: WeeklyStats | MonthlyStats, prev: WeeklyStats | MonthlyStats | None,
+                    cur_avg: float, prev_avg: float | None, active_str: str) -> Text:
+    """This Month / This Week 段：标题 + 区间，单行橙色 Tokens/Cost/Avg/Cost（带环比）+ 活跃天数（不带环比）。
+    cur/prev 鸭子类型——Monthly/WeeklyStats 都有 total_tokens / cost_usd。"""
+    body = Text()
+    body.append(title, style=f"bold {_S.good}")
+    body.append(f"  {subtitle}", style=f"dim {_S.good}")
+    body.append("\n")
+    append_metric(body, "Tokens", _fmt_tokens(cur.total_tokens), _S.peach,
+                  cur.total_tokens, prev.total_tokens if prev else None)
+    body.append("   ")
+    append_metric(body, "Cost", _fmt_cost(cur.cost_usd), _S.peach,
+                  cur.cost_usd, prev.cost_usd if prev else None)
+    body.append("   ")
+    append_metric(body, "Avg/Cost", _fmt_cost(cur_avg), _S.peach, cur_avg, prev_avg)
+    body.append("   ")
+    append_metric(body, t("active_days"), active_str, _S.peach)
+    return body
 
 
 def _display_weeks() -> int:
