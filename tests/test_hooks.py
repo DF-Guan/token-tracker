@@ -80,6 +80,19 @@ def test_codex_statusline_install_uninstall_roundtrip(tmp_path, monkeypatch):
     assert "tt-statusline" not in removed and 'command = "mine"' in removed
 
 
+def test_codex_statusline_windows_path_toml_parses(tmp_path, monkeypatch):
+    # 回归：Windows 路径含 \U \A \P 等被 TOML basic string 当 unicode 转义起始符（issue 用户反馈）
+    # —— 写入的 command 必须用 literal string（单引号）包裹，写出来后能被 tomllib 原样解析回来。
+    import tomllib
+    monkeypatch.setattr(hooks, "CODEX_STATUSLINE_HOOK_PATH",
+                        r"C:\Users\test\.config\token-tracker\codex-statusline.py")
+    py = r"C:\Users\test\AppData\Local\Programs\Python\Python313\python.exe"
+    content = hooks._install_codex_statusline("", py)
+    parsed = tomllib.loads(content)  # 旧 bug：basic string 下 \U 等触发 TOML 解析错误
+    assert parsed["hooks"]["Stop"][0]["hooks"][0]["command"] == \
+        rf"{py} C:\Users\test\.config\token-tracker\codex-statusline.py"
+
+
 def test_codex_statusline_version_roundtrip(tmp_path, monkeypatch):
     # _installed_codex_statusline_version 读回的版本应与写入的 STATUSLINE_HOOK_VERSION 一致，
     # 保证 needs_update 不会因解析偏差而误判。

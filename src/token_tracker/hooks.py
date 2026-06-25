@@ -690,7 +690,8 @@ _CODEX_STATUSLINE_REGEX = re.compile(
     r'\n*\[\[hooks\.Stop\]\]\s*'
     r'\[\[hooks\.Stop\.hooks\]\]\s*'
     r'type = "command"\s*'
-    r'command = "[^"]*(?:codex-statusline|tt-statusline)[^"]*"\s*'
+    # command 兼容双引号 basic string（老用户已装）和单引号 literal string（修了 Windows 路径转义后的新装）
+    r'command = ["\'][^"\']*(?:codex-statusline|tt-statusline)[^"\']*["\']\s*'
     r'timeout = \d+\s*'
 )
 
@@ -712,7 +713,9 @@ def _install_codex_statusline(content: str, python: str) -> str:
         "\n\n[[hooks.Stop]]\n\n"
         "[[hooks.Stop.hooks]]\n"
         'type = "command"\n'
-        f'command = "{cmd}"\n'
+        # 用 TOML literal string（单引号）包裹 command，避免 Windows 反斜杠路径被当转义符
+        # 解析失败（如 `C:\Users\...` 里的 `\U` 被识别为 unicode 转义起始）
+        f"command = '{cmd}'\n"
         "timeout = 10\n"
     )
 
