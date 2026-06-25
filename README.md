@@ -13,7 +13,7 @@
 ## 功能亮点
 
 - **多 Agent 统一追踪** — Claude Code + Codex 统一读取，多 Agent 按来源分组
-- **状态栏集成** — Claude Code 用官方 StatusLine 接口；**Codex 业界首创伪 statusline 方案**（Stop hook 注入两行真彩色状态栏，把官方未开放的能力在 Codex 里做了出来）
+- **状态栏集成** — Claude Code 用官方 StatusLine 接口；**Codex 业界首创伪 statusline 方案**（hook 注入两行真彩色状态栏，把官方未开放的能力在 Codex 里做了出来）
 - **限额监控** — 实时 5h / 7d 配额百分比 + 重置倒计时
 - **多维成本分析** — 会话 / 日 / 周 / 月多维报表，等效成本统计
 - **定价识别** — litellm 在线定价 + 内置官方价双层兜底，覆盖 Claude / OpenAI / Gemini / Grok 及国产主流（Kimi / GLM / Qwen / 豆包 / DeepSeek / MiniMax / MiMo）；新模型自动套用同系列定价、不静默归零
@@ -74,7 +74,7 @@
 
 ### Codex（伪 statusline，业界首创）
 
-Codex 官方暂不支持自定义 StatusLine。Token Tracker 通过 Codex `Stop` hook 注入了一个**伪 statusline**——每次回答完成后，在回答尾部追加两行真彩色状态栏。**这是目前业界少见的把状态栏能力在 Codex 里做出来的实现方案**。
+Codex 官方暂不支持自定义 StatusLine。Token Tracker 通过 hook 注入了一个**伪 statusline**——每次回答完成后，在回答尾部追加两行真彩色状态栏。**这是目前业界少见的把状态栏能力在 Codex 里做出来的实现方案**。
 
 ![Codex StatusLine](assets/screenshot-statusline-codex.png)
 
@@ -83,7 +83,7 @@ Codex 官方暂不支持自定义 StatusLine。Token Tracker 通过 Codex `Stop`
 - **L1** `[项目](分支 +A -D) | Total: <会话累计 token> | Model: <模型 推理强度>` —— Total 橙、Model 红
 - **L2** `Limit: 5h <进度条> % (reset <倒计时>) | 7d <进度条> % (reset <倒计时>) | <窗口> Ctx <进度条> %`
 
-通过 `Stop` hook 注入 `systemMessage` 实现，渲染 24-bit 真彩色、**不进模型上下文**（实测），**配色跟随当前主题**（与 CLI 报表 / CC 状态栏同源，`tt theme` 切换三者一起变）。`tt unsetup` 一并移除。
+渲染 24-bit 真彩色、**不进模型上下文**（实测），**配色跟随当前主题**（与 CLI 报表 / CC 状态栏同源，`tt theme` 切换三者一起变）。`tt unsetup` 一并移除。
 
 ## 安装
 

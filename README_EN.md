@@ -13,7 +13,7 @@ Custom StatusLine integration + CLI Dashboard — see token usage, cost, and rat
 ## Highlights
 
 - **Unified multi-agent tracking** — Claude Code + Codex in one place, grouped by source
-- **Status line integration** — Claude Code via official StatusLine API; **Codex industry-first faux statusline** (Stop-hook injected two-line truecolor status — bringing an official-unsupported capability to Codex)
+- **Status line integration** — Claude Code via official StatusLine API; **Codex industry-first faux statusline** (hook-injected two-line truecolor status — bringing an official-unsupported capability to Codex)
 - **Rate limit monitoring** — real-time 5h / 7d quota usage with reset countdown
 - **Multi-dimensional cost analysis** — per-session, daily, weekly, monthly cost breakdown
 - **Pricing resolution** — litellm live pricing + built-in official-price fallback, covering Claude / OpenAI / Gemini / Grok and major Chinese models (Kimi / GLM / Qwen / Doubao / DeepSeek / MiniMax / MiMo); new family members auto-priced, never silently $0
@@ -74,7 +74,7 @@ Built on the Claude Code official custom StatusLine API — **all data comes dir
 
 ### Codex (faux statusline — industry-first)
 
-Codex doesn't yet support custom StatusLine. Token Tracker injects a **faux statusline** via a Codex `Stop` hook — after each turn completes, two truecolor status lines are appended to the response. **This is a rare implementation that brings a status line to Codex despite no official support.**
+Codex doesn't yet support custom StatusLine. Token Tracker injects a **faux statusline** via a hook — after each turn completes, two truecolor status lines are appended to the response. **This is a rare implementation that brings a status line to Codex despite no official support.**
 
 ![Codex StatusLine](assets/screenshot-statusline-codex.png)
 
@@ -83,7 +83,7 @@ Codex doesn't yet support custom StatusLine. Token Tracker injects a **faux stat
 - **L1** `[project](branch +A -D) | Total: <session tokens> | Model: <model reasoning>` — Total in orange, Model in red
 - **L2** `Limit: 5h <bar> % (reset <ttl>) | 7d <bar> % (reset <ttl>) | <window> Ctx <bar> %`
 
-Implemented via a `Stop` hook returning `systemMessage` — renders 24-bit truecolor, **does not enter the model context** (verified), and **follows the current theme** (same source as the CLI reports / CC status line; `tt theme` switches all three together). `tt unsetup` removes it.
+Renders 24-bit truecolor, **does not enter the model context** (verified), and **follows the current theme** (same source as the CLI reports / CC status line; `tt theme` switches all three together). `tt unsetup` removes it.
 
 ## Install
 
