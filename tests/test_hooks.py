@@ -86,6 +86,7 @@ def test_codex_statusline_windows_path_toml_parses(tmp_path, monkeypatch):
     import tomllib
     monkeypatch.setattr(hooks, "CODEX_STATUSLINE_HOOK_PATH",
                         r"C:\Users\test\.config\token-tracker\codex-statusline.py")
+    monkeypatch.setattr(hooks, "_write_codex_statusline_script", lambda: None)  # 别在 macOS 上真写 Windows 路径
     py = r"C:\Users\test\AppData\Local\Programs\Python\Python313\python.exe"
     content = hooks._install_codex_statusline("", py)
     parsed = tomllib.loads(content)  # 旧 bug：basic string 下 \U 等触发 TOML 解析错误
