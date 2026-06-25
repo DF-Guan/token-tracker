@@ -68,4 +68,3 @@ say "Configuring status bar..."
 
 say ""
 say "Done! Run 'tt' to start."
-say "Tip: to customize language / theme / components interactively, run 'tt setup' in a real terminal."
