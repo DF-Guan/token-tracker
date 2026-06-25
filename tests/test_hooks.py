@@ -80,6 +80,21 @@ def test_codex_statusline_install_uninstall_roundtrip(tmp_path, monkeypatch):
     assert "tt-statusline" not in removed and 'command = "mine"' in removed
 
 
+def test_codex_statusline_install_updates_stale_python(tmp_path, monkeypatch):
+    # 回归：用户升级 Python / 切换 conda/venv 后再跑 tt setup，
+    # 老的 codex-statusline 段被无脑幂等保留 → command 指向已死 python → 状态栏半残（issue 用户反馈）。
+    monkeypatch.setattr(hooks, "CODEX_STATUSLINE_HOOK_PATH", str(tmp_path / "codex-statusline.py"))
+    first = hooks._install_codex_statusline("", "/old/python")
+    assert "/old/python" in first
+    # 同 python 再装 → 幂等保持
+    assert hooks._install_codex_statusline(first, "/old/python") == first
+    # 换 python（用户升级了 Python / 切了环境）→ 必须重写、删旧段、装新段
+    second = hooks._install_codex_statusline(first, "/new/python")
+    assert "/new/python" in second
+    assert "/old/python" not in second  # 死路径清干净
+    assert second.count("[[hooks.Stop]]") == 1  # 没残留两段
+
+
 def test_codex_statusline_windows_path_toml_parses(tmp_path, monkeypatch):
     # 回归：Windows 路径含 \U \A \P 等被 TOML basic string 当 unicode 转义起始符（issue 用户反馈）
     # —— 写入的 command 必须用 literal string（单引号）包裹，写出来后能被 tomllib 原样解析回来。

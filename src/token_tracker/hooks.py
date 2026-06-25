@@ -702,13 +702,21 @@ def _has_tt_codex_statusline(content: str) -> bool:
 
 def _install_codex_statusline(content: str, python: str) -> str:
     """落盘 Codex statusline 脚本 + 在 config.toml 末尾追加 Stop hook 段。
-    新名（codex-statusline）已存在 → 幂等返回；只存在旧名（tt-statusline）→ 清掉后追加（迁移）。"""
+    - 新名 codex-statusline 段已存在 + python 路径一致 → 幂等返回；
+    - 已存在但 python 路径不一致（用户升级 Python / 切换 conda/venv / 卸载某环境后跑 tt setup）→ 删旧装新，
+      避免 command 指向已死 python（症状：脚本 import token_tracker 失败被 try/except 吞掉，状态栏只剩项目名）；
+    - 只存在旧名 tt-statusline → 清掉后追加新路径段（老用户迁移）。"""
     _write_codex_statusline_script()
-    if "codex-statusline" in content:
-        return content
-    if "tt-statusline" in content:  # 旧路径残留 → 清掉，下面追加新路径段
-        content = _CODEX_STATUSLINE_REGEX.sub("\n", content)
     cmd = f"{python} {CODEX_STATUSLINE_HOOK_PATH}"
+    if "codex-statusline" in content or "tt-statusline" in content:
+        # 从已有的 command 行提取 python 路径（兼容 basic / literal string 包裹）
+        m = re.search(
+            r"command = [\"']([^ ]+) [^\"']*(?:codex-statusline|tt-statusline)[^\"']*[\"']",
+            content,
+        )
+        if m and m.group(1) == python and "codex-statusline" in content:
+            return content  # python 一致 + 已是新名 → 幂等
+        content = _CODEX_STATUSLINE_REGEX.sub("\n", content)  # 路径不一致或老名残留 → 删旧段
     return content.rstrip() + (
         "\n\n[[hooks.Stop]]\n\n"
         "[[hooks.Stop.hooks]]\n"
