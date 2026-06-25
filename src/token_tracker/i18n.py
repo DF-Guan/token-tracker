@@ -98,7 +98,7 @@ _STRINGS = {
         "wizard_signoff": "祝你使用愉快",
         # --- hooks.py ---
         "no_agent_install": "未检测到 Claude Code 或 Codex，请先安装其中之一",
-        "auto_setup_hint": "非交互环境，已按默认（语言跟随系统 / 主题 mocha / 组件全开）配置；如需自定义请在终端运行 tt setup",
+        "auto_setup_hint": "非交互环境，已按默认（语言跟随系统 / 主题 mocha / 组件全开）配置\n如需自定义请在终端运行 tt setup",
         "first_setup": "首次使用，正在配置状态栏...",
         "cc_not_found": "未检测到 Claude Code，跳过",
         "codex_not_found": "未检测到 Codex，跳过",
@@ -213,7 +213,7 @@ _STRINGS = {
         "wizard_signoff": "Enjoy!",
         # --- hooks.py ---
         "no_agent_install": "Claude Code or Codex not detected, please install one first",
-        "auto_setup_hint": "Non-interactive env — configured with defaults (language follows system / theme mocha / all components on); run tt setup in a terminal to customize",
+        "auto_setup_hint": "Non-interactive env — configured with defaults (language follows system / theme mocha / all components on)\nRun tt setup in a terminal to customize",
         "first_setup": "First run, configuring status bar...",
         "cc_not_found": "Claude Code not detected, skipping",
         "codex_not_found": "Codex not detected, skipping",
