@@ -5,9 +5,11 @@
 
 ## 当前阶段
 
-`0.4.2` 已发布 PyPI（2026-06-24，https://pypi.org/project/token-tracker/0.4.2/ ），commit `2ec41d5` + 打了 `v0.4.2` tag（本地、未 push）。含三批改动：① `install.sh` tty 判定 fix（`400fb70`）；② 升级引导改「自动走一遍 setup」+ `SETUP_VERSION` bump 到 2（`da670e7`）；③ 国产模型识别 + cost（七家：Kimi/GLM/Qwen/Doubao/DeepSeek/MiniMax/MiMo）+ 国外补强（Grok 定价、Gemini 短名，`bceb903`）。**待 push**：main + `v0.4.1` / `v0.4.2` tag 均本地未 push（主人统一管控）。
+`0.4.3` 已发布 PyPI（2026-06-25，https://pypi.org/project/token-tracker/0.4.3/ ），commit `7c4bb7b` + 打了 `v0.4.3` tag（本地、待 push）。含五批改动：① **会话表精简**——`tt status` 底部 + `tt sessions` 共用的会话表删「活跃/时长」列、模型只显主力一个（连带删 `_fmt_session_duration` 函数 + `unit_hour` i18n 孤儿）；② **README 全套重构**——daily 截图置顶、StatusLine 章节提到报表速览前作为明星功能（突出 Codex 业界首创伪 statusline）、CC 四行字段表折叠 `<details>`、精简实现细节（去 Stop hook / systemMessage 等用户不必关心的字）、卸载说明精简到 `tt unsetup`、删开发 + TODO 段；8 张截图全部 256 色无损压缩（仓库截图体积约 -50%）+ 新增 sessions / themes 两张；③ **install.sh 修复 `curl|bash` 安装崩溃**——避开 prompt_toolkit upstream issue #1943（curl 管道 stdin + `< /dev/tty` 重定向触发 macOS kqueue `OSError [Errno 22]`），改为不重定向 stdin、走 `_auto_setup` 默认全装，配合 `auto_setup_hint` 换行 + 文案精简引导用户独立终端跑 `tt setup` 自定义；④ **CI 测试时区敏感修复**——`test_build_status_data_merges_and_per_agent` 用 `hours=2` 跨 UTC 凌晨被 today 过滤致 CI 间歇失败，改成 30~40 min（本地复现 + 验证）；⑤ **gitignore 补 `.mypy_cache/`/`.ruff_cache/`/coverage 产物/`*.log`**。
 
-`0.4.1` 已发布 PyPI（2026-06-23，https://pypi.org/project/token-tracker/0.4.1/ ），打了 `v0.4.1` tag（本地、未 push）。**注**：`0.4.0` 之前打过 tag 但实际上**已上 PyPI**（之前 ROADMAP 写错）。
+`0.4.2` 已发布 PyPI（2026-06-24，https://pypi.org/project/token-tracker/0.4.2/ ），commit `2ec41d5` + 打了 `v0.4.2` tag。含三批改动：① `install.sh` tty 判定 fix（`400fb70`）；② 升级引导改「自动走一遍 setup」+ `SETUP_VERSION` bump 到 2（`da670e7`）；③ 国产模型识别 + cost（七家：Kimi/GLM/Qwen/Doubao/DeepSeek/MiniMax/MiMo）+ 国外补强（Grok 定价、Gemini 短名，`bceb903`）。
+
+`0.4.1` 已发布 PyPI（2026-06-23，https://pypi.org/project/token-tracker/0.4.1/ ），打了 `v0.4.1` tag。**注**：`0.4.0` 之前打过 tag 但实际上**已上 PyPI**（之前 ROADMAP 写错）。
 
 ## 已完成（均已发布并验证）
 
