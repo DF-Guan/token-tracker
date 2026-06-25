@@ -22,24 +22,6 @@ Custom StatusLine integration + CLI Dashboard — see token usage, cost, and rat
 - **Zero config** — auto-detects installed agents, reads local data directly
 - **Privacy first** — all data stays local, no collection or upload
 
-## Reports at a Glance
-
-`tt status` — last-5h real-time panel (merged overview + 5h/7d quota + recent sessions)
-
-![Status](assets/screenshot.png)
-
-`tt weekly` — weekly report: this-week card + daily-trend bars + weekly / project / model trends
-
-![Weekly](assets/screenshot-weekly.png)
-
-`tt monthly` — monthly report: this-month card + weekly bars + monthly trend + project / model breakdown
-
-![Monthly](assets/screenshot-monthly.png)
-
-`tt sessions` — last 20 sessions sorted by cost (use `--sort` to change field)
-
-![Sessions](assets/screenshot-sessions.png)
-
 ## StatusLine
 
 `tt setup` auto-configures status lines for Claude Code and Codex, auto-upgraded when the script updates.
@@ -84,6 +66,24 @@ Codex doesn't yet support custom StatusLine. Token Tracker injects a **faux stat
 - **L2** `Limit: 5h <bar> % (reset <ttl>) | 7d <bar> % (reset <ttl>) | <window> Ctx <bar> %`
 
 Renders 24-bit truecolor, **does not enter the model context** (verified), and **follows the current theme** (same source as the CLI reports / CC status line; `tt theme` switches all three together). `tt unsetup` removes it.
+
+## Reports at a Glance
+
+`tt status` — last-5h real-time panel (merged overview + 5h/7d quota + recent sessions)
+
+![Status](assets/screenshot.png)
+
+`tt weekly` — weekly report: this-week card + daily-trend bars + weekly / project / model trends
+
+![Weekly](assets/screenshot-weekly.png)
+
+`tt monthly` — monthly report: this-month card + weekly bars + monthly trend + project / model breakdown
+
+![Monthly](assets/screenshot-monthly.png)
+
+`tt sessions` — last 20 sessions sorted by cost (use `--sort` to change field)
+
+![Sessions](assets/screenshot-sessions.png)
 
 ## Install
 
