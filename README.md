@@ -96,6 +96,13 @@ curl -sSL https://raw.githubusercontent.com/stormzhang/token-tracker/main/instal
 > **升级**：重跑上面的命令即可（脚本幂等、自动升到最新）。
 > **卸载**：`tt unsetup`
 
+**升级后 `tt --version` 还是旧版？** 多半是旧版装在别的 Python 环境里遮蔽了新版（常见于 Windows、或早期用 `pip install` 装过）。卸载旧版后重装一次即可：
+
+```bash
+pip uninstall token-tracker
+curl -sSL https://raw.githubusercontent.com/stormzhang/token-tracker/main/install.sh | bash
+```
+
 ## 使用
 
 ```bash

@@ -96,6 +96,13 @@ The script auto-picks the best install method (uv / pipx / private venv), sidest
 > **Upgrade**: re-run the command above (the script is idempotent and pulls the latest).
 > **Uninstall**: `tt unsetup`
 
+**Still on the old version after upgrading?** An old copy installed in another Python environment is likely shadowing the new one (common on Windows, or if you installed via `pip install` early on). Uninstall the old copy, then re-run the curl install once:
+
+```bash
+pip uninstall token-tracker
+curl -sSL https://raw.githubusercontent.com/stormzhang/token-tracker/main/install.sh | bash
+```
+
 ## Usage
 
 ```bash
