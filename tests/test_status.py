@@ -26,13 +26,14 @@ def test_build_status_data_merges_and_per_agent(monkeypatch):
     # 头图合并汇总 + per-agent 拆分 + session 合并带 agent_id 且按 cost 倒序（entries 给跨度，避免被 0min 过滤）。
     now = datetime.now(UTC)
     data_map = {
+        # 用「现在前 1 小时内」避免 UTC 凌晨跑 CI 时跨日被 _build_status_data 今天过滤掉
         "claude-code": [  # s1 跨度 10min
-            _entry("claude-code", "s1", "claude-opus-4-8", now - timedelta(hours=1), out=500),
-            _entry("claude-code", "s1", "claude-opus-4-8", now - timedelta(minutes=50), out=100),
+            _entry("claude-code", "s1", "claude-opus-4-8", now - timedelta(minutes=30), out=500),
+            _entry("claude-code", "s1", "claude-opus-4-8", now - timedelta(minutes=20), out=100),
         ],
         "codex": [  # s2 跨度 6min
-            _entry("codex", "s2", "gpt-5", now - timedelta(hours=2), out=20),
-            _entry("codex", "s2", "gpt-5", now - timedelta(hours=1, minutes=54), out=10),
+            _entry("codex", "s2", "gpt-5", now - timedelta(minutes=40), out=20),
+            _entry("codex", "s2", "gpt-5", now - timedelta(minutes=34), out=10),
         ],
     }
     monkeypatch.setattr(cli, "_load_entries", lambda aid, hours_back=0: data_map.get(aid, []))
