@@ -1,11 +1,22 @@
 __pycache__/
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 *.pyc
 *.pyo
 *.egg-info/
 dist/
 build/
 .venv/
+
+# 测试覆盖率产物
+.coverage
+htmlcov/
+coverage.xml
+
+# 本地日志
+*.log
+
 .env
 .env.local
 .env.*.local
