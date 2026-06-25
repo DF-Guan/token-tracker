@@ -57,16 +57,15 @@ case ":$PATH:" in
 esac
 
 # 跑配置向导：用 tt 绝对路径调，避免 PATH 尚未更新时 command not found。
-# 判定改用 `/dev/tty` 可读可写（真终端必然有、CI/Docker 没有），不依赖 `[ -t 1 ]`——
-# 后者在某些 shell / iTerm / 集成终端 + curl|bash 下会被误判为 false，导致 setup 收不到
-# tty stdin 走静默 _auto_setup、wizard 弹不起。
+# 不把 stdin 重定向到 /dev/tty——curl|bash 下 bash 没 controlling terminal，
+# 这种「pipe stdin → /dev/tty 重定向」会触发 prompt_toolkit issue #1943（kqueue
+# 注册 fd 失败 OSError [Errno 22]）。改用：让 tt setup 看到 non-tty stdin →
+# 自动走 _auto_setup 默认全装（语言跟随系统 / mocha / 组件全开），不崩。
+# 想自定义的用户末尾会看到明确提示，去独立终端跑 `tt setup` 即可。
 say ""
-if [ -r /dev/tty ] && [ -w /dev/tty ]; then
-    "$TT_BIN" setup < /dev/tty
-else
-    say "Configuring status bar..."
-    "$TT_BIN" setup
-fi
+say "Configuring status bar..."
+"$TT_BIN" setup
 
 say ""
 say "Done! Run 'tt' to start."
+say "Tip: to customize language / theme / components interactively, run 'tt setup' in a real terminal."
