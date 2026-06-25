@@ -45,16 +45,27 @@ else
     TT_BIN="$(command -v tt || echo "$HOME/.local/bin/tt")"
 fi
 
-# PATH 检测：tt 所在目录不在 PATH 就给出明确的一行修复命令（macOS 默认不含 ~/.local/bin）。
+# PATH 健康检查：当前 shell 解析到的 tt 是不是我们刚装的——不是的话给清晰指引。
+# 两种 case 都会让用户跑出旧版：
+#   1. PATH 不含装的目录（macOS 默认不含 ~/.local/bin）
+#   2. 另一个同名 tt 在 PATH 前面（最常见：conda/miniforge/system Python 里 pip 装过旧版本）
 TT_DIR="$(dirname "$TT_BIN")"
-case ":$PATH:" in
-    *":$TT_DIR:"*) ;;
-    *)
-        say ""
+ACTIVE_TT="$(command -v tt 2>/dev/null || true)"
+if [ "$ACTIVE_TT" != "$TT_BIN" ]; then
+    say ""
+    if [ -z "$ACTIVE_TT" ]; then
         say "Note: $TT_DIR is not on your PATH. Add this to ~/.zshrc (or ~/.bashrc), then restart your shell:"
         say "    export PATH=\"$TT_DIR:\$PATH\""
-        ;;
-esac
+    else
+        say "Warning: another 'tt' is shadowing the one we just installed."
+        say "    Active in shell : $ACTIVE_TT"
+        say "    Just installed  : $TT_BIN"
+        say ""
+        say "Likely cause: you previously installed token-tracker via pip in a Python env (conda / system / etc.)."
+        say "Uninstall the old one and reopen your shell:"
+        say "    pip uninstall token-tracker -y"
+    fi
+fi
 
 # 跑配置向导：用 tt 绝对路径调，避免 PATH 尚未更新时 command not found。
 # 不把 stdin 重定向到 /dev/tty——curl|bash 下 bash 没 controlling terminal，
