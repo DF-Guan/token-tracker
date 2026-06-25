@@ -8,19 +8,54 @@ Custom StatusLine integration + CLI Dashboard — see token usage, cost, and rat
 
 [中文](README.md)
 
+![Token Tracker Daily](assets/screenshot-daily.png)
+
+## Highlights
+
+- **Unified multi-agent tracking** — Claude Code + Codex in one place, grouped by source
+- **Status line integration** — Claude Code via official StatusLine API; **Codex industry-first faux statusline** (Stop-hook injected two-line truecolor status — bringing an official-unsupported capability to Codex)
+- **Rate limit monitoring** — real-time 5h / 7d quota usage with reset countdown
+- **Multi-dimensional cost analysis** — per-session, daily, weekly, monthly cost breakdown
+- **Pricing resolution** — litellm live pricing + built-in official-price fallback, covering Claude / OpenAI / Gemini / Grok and major Chinese models (Kimi / GLM / Qwen / Doubao / DeepSeek / MiniMax / MiMo); new family members auto-priced, never silently $0
+- **Session insights** — project, model, duration, message count per session
+- **Unified multi-theme** — 6 themes (Catppuccin family + Nord + Dracula) shared across CLI reports, the CC status line, and the Codex faux statusline; switch with `tt theme`
+- **Zero config** — auto-detects installed agents, reads local data directly
+- **Privacy first** — all data stays local, no collection or upload
+
+## Reports at a Glance
+
+`tt status` — last-5h real-time panel (merged overview + 5h/7d quota + recent sessions)
+
+![Status](assets/screenshot.png)
+
+`tt weekly` — weekly report: this-week card + daily-trend bars + weekly / project / model trends
+
+![Weekly](assets/screenshot-weekly.png)
+
+`tt monthly` — monthly report: this-month card + weekly bars + monthly trend + project / model breakdown
+
+![Monthly](assets/screenshot-monthly.png)
+
+`tt sessions` — last 20 sessions sorted by cost (use `--sort` to change field)
+
+![Sessions](assets/screenshot-sessions.png)
+
 ## StatusLine
 
 `tt setup` auto-configures status lines for Claude Code and Codex, auto-upgraded when the script updates.
 
-**Claude Code**: Built on the official custom StatusLine API — all data comes directly from local Claude, accurate with zero guesswork
+### Claude Code (official API)
+
+Built on the Claude Code official custom StatusLine API — **all data comes directly from local Claude, zero guesswork**.
 
 ![Claude Code StatusLine](assets/screenshot-statusline-cc.png)
 
-The status line has four rows, left to right:
+<details>
+<summary>Four-row layout field details</summary>
 
 | Row | Field | Description |
 |-----|-------|-------------|
-| 1 | `[project](branch +12 -3)` | Project name (bold) + Git branch (`*` = uncommitted), with added/removed lines vs HEAD in parentheses |
+| 1 | `[project](branch +12 -3)` | Project name (bold) + Git branch (`*` = uncommitted), with added/removed lines vs HEAD in parens |
 | 1 | `Total: 1.2M` | Cumulative tokens consumed this session (input+output+cache, parsed from transcript) |
 | 1 | `Cost: $35.51` | Session cost (from Claude Code itself, official billing, accurate) |
 | 1 | `Code: +208 -8` | Lines of code written / removed by Claude this session (`+` green `-` red, same as git diff) |
@@ -35,46 +70,20 @@ The status line has four rows, left to right:
 
 > When terminal width is limited, the display auto-degrades: first hides reset countdowns, then simplifies progress bars to plain percentages. **API mode** has no subscription quota, so row 2 shows only Ctx.
 
-**Codex**: Custom StatusLine rendering is not yet supported by Codex, so `tt setup` installs a **faux statusline** via a Codex `Stop` hook — **two** colored status lines appended after each turn completes, mirroring the Claude Code status line (it no longer touches Codex's official `status_line`; the faux statusline carries more than the official fields):
+</details>
+
+### Codex (faux statusline — industry-first)
+
+Codex doesn't yet support custom StatusLine. Token Tracker injects a **faux statusline** via a Codex `Stop` hook — after each turn completes, two truecolor status lines are appended to the response. **This is a rare implementation that brings a status line to Codex despite no official support.**
 
 ![Codex StatusLine](assets/screenshot-statusline-codex.png)
 
-**Faux statusline layout (two lines)**:
+**Two-line layout**:
 
 - **L1** `[project](branch +A -D) | Total: <session tokens> | Model: <model reasoning>` — Total in orange, Model in red
 - **L2** `Limit: 5h <bar> % (reset <ttl>) | 7d <bar> % (reset <ttl>) | <window> Ctx <bar> %`
 
 Implemented via a `Stop` hook returning `systemMessage` — renders 24-bit truecolor, **does not enter the model context** (verified), and **follows the current theme** (same source as the CLI reports / CC status line; `tt theme` switches all three together). `tt unsetup` removes it.
-
-## Daily Overview & Daily / Weekly / Monthly Reports
-
-`tt` (no args) / `tt daily`: the default entrypoint — GitHub-style token contribution heatmap + a top **single card** containing three stacked sections (**Last 12 months / This Month / This Week**, coarse → fine).
-- Last 12 months: orange Tokens / Cost / Sessions / Avg/Cost / Active Days + blue Daily Peak / Current·Longest Streak
-- This Month / This Week: orange Tokens / Cost / Avg/Cost / Active Days, with **delta vs prev month / week** (↑/↓)
-
-`tt status`: a **last-5-hours** real-time panel — top: multi-agent **merged** overview (Token / Cost / Sessions / Messages / Top Model); middle: **5h / 7d subscription quota** bars (Claude Code / Codex separately; when neither has a subscription quota, shows per-agent token/cost/sessions/messages instead); bottom: **recent sessions** (CC + Codex merged, with an Agent column, sorted by Cost desc, top-3 cost highlighted). All times use the **system timezone**; colors follow the current theme.
-
-![Token Tracker Daily](assets/screenshot-daily.png)
-
-![Token Tracker Status](assets/screenshot.png)
-
-![Token Tracker Weekly](assets/screenshot-weekly.png)
-
-![Token Tracker Monthly](assets/screenshot-monthly.png)
-
-![Token Tracker Sessions](assets/screenshot-sessions.png)
-
-## Features
-
-- **Multi-agent tracking** — Claude Code + Codex unified, grouped by source
-- **Status line integration** — Claude Code statusLine + Codex faux statusline, auto-configured on first run, auto-upgraded on script updates
-- **Rate limit monitoring** — real-time 5h / 7d quota usage with reset countdown
-- **Cost analysis** — per-session, daily, weekly, monthly cost breakdown with per-agent grouping
-- **Pricing resolution** — litellm live pricing with built-in official-price fallback, covering Claude / OpenAI / Gemini / Grok and major Chinese models (Kimi / GLM / Qwen / Doubao / DeepSeek / MiniMax / MiMo); new models in a known family are priced automatically (incl. Claude Fable 5 / Opus 4.8), and unknown models trigger an explicit warning instead of silently counting as $0
-- **Session insights** — project, model, duration, message count per session
-- **Unified multi-theme** — 6 themes (Catppuccin Mocha/Latte/Frappe/Macchiato + Nord + Dracula) shared across CLI reports, the CC status line, and the Codex faux statusline; switch/preview with `tt theme`, auto-pick Catppuccin by terminal light/dark, first-run wizard guides selection (override with `TT_THEME`); falls back to 256-color approximation when the terminal lacks truecolor
-- **Zero config** — auto-detects installed agents, reads local data directly
-- **Privacy first** — all data stays local, no collection or upload of any user information, lightweight and worry-free
 
 ## Install
 
@@ -91,12 +100,12 @@ The script auto-picks the best install method (uv / pipx / private venv), sidest
 
 ```bash
 tt setup          # interactive setup wizard (terminal: language / theme / components); auto full-install on non-tty
-tt                # last-12-months heatmap + top tri-section overview (Last 12 months / This Month / This Week, = tt daily)
+tt                # last-12-months heatmap + top tri-section overview (= tt daily)
 tt daily          # same (tt with no args enters daily)
-tt status         # last-5h real-time panel (merged overview + 5h/7d quota + recent sessions)
-tt weekly         # weekly report: this-week card + daily-trend bars + weekly / project / model trends
-tt monthly        # monthly summary (per-agent grouping)
-tt sessions       # last 20 session details
+tt status         # last-5h real-time panel
+tt weekly         # weekly report
+tt monthly        # monthly report
+tt sessions       # last 20 session details (tt sessions <n> to change count, --sort to change order)
 tt theme          # view / switch color theme (show / list / set / preview)
 tt unsetup        # uninstall and restore previous config
 tt --version      # show version (-v / -V)
@@ -104,17 +113,7 @@ tt --version      # show version (-v / -V)
 
 > 💡 `tt daily` is a GitHub-style token contribution heatmap (shaded green cells). In a Claude Code session, type `!tt daily` to see it in full color — commands you run yourself with `!` have their 24-bit true-color output rendered.
 
-### First-run wizard
-
-The first time you run `tt` (or right after the curl one-liner installer finishes), an **interactive wizard** kicks in — arrow keys to move, Enter to confirm:
-
-1. **Pick a language** — 中文 / English (saved to `~/.config/token-tracker/config.json`, applied to all commands)
-2. **Pick a color theme** — 6 themes with an inline color swatch on each option
-3. **Enable Codex faux statusline** — Yes/No, Yes by default (only when Codex is detected)
-
-A key-value config summary follows, with restart / next-step hints. CI / non-tty environments (Docker, scripts) auto-install with defaults: **language follows the system setting** (reads the OS language, not misled by the CLI's `LANG`), theme mocha, all components on. To change anything later, just run `tt setup` again (in a terminal, every `tt setup` enters the wizard).
-
-### Color Themes
+## Color Themes
 
 6 built-in themes, **shared** across CLI reports, the CC status line, and the Codex faux statusline (switching changes all three):
 
@@ -134,9 +133,20 @@ tt theme set nord      # switch theme (persist + re-bake status line)
 tt monthly --theme nord  # render any report in a theme temporarily (no persist, status line untouched)
 ```
 
-- **First run** (in a terminal, not inside an AI session) opens an interactive wizard to pick a theme; CI / scripts / in-session runs skip it silently and use the default.
-- Choice persists to `~/.config/token-tracker/config.json` (theme + language + component intent all in this one file); priority: `--theme` flag > `TT_THEME` env var > config file > auto (both `--theme` and `TT_THEME` are temporary and never written to config).
-- Truecolor terminals get exact colors; terminals without truecolor (e.g. macOS Terminal.app) fall back to a **256-color approximation** of the current theme; 8-color terminals are no longer targeted.
+- Choice persists to `~/.config/token-tracker/config.json`; priority: `--theme` flag > `TT_THEME` env var > config file > auto.
+- Truecolor terminals get exact colors; terminals without truecolor (e.g. macOS Terminal.app) fall back to a **256-color approximation**.
+
+## Advanced
+
+### First-run wizard
+
+The first time you run `tt` (or run `tt setup` in a standalone terminal), an **interactive wizard** kicks in — arrow keys to move, Enter to confirm:
+
+1. **Pick a language** — 中文 / English (saved to `~/.config/token-tracker/config.json`)
+2. **Pick a color theme** — 6 themes with an inline color swatch on each option
+3. **Enable Codex faux statusline** — Yes/No (only when Codex is detected)
+
+CI / non-tty environments (Docker / scripts / `curl|bash`) auto-install with defaults: **language follows the system setting**, theme mocha, all components on. To change anything later, just run `tt setup` again.
 
 ### Report Sorting
 
@@ -156,7 +166,7 @@ Available sort fields: `tokens` / `cost` / `messages` / `time` / `input` / `outp
 | Claude Code | `~/.claude/projects/*/` | JSONL (per-message usage) |
 | Codex | `~/.codex/sessions/` | JSONL + SQLite |
 
-Cross-platform paths: on Windows `~` resolves to `%USERPROFILE%` (e.g. `C:\Users\xxx\.claude`). Honors `CLAUDE_CONFIG_DIR` / `CODEX_HOME` (the official custom-directory env vars) when set.
+Cross-platform paths: on Windows `~` resolves to `%USERPROFILE%`. Honors `CLAUDE_CONFIG_DIR` / `CODEX_HOME` (the official custom-directory env vars) when set.
 
 Token Tracker is **read-only** — it never modifies any agent data.
 

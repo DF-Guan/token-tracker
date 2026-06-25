@@ -8,15 +8,50 @@
 
 [English](README_EN.md)
 
+![Token Tracker Daily](assets/screenshot-daily.png)
+
+## 功能亮点
+
+- **多 Agent 统一追踪** — Claude Code + Codex 统一读取，多 Agent 按来源分组
+- **状态栏集成** — Claude Code 用官方 StatusLine 接口；**Codex 业界首创伪 statusline 方案**（Stop hook 注入两行真彩色状态栏，把官方未开放的能力在 Codex 里做了出来）
+- **限额监控** — 实时 5h / 7d 配额百分比 + 重置倒计时
+- **多维成本分析** — 会话 / 日 / 周 / 月多维报表，等效成本统计
+- **定价识别** — litellm 在线定价 + 内置官方价双层兜底，覆盖 Claude / OpenAI / Gemini / Grok 及国产主流（Kimi / GLM / Qwen / 豆包 / DeepSeek / MiniMax / MiMo）；新模型自动套用同系列定价、不静默归零
+- **会话洞察** — 项目、模型、时长、消息数一览
+- **多主题统一配色** — 6 套主题（Catppuccin 全家 + Nord + Dracula），CLI 报表 / CC 状态栏 / Codex 伪 statusline **三者同源**，`tt theme` 一键切换
+- **零配置** — 自动检测已安装的 Agent，直接读取本地数据
+- **隐私安全** — 数据纯本地存储，不采集、不上传
+
+## 报表速览
+
+`tt status` — 过去 5h 实时面板（合并概览 + 5h/7d 额度 + 近期会话）
+
+![Status](assets/screenshot.png)
+
+`tt weekly` — 周报：本周分析卡片 + 每日趋势柱状图 + 周 / 项目 / 模型趋势
+
+![Weekly](assets/screenshot-weekly.png)
+
+`tt monthly` — 月报：本月分析卡片 + 周柱状图 + 月趋势 + 项目 / 模型分布
+
+![Monthly](assets/screenshot-monthly.png)
+
+`tt sessions` — 最近 20 条会话明细（按 cost 倒序，支持 `--sort` 改字段）
+
+![Sessions](assets/screenshot-sessions.png)
+
 ## StatusLine 状态栏
 
-自动为 Claude Code 和 Codex 配置状态栏，`tt setup` 一键配置，脚本更新时自动升级。
+`tt setup` 自动为 Claude Code 和 Codex 配置状态栏，脚本更新时自动升级。
 
-**Claude Code**：基于官方自定义 StatusLine 接口，数据完全来自本地 Claude，准确无任何推测
+### Claude Code（官方接口）
+
+基于 Claude Code 官方自定义 StatusLine 接口，**数据完全来自本地 Claude，无任何推测**。
 
 ![Claude Code StatusLine](assets/screenshot-statusline-cc.png)
 
-状态栏共四行，从左到右：
+<details>
+<summary>四行布局字段详解</summary>
 
 | 行 | 字段 | 说明 |
 |----|------|------|
@@ -35,46 +70,20 @@
 
 > 终端宽度不足时会自动降级：先隐藏重置倒计时，再将进度条简化为百分比数字。**API 模式**无订阅配额，第 2 行只显示 Ctx。
 
-**Codex**：官方暂不支持自定义 StatusLine，`tt setup` 通过 Codex `Stop` hook 装一个**伪 statusline**——每次回答完成后在回答尾部追加**两行**彩色 status，仿 Claude Code 状态栏（不再接管 Codex 官方 `status_line`，伪 statusline 信息比官方字段更全）：
+</details>
+
+### Codex（伪 statusline，业界首创）
+
+Codex 官方暂不支持自定义 StatusLine。Token Tracker 通过 Codex `Stop` hook 注入了一个**伪 statusline**——每次回答完成后，在回答尾部追加两行真彩色状态栏。**这是目前业界少见的把状态栏能力在 Codex 里做出来的实现方案**。
 
 ![Codex StatusLine](assets/screenshot-statusline-codex.png)
 
-**伪 statusline 两行布局**：
+**两行布局**：
 
 - **L1** `[项目](分支 +A -D) | Total: <会话累计 token> | Model: <模型 推理强度>` —— Total 橙、Model 红
 - **L2** `Limit: 5h <进度条> % (reset <倒计时>) | 7d <进度条> % (reset <倒计时>) | <窗口> Ctx <进度条> %`
 
 通过 `Stop` hook 注入 `systemMessage` 实现，渲染 24-bit 真彩色、**不进模型上下文**（实测），**配色跟随当前主题**（与 CLI 报表 / CC 状态栏同源，`tt theme` 切换三者一起变）。`tt unsetup` 一并移除。
-
-## Daily 概览和 日/周/月 数据报表分析
-
-`tt`（无参）/ `tt daily`：默认入口，GitHub 风格 token 贡献热力图 + 顶部**单一卡片**内拼三段概览（**Last 12 months / This Month / This Week**，粗→细）。
-- Last 12 months：橙色 Tokens / Cost / Sessions / Avg/Cost / 活跃天数 + 蓝色 单日峰值 / 当前·最长连续活跃天数
-- This Month / This Week：橙色 Tokens / Cost / Avg/Cost / 活跃天数，**带环比**（↑/↓ 上月 / 上周）
-
-`tt status`：聚焦**过去 5 小时**的实时面板——顶部多 Agent **合并**概览（Token / Cost / Sessions / Messages / Top Model），中间 **5h / 7d 订阅额度**进度条（Claude Code / Codex 分开；都没订阅额度时换成 per-agent 的 token/cost/sessions/messages 统计），底部**近期会话**列表（CC + Codex 合并、带 Agent 列、按 Cost 倒序、Cost 前三名高亮）。所有时间按**系统时区**显示，配色跟随当前主题。
-
-![Token Tracker Daily](assets/screenshot-daily.png)
-
-![Token Tracker Status](assets/screenshot.png)
-
-![Token Tracker Weekly](assets/screenshot-weekly.png)
-
-![Token Tracker Monthly](assets/screenshot-monthly.png)
-
-![Token Tracker Sessions](assets/screenshot-sessions.png)
-
-## 功能
-
-- **多 Agent 追踪** — Claude Code + Codex 统一读取，多 Agent 按来源分组展示
-- **状态栏集成** — Claude Code statusLine + Codex 伪 statusline，首次运行自动配置，脚本更新自动升级
-- **限额监控** — 实时 5h / 7d 配额百分比 + 重置倒计时
-- **成本分析** — 按会话、日、周、月维度的等效成本统计，多 Agent 按来源分组展示
-- **定价识别** — litellm 在线定价 + 内置官方价双层兜底，覆盖 Claude / OpenAI / Gemini / Grok 及国产主流（Kimi / GLM / Qwen / 豆包 / DeepSeek / MiniMax / MiMo）；同系列新模型自动套用本档定价（含 Claude Fable 5 / Opus 4.8），全新系列缺价时明确提示，不静默按 $0 统计
-- **会话洞察** — 项目、模型、时长、消息数一览
-- **多主题统一配色** — 6 套主题（Catppuccin Mocha/Latte/Frappe/Macchiato + Nord + Dracula），CLI 报表、CC 状态栏与 Codex 伪 statusline **三者同源**；`tt theme` 一键切换 / 预览，暗 / 亮终端自动选 Catppuccin，首次运行交互向导引导选择，`TT_THEME` 可覆盖；终端不支持 truecolor 时自动降级到 256 色近似
-- **零配置** — 自动检测已安装的 Agent，直接读取本地数据
-- **隐私安全** — 数据纯本地存储，不采集、不上传任何用户信息，极轻量无后顾之忧
 
 ## 安装
 
@@ -91,12 +100,12 @@ curl -sSL https://raw.githubusercontent.com/stormzhang/token-tracker/main/instal
 
 ```bash
 tt setup          # 交互配置向导（终端：上下键选语言 / 主题 / 各组件）；非 tty 环境自动全装
-tt                # 过去一年 token 热力图 + 顶部三段概览（Last 12 months / This Month / This Week，= tt daily）
+tt                # 过去一年 token 热力图 + 顶部三段概览（= tt daily）
 tt daily          # 同上（tt 无参即进 daily）
-tt status         # 过去 5h 实时面板（合并概览 + 5h/7d 额度 + 近期会话）
-tt weekly         # 周报：本周分析卡片 + 每日趋势柱状图 + 周 / 项目 / 模型趋势
-tt monthly        # 按月汇总（多 Agent 分组展示）
-tt sessions       # 最近 20 条会话明细（按 cost 倒序展示；tt sessions <n> 改条数、--sort 改排序）
+tt status         # 过去 5h 实时面板
+tt weekly         # 周报
+tt monthly        # 月报
+tt sessions       # 最近 20 条会话明细（tt sessions <n> 改条数、--sort 改排序）
 tt theme          # 查看 / 切换配色主题（show / list / set / preview）
 tt unsetup        # 卸载并恢复安装前的配置
 tt --version      # 查看版本（-v / -V 同义）
@@ -104,17 +113,7 @@ tt --version      # 查看版本（-v / -V 同义）
 
 > 💡 `tt daily` 是 GitHub 风格的 token 贡献热力图（深浅绿方格）。在 Claude Code 会话里输入 `!tt daily` 即可看到彩色热力图 —— 用户主动用 `!` 执行的命令，Claude Code 会渲染其 24-bit 真彩色输出。
 
-### 首次运行向导
-
-第一次跑 `tt`（或通过 curl 一键安装脚本装完自动启动）会进入**交互式配置向导**，全程上下键选 + 回车确认：
-
-1. **选语言** — 中文 / English（落 `~/.config/token-tracker/config.json`，之后所有命令跟随）
-2. **选配色主题** — 6 套主题上下键选择，每个选项右侧内联色板预览
-3. **启用 Codex 伪 statusline** — Yes/No，默认 Yes（仅检测到 Codex 时）
-
-选完给一份键值对齐的配置总结 + 重启 / 下一步提示。CI / 非 tty 环境（Docker / 脚本）自动按默认全装：**语言跟随系统设置**（读系统语言、不被 CLI 的 `LANG` 误导）、主题 mocha、组件全开。装好后想改任何一项，再跑一次 `tt setup` 即可（终端里每次 `tt setup` 都进向导）。
-
-### 配色主题
+## 配色主题
 
 内置 6 套主题，CLI 报表、CC 状态栏与 Codex 伪 statusline **统一同源**（切主题三者一起变）：
 
@@ -134,9 +133,20 @@ tt theme set nord      # 切换主题（持久化 + 重烘焙状态栏）
 tt monthly --theme nord  # 任意报表临时换主题渲染（不持久化、不动状态栏，适合对比）
 ```
 
-- **首次运行**（终端内、非 AI 会话）会进入交互向导引导选主题；CI / 脚本 / 会话内自动跳过、静默用默认。
-- 切换持久化到 `~/.config/token-tracker/config.json`（主题 + 语言 + 组件意图统一存这一个文件）；优先级 `--theme` 参数 > `TT_THEME` 环境变量 > 配置文件 > 自动（`--theme` 和 `TT_THEME` 都只临时生效、不写配置）。
-- 终端支持 truecolor 用精确配色；不支持的（如 macOS 自带 Terminal.app）自动降级到当前主题的 **256 色近似**，8 色老终端不再适配。
+- 切换持久化到 `~/.config/token-tracker/config.json`；优先级 `--theme` 参数 > `TT_THEME` 环境变量 > 配置文件 > 自动。
+- 终端支持 truecolor 用精确配色；不支持的（如 macOS 自带 Terminal.app）自动降级到 **256 色近似**。
+
+## 高级
+
+### 首次运行向导
+
+第一次跑 `tt`（或在独立终端跑 `tt setup`）会进入**交互式配置向导**，全程上下键选 + 回车确认：
+
+1. **选语言** — 中文 / English（落 `~/.config/token-tracker/config.json`）
+2. **选配色主题** — 6 套主题上下键选择，每个选项右侧内联色板预览
+3. **启用 Codex 伪 statusline** — Yes/No（仅检测到 Codex 时）
+
+CI / 非 tty 环境（Docker / 脚本 / `curl|bash`）自动按默认全装：**语言跟随系统设置**、主题 mocha、组件全开。装好后想改任何一项，再跑一次 `tt setup` 即可。
 
 ### 报告排序
 
@@ -156,7 +166,7 @@ tt sessions --sort tokens --asc # 按 token 升序
 | Claude Code | `~/.claude/projects/*/` | JSONL（逐消息用量） |
 | Codex | `~/.codex/sessions/` | JSONL + SQLite |
 
-路径跨平台：Windows 下 `~` 解析到 `%USERPROFILE%`（如 `C:\Users\xxx\.claude`）。设了 `CLAUDE_CONFIG_DIR` / `CODEX_HOME` 环境变量（官方支持的自定义目录）时自动跟随。
+路径跨平台：Windows 下 `~` 解析到 `%USERPROFILE%`。设了 `CLAUDE_CONFIG_DIR` / `CODEX_HOME` 环境变量（官方支持的自定义目录）时自动跟随。
 
 Token Tracker 对 Agent 数据**只读**，不做任何修改。
 
