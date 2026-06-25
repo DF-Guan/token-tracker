@@ -94,7 +94,7 @@ curl -sSL https://raw.githubusercontent.com/stormzhang/token-tracker/main/instal
 脚本自动选最优安装方式（uv / pipx / 私有 venv），绕开 PEP 668、不污染系统 Python。
 
 > **升级**：重跑上面的命令即可（脚本幂等、自动升到最新）。
-> **卸载**：先 `tt unsetup` 还原状态栏，再按装法移除（`uv tool uninstall token-tracker` / `pipx uninstall token-tracker` / 删 `~/.local/share/token-tracker` 与 `~/.local/bin/tt`）。
+> **卸载**：`tt unsetup`
 
 ## 使用
 

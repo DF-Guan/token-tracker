@@ -94,7 +94,7 @@ curl -sSL https://raw.githubusercontent.com/stormzhang/token-tracker/main/instal
 The script auto-picks the best install method (uv / pipx / private venv), sidesteps PEP 668, and never pollutes system Python.
 
 > **Upgrade**: re-run the command above (the script is idempotent and pulls the latest).
-> **Uninstall**: run `tt unsetup` first to restore the status bar, then remove according to install method (`uv tool uninstall token-tracker` / `pipx uninstall token-tracker` / delete `~/.local/share/token-tracker` and `~/.local/bin/tt`).
+> **Uninstall**: `tt unsetup`
 
 ## Usage
 
