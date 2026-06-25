@@ -175,20 +175,6 @@ Token Tracker 对 Agent 数据**只读**，不做任何修改。
 - Python 3.11+
 - [Rich](https://github.com/Textualize/rich)（自动安装）
 
-## 开发
-
-```bash
-git clone https://github.com/stormzhang/token-tracker && cd token-tracker
-uv run --extra dev pytest                # 运行测试
-uv run --extra dev ruff check src tests  # Lint
-```
-
-包采用标准 src layout（`src/token_tracker/`）：发行名 `token-tracker`，导入名 `token_tracker`（0.4.0 起）。
-
-## TODO
-
-未来持续增加更多数据报表，多维度分析。
-
 ## License
 
 Copyright (c) 2026 stormzhang. MIT License.

@@ -175,20 +175,6 @@ Token Tracker is **read-only** — it never modifies any agent data.
 - Python 3.11+
 - [Rich](https://github.com/Textualize/rich) (auto-installed)
 
-## Development
-
-```bash
-git clone https://github.com/stormzhang/token-tracker && cd token-tracker
-uv run --extra dev pytest                # run tests
-uv run --extra dev ruff check src tests  # lint
-```
-
-The package uses the standard src layout (`src/token_tracker/`): distribution name `token-tracker`, import name `token_tracker` (since 0.4.0).
-
-## TODO
-
-More reports and multi-dimensional analysis coming soon.
-
 ## License
 
 Copyright (c) 2026 stormzhang. MIT License.
