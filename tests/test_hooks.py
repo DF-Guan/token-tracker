@@ -229,6 +229,12 @@ def test_statusline_shows_git_diff_stat(tmp_path):
     line_dirty = _run_statusline(script_path, repo)
     assert "+2" in line_dirty and "-1" in line_dirty
 
+    # 再造 2 个未跟踪文件 → 应额外显示 ?2（按文件数计、不读行数）
+    (repo / "new1.txt").write_text("x\n")
+    (repo / "new2.txt").write_text("x\ny\n")
+    line_with_untracked = _run_statusline(script_path, repo)
+    assert "?2" in line_with_untracked
+
 
 def _run_statusline_home(script_path, payload, home):
     """隔离 HOME 下跑落盘 statusline 脚本，返回完整 stdout（不污染真实 ~/.claude）。"""

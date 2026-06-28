@@ -36,8 +36,8 @@ CODEX_DIR = _CODEX
 CODEX_CONFIG = os.path.join(CODEX_DIR, "config.toml")     # 改 Codex 配置，留 agent 目录
 CODEX_STATUSLINE_HOOK_PATH = os.path.join(_TT, "codex-statusline.py")
 STATUS_FILE = os.path.join(_TT, "tt-status.json")         # CC statusline 缓存（脚本写、tt status 读）
-HOOK_VERSION = "1.7"
-STATUSLINE_HOOK_VERSION = "1.0"
+HOOK_VERSION = "1.8"
+STATUSLINE_HOOK_VERSION = "1.1"
 
 CC_BACKUP_PATH = os.path.join(_TT, "cc-backup.json")
 CODEX_BACKUP_LEGACY = os.path.join(_TT, "codex-backup.json")  # 老用户残留，unsetup 时还能恢复
@@ -150,25 +150,35 @@ def git_branch(cwd):
 
 
 def git_diff_stat(cwd):
-    """相对 HEAD 的未提交增删行数（暂存+未暂存，不含未跟踪文件）。失败/无 commit 返回 (0, 0)。"""
+    """相对 HEAD 的未提交增删行数 + 未跟踪文件数（已跟踪改动按行、未跟踪按文件计数）。
+    失败/无 commit 返回 (0, 0, 0)。"""
+    added = deleted = 0
     try:
         out = subprocess.check_output(
             ["git", "diff", "HEAD", "--numstat"], cwd=cwd,
             stderr=subprocess.DEVNULL, text=True, timeout=2,
         )
+        for line in out.splitlines():
+            parts = line.split("\t")
+            if len(parts) < 2:
+                continue
+            a, d = parts[0], parts[1]
+            if a.isdigit():
+                added += int(a)
+            if d.isdigit():
+                deleted += int(d)
     except Exception:
-        return 0, 0
-    added = deleted = 0
-    for line in out.splitlines():
-        parts = line.split("\t")
-        if len(parts) < 2:
-            continue
-        a, d = parts[0], parts[1]
-        if a.isdigit():
-            added += int(a)
-        if d.isdigit():
-            deleted += int(d)
-    return added, deleted
+        pass
+    untracked = 0
+    try:
+        out = subprocess.check_output(
+            ["git", "ls-files", "--others", "--exclude-standard"], cwd=cwd,
+            stderr=subprocess.DEVNULL, text=True, timeout=2,
+        )
+        untracked = sum(1 for ln in out.splitlines() if ln.strip())
+    except Exception:
+        pass
+    return added, deleted, untracked
 
 
 def save_data(data, now):
@@ -267,11 +277,13 @@ def render(data, now, tps=None):
         branch = git_branch(project)
         if branch:
             inner = f"{C['branch']}{branch}{C['reset']}"
-            added, deleted = git_diff_stat(project)
+            added, deleted, untracked = git_diff_stat(project)
             if added:
                 inner += f" {C['added']}+{added}{C['reset']}"
             if deleted:
                 inner += f" {C['deleted']}-{deleted}{C['reset']}"
+            if untracked:
+                inner += f" {C['untracked']}?{untracked}{C['reset']}"
             line1.append(f"\033[1m{C['project']}[{name}]{C['reset']}({inner})")
         else:
             line1.append(f"\033[1m{C['project']}[{name}]{C['reset']}")
@@ -528,9 +540,10 @@ def _ctx_pct(info):
 
 
 def _git_status(cwd):
-    """(branch, +A, -D)；失败/非 git/无 commit 返回 ("", 0, 0)。"""
+    """(branch, +A, -D, ?U)；已跟踪改动按行、未跟踪按文件计数。
+    失败/非 git/无 commit 返回 ("", 0, 0, 0)。"""
     if not cwd:
-        return "", 0, 0
+        return "", 0, 0, 0
 
     def run(args):
         return subprocess.check_output(
@@ -540,9 +553,9 @@ def _git_status(cwd):
     try:
         branch = run(["branch", "--show-current"])
     except Exception:
-        return "", 0, 0
+        return "", 0, 0, 0
     if not branch:
-        return "", 0, 0
+        return "", 0, 0, 0
     try:
         if run(["status", "--porcelain", "--untracked-files=no"]):
             branch += "*"
@@ -559,14 +572,19 @@ def _git_status(cwd):
                     d += int(parts[1])
     except Exception:
         pass
-    return branch, a, d
+    u = 0
+    try:
+        u = sum(1 for ln in run(["ls-files", "--others", "--exclude-standard"]).splitlines() if ln.strip())
+    except Exception:
+        pass
+    return branch, a, d, u
 
 
 def _render_project(cwd):
     if not cwd:
         return ""
     name = os.path.basename(cwd.rstrip("/"))
-    branch, a, d = _git_status(cwd)
+    branch, a, d, u = _git_status(cwd)
     if not branch:
         return f"{BOLD}{C['project']}[{name}]{RST}"
     inner = f"{C['branch']}{branch}{RST}"
@@ -574,6 +592,8 @@ def _render_project(cwd):
         inner += f" {C['added']}+{a}{RST}"
     if d:
         inner += f" {C['deleted']}-{d}{RST}"
+    if u:
+        inner += f" {C['untracked']}?{u}{RST}"
     return f"{BOLD}{C['project']}[{name}]{RST}({inner})"
 
 
@@ -614,7 +634,8 @@ def main():
         line1.append(f"{C['tokens']}Total: {fmt_tokens(total)}{RST}")  # 整体取 tokens 槽（mocha=peach/橙）
     model = model or payload.get("model") or ""  # session turn_context 的 model（gpt-5.5）优先
     if model:
-        label = f"{model} {effort}" if effort else model
+        # effort 缺失时显示 default（Codex 默认 reasoning level），与 TUI 的 Current reasoning level 对齐
+        label = f"{model} {effort or 'default'}"
         line1.append(f"{C['total']}Model: {label}{RST}")  # 整体取 total 槽（mocha=red/红）
 
     # L2: Limit: 5h | 7d | <window> Ctx（仿 CC statusline，带进度条 + reset）

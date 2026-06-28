@@ -2,7 +2,7 @@
 
 每个主题只定义 **9 个基色**（沿用 Catppuccin 的槽位命名）+ 是否浅色 + 5 档热力渐变；
 - 17 个 CLI 语义槽由 `derive_slots()` 统一派生（`token=sapphire`、`cost=yellow`…）；
-- statusline 的 12 个 key 由 `_STATUSLINE_SLOTS` 映射到这 9 槽的子集。
+- statusline 的 13 个 key 由 `_STATUSLINE_SLOTS` 映射到这 9 槽的子集。
 
 颜色取值：Catppuccin（mocha/latte/frappe/macchiato）用官方 hex；Nord / Dracula 按色相
 就近映射到这 9 槽。truecolor 终端用精确 hex，不支持 truecolor 的降级到 **256 色近似**
@@ -77,15 +77,17 @@ THEMES: dict[str, dict] = {
 # 展示顺序（tt theme list / 向导）。
 THEME_NAMES = tuple(THEMES)
 
-# statusline 12 个着色 key → 9 基色槽（reset 固定为 \033[0m，单列）。
+# statusline 13 个着色 key → 9 基色槽（reset 固定为 \033[0m，单列）。
 # 这套角色映射沿用旧 mocha 状态栏观感（分支红/玫红、标签粉、Tokens 桃、Model/Duration 蓝），
 # 与 CLI 报表的 _S 语义槽**不完全同源**（CLI token=sapphire 青）——按主人审美选择保留状态栏旧手感。
 # total=red 红：第 1 行消耗/产出指标（Total/Cost/Code 标签）用它。
+# untracked=mauve 紫：git 段未跟踪文件数 ?N，独占一色与 +A(绿)/-D(红) 区分。
 _STATUSLINE_SLOTS = {
     "project": "green",
     "branch": "red",
     "added": "green",
     "deleted": "red",
+    "untracked": "mauve",
     "label": "pink",
     "bar_ok": "green",
     "bar_warn": "yellow",
