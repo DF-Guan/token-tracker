@@ -820,6 +820,30 @@ def _is_tt_cc_command(cmd: str) -> bool:
     return "claude-statusline" in cmd or "tt-statusline" in cmd
 
 
+def _build_cc_command(python: str, script: str) -> str:
+    """拼 statusLine command 字符串。
+    Windows: 反斜杠转正斜杠（CC 在 Windows 走 Git Bash/sh 执行 command，反斜杠被吞致 exit 127）；
+    所有平台: 两段路径都加双引号包裹（防路径含空格断词）。
+    issue #13 / #14 根治：旧格式 `f"{python} {script}"` 在 Windows 静默失败、状态栏空白。"""
+    if os.name == "nt":
+        python = python.replace("\\", "/")
+        script = script.replace("\\", "/")
+    return f'"{python}" "{script}"'
+
+
+def _cc_command_outdated(cmd: str) -> bool:
+    """settings.json 里 tt 的 statusLine.command 是否还是旧格式（裸拼接 / 含反斜杠）。
+    新格式：两段路径都用 `"` 包裹 + Windows 上路径必须正斜杠。
+    仅对 tt 的 command 生效（_is_tt_cc_command 已先过滤），用户原 command 不动。"""
+    if not cmd:
+        return False
+    if not cmd.startswith('"'):
+        return True  # 没引号 = 旧裸拼接
+    if os.name == "nt" and "\\" in cmd:
+        return True  # Windows 上还含反斜杠 = 没转过来
+    return False
+
+
 def _write_cc_statusline_script() -> None:
     """渲染并落盘 CC statusline 脚本（mkdir + 执行权限）。"""
     os.makedirs(_TT, exist_ok=True)
@@ -840,12 +864,45 @@ def _migrate_legacy() -> None:
                 pass
 
 
+def _cc_command_needs_sync() -> bool:
+    """检测 settings.json 里 tt 的 statusLine.command 是否需要重写为新格式（issue #13/#14）。
+    用户原 command（非 tt）一律不动。"""
+    if not os.path.exists(CLAUDE_SETTINGS):
+        return False
+    try:
+        with open(CLAUDE_SETTINGS, encoding="utf-8") as f:
+            settings = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return False
+    cmd = (settings.get("statusLine") or {}).get("command") or ""
+    if not _is_tt_cc_command(cmd):
+        return False
+    return _cc_command_outdated(cmd)
+
+
+def _sync_cc_command() -> None:
+    """重写 settings.json 里 tt 的 statusLine.command 字段（保留其它字段不动）。"""
+    try:
+        with open(CLAUDE_SETTINGS, encoding="utf-8") as f:
+            settings = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return
+    if not _is_tt_cc_command((settings.get("statusLine") or {}).get("command") or ""):
+        return
+    python = sys.executable or "python3"
+    settings["statusLine"] = {"type": "command", "command": _build_cc_command(python, HOOK_SCRIPT_PATH)}
+    with open(CLAUDE_SETTINGS, "w", encoding="utf-8") as f:
+        json.dump(settings, f, indent=2, ensure_ascii=False)
+
+
 def needs_update() -> bool:
     # 只在已安装（新位置脚本文件存在）时纳入版本判断，未装不主动装
     if os.path.exists(HOOK_SCRIPT_PATH) and _installed_hook_version() != HOOK_VERSION:
         return True
     sv = _installed_codex_statusline_version()
-    return sv is not None and sv != STATUSLINE_HOOK_VERSION
+    if sv is not None and sv != STATUSLINE_HOOK_VERSION:
+        return True
+    return _cc_command_needs_sync()  # settings.json 里 command 格式过时也算待更新（issue #13/#14）
 
 
 def update_hook() -> None:
@@ -853,6 +910,8 @@ def update_hook() -> None:
         _write_cc_statusline_script()
     if _installed_codex_statusline_version() is not None:
         _write_codex_statusline_script()
+    if _cc_command_needs_sync():
+        _sync_cc_command()
 
 
 # --- setup ---
@@ -924,7 +983,7 @@ def _setup_claude(quiet: bool = False) -> None:
             json.dump({"statusLine": existing}, f, indent=2)
 
     python = sys.executable or "python3"
-    settings["statusLine"] = {"type": "command", "command": f"{python} {HOOK_SCRIPT_PATH}"}
+    settings["statusLine"] = {"type": "command", "command": _build_cc_command(python, HOOK_SCRIPT_PATH)}
 
     with open(CLAUDE_SETTINGS, "w", encoding="utf-8") as f:
         json.dump(settings, f, indent=2, ensure_ascii=False)

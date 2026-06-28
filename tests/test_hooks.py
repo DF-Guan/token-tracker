@@ -144,8 +144,8 @@ def test_setup_components_off_skips_install(tmp_path, monkeypatch):
 
     hooks.setup(components=hooks.SetupComponents(codex_faux_statusline=False))
 
-    # CC statusline 仍装
-    assert json.loads(settings_path.read_text())["statusLine"]["command"].endswith("tt-statusline.py")
+    # CC statusline 仍装（command 现在带引号包裹，issue #13 修复）
+    assert json.loads(settings_path.read_text())["statusLine"]["command"].endswith('tt-statusline.py"')
     # Codex 端：不再动 [tui].status_line（保持用户原配置）；Stop hook（tt-statusline）也不在 config 里
     codex_content = codex_config.read_text()
     assert "status_line = []" in codex_content  # 用户原 status_line 没被动
@@ -486,3 +486,77 @@ def test_cli_setup_up_to_date_skips_flow(monkeypatch, tmp_path):
 
     cli.main()
     assert calls == {}
+
+
+def test_build_cc_command_windows_quotes_and_slashes(monkeypatch):
+    # issue #13/#14：Windows 上 statusLine command 必须正斜杠 + 引号包裹，
+    # 否则 CC 走 Git Bash 执行时反斜杠被吞，状态栏静默空白。
+    monkeypatch.setattr(hooks.os, "name", "nt")
+    cmd = hooks._build_cc_command(
+        r"C:\Users\X\pipx\venvs\token-tracker\Scripts\python.exe",
+        r"C:\Users\X\.config\token-tracker\claude-statusline.py",
+    )
+    assert cmd == '"C:/Users/X/pipx/venvs/token-tracker/Scripts/python.exe" "C:/Users/X/.config/token-tracker/claude-statusline.py"'
+    assert "\\" not in cmd  # 反斜杠全转完
+    assert cmd.count('"') == 4  # 两段路径各包一对引号
+
+
+def test_build_cc_command_unix_always_quoted(monkeypatch):
+    # Unix 平台不转换路径分隔符，但始终加引号（防路径含空格断词）。
+    monkeypatch.setattr(hooks.os, "name", "posix")
+    cmd = hooks._build_cc_command(
+        "/Users/John Doe/.local/share/uv/tools/token-tracker/bin/python3",
+        "/Users/John Doe/.config/token-tracker/claude-statusline.py",
+    )
+    assert cmd.startswith('"') and cmd.count('"') == 4
+    assert "John Doe" in cmd  # 含空格路径被引号包住、能正确执行
+
+
+def test_cc_command_outdated_detects_legacy_format(monkeypatch):
+    # 旧格式（裸拼接、无引号）应被检测为过时；新格式不动。
+    monkeypatch.setattr(hooks.os, "name", "posix")
+    assert hooks._cc_command_outdated("/usr/bin/python3 /home/u/.config/token-tracker/claude-statusline.py")
+    assert not hooks._cc_command_outdated('"/usr/bin/python3" "/home/u/.config/token-tracker/claude-statusline.py"')
+    # Windows 上即便有引号，含反斜杠也算过时
+    monkeypatch.setattr(hooks.os, "name", "nt")
+    assert hooks._cc_command_outdated(r'"C:\Users\X\python.exe" "C:\Users\X\claude-statusline.py"')
+    assert not hooks._cc_command_outdated('"C:/Users/X/python.exe" "C:/Users/X/claude-statusline.py"')
+    # 空命令 / 非 tt 命令交给上层 _is_tt_cc_command 过滤；这里仅断言空串返回 False
+    assert not hooks._cc_command_outdated("")
+
+
+def test_update_hook_rewrites_outdated_cc_command(tmp_path, monkeypatch):
+    # 老用户场景：HOOK_SCRIPT_PATH 存在 + settings.json 里 command 是旧格式 →
+    # 跑任意 tt 命令触发 update_hook 自动重写为新格式（用户其它字段不动）。
+    settings_file = tmp_path / "settings.json"
+    script_file = tmp_path / "claude-statusline.py"
+    script_file.write_text(hooks._render_hook_script(), encoding="utf-8")
+    settings_file.write_text(json.dumps({
+        "statusLine": {"type": "command",
+                       "command": "/old/python3 /old/path/claude-statusline.py"},
+        "userField": "keep me",
+    }), encoding="utf-8")
+    monkeypatch.setattr(hooks, "CLAUDE_SETTINGS", str(settings_file))
+    monkeypatch.setattr(hooks, "HOOK_SCRIPT_PATH", str(script_file))
+    monkeypatch.setattr(hooks.sys, "executable", "/new/python3")
+    monkeypatch.setattr(hooks.os, "name", "posix")
+
+    assert hooks._cc_command_needs_sync()  # 检测到过时
+    hooks.update_hook()
+    new_settings = json.loads(settings_file.read_text(encoding="utf-8"))
+    assert new_settings["statusLine"]["command"].startswith('"/new/python3"')
+    assert new_settings["userField"] == "keep me"  # 用户其它字段保留
+    assert not hooks._cc_command_needs_sync()  # 重写后不再触发
+
+
+def test_cc_command_sync_skips_non_tt_command(tmp_path, monkeypatch):
+    # 用户自己的 statusLine（非 tt）即便没引号也不动——只管 tt 自己装的。
+    settings_file = tmp_path / "settings.json"
+    user_cmd = "/usr/bin/my-own-statusline --foo"
+    settings_file.write_text(json.dumps({
+        "statusLine": {"type": "command", "command": user_cmd},
+    }), encoding="utf-8")
+    monkeypatch.setattr(hooks, "CLAUDE_SETTINGS", str(settings_file))
+    assert not hooks._cc_command_needs_sync()
+    hooks._sync_cc_command()  # no-op
+    assert json.loads(settings_file.read_text(encoding="utf-8"))["statusLine"]["command"] == user_cmd
