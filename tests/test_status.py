@@ -101,6 +101,32 @@ def test_render_status_with_limits(monkeypatch):
     assert "Claude" in out and "Codex" in out  # session Agent 列（短名 Claude / Codex）
 
 
+def test_render_status_expired_reset_shows_dash(monkeypatch):
+    # 久没用 → window 已滚但本次启动没拿到新 rate_limits（normalize_pct 把 pct 归零成 0.0、resets_at 保留旧值）。
+    # 旧逻辑会显示「reset at 09:49」误导用户当成未来时间；新逻辑显示 `reset --` 让用户明白这是旧数据，
+    # 并保留这行让订阅用户能识别自己是订阅套餐（避免误以为切了 API 计费）。
+    monkeypatch.setattr("token_tracker.ui.status.forced_color_console", contextlib.nullcontext)
+    now = datetime.now(UTC)
+    summary = StatusSummary(total_tokens=0, cost_usd=0.0, session_count=0)
+    past_5h = int((now - timedelta(hours=10)).timestamp())   # 5h window 早过期
+    past_7d = int((now - timedelta(days=2)).timestamp())     # 7d window 也过期
+    rl = {"claude-code": RateLimits(
+        five_hour_pct=0.0, five_hour_resets_at=past_5h,
+        seven_day_pct=0.0, seven_day_resets_at=past_7d,
+        model="Opus 4.8",
+    )}
+    per_agent = {"claude-code": StatusSummary(total_tokens=0, cost_usd=0.0)}
+
+    with capture_console(160) as buf:
+        render_status(summary, per_agent, rl, [], ["Claude Code"])
+    out = buf.getvalue()
+
+    assert "Rate Limits" in out                # 整段保留（让订阅用户能识别）
+    assert "5h" in out and "7d" in out         # 两行都在
+    assert "reset --" in out                   # 过期时间不再误导
+    assert "reset at " not in out              # 不显示具体钟点
+
+
 def test_render_status_no_limits_shows_agent_stats(monkeypatch):
     # 都没订阅额度 → 中间换成 per-agent token/cost/sessions/messages 统计。
     monkeypatch.setattr("token_tracker.ui.status.forced_color_console", contextlib.nullcontext)

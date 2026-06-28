@@ -3,7 +3,7 @@
 配色跟随当前主题（`_S` 运行时代理）；头图仿 daily 品牌面板，额度条仿 weekly trend 样式。
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from rich import box
 from rich.console import Group
@@ -109,11 +109,19 @@ def _render_limits(rate_limits: dict, per_agent: dict) -> None:
         table.add_column("", justify="right")
         table.add_column("", min_width=20)
         table.add_column("", justify="right", style=_S.dim)
+        now_ts = datetime.now(UTC).timestamp()
         for label, pct, resets in (("5h", rl.five_hour_pct, rl.five_hour_resets_at),
                                    ("7d", rl.seven_day_pct, rl.seven_day_resets_at)):
             if pct is None:
                 continue
-            reset_str = f"reset at {datetime.fromtimestamp(resets, tz=system_tz()).strftime('%H:%M')}" if resets else ""
+            # reset 已过期（window 已滚但本次启动没拿到新数据）→ 显示 `reset --`，避免误导
+            # 用户「上次旧 reset 时间」当未来时间；保留整行让订阅用户能识别自己是订阅套餐（非 API 计费）。
+            if not resets:
+                reset_str = ""
+            elif resets < now_ts:
+                reset_str = "reset --"
+            else:
+                reset_str = f"reset at {datetime.fromtimestamp(resets, tz=system_tz()).strftime('%H:%M')}"
             table.add_row(f"  {label}", f"{pct:.0f}%", _bar_text(pct / 100, _pct_style(pct)), reset_str)
         blocks.append(table)
     get_console().print(Padding(Group(*blocks), (0, 0, 0, 2), expand=False))
