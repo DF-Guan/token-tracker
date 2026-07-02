@@ -1,4 +1,5 @@
-"""统一配置存储：~/.config/token-tracker/config.json（XDG，不绑 Claude Code）。
+"""统一配置存储：~/.config/token-tracker/config.json（固定路径、不读 XDG_CONFIG_HOME——
+跨平台行为一致 + statusline 模板内硬编码同路径；不绑 Claude Code）。
 
 包含所有 tt 自身偏好——主题、语言、组件意图。schema_version 用于未来格式迁移。
 
@@ -16,6 +17,9 @@ from .ui import themes
 
 CONFIG_DIR = os.path.expanduser("~/.config/token-tracker")
 CONFIG_PATH = os.path.join(CONFIG_DIR, "config.json")
+# CC statusline 缓存的单一权威路径（statusline 脚本写、tt status / adapters.rate_limits 读）。
+# 注意 templates/claude_statusline.py 因脚本独立运行硬编码了同一路径——改这里必须同步改模板。
+STATUS_FILE = os.path.join(CONFIG_DIR, "tt-status.json")
 SCHEMA_VERSION = 1
 
 # 引导版本：每次新增"值得让老用户重新走一遍 setup"的配置项时手动 +1（只能整数、一次 +1）。

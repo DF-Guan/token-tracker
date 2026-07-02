@@ -5,6 +5,7 @@ import stat
 import sys
 import tomllib
 from dataclasses import dataclass
+from importlib import resources
 
 from . import config
 from .adapters.util import claude_home, codex_home
@@ -35,7 +36,7 @@ HOOK_SCRIPT_PATH = os.path.join(_TT, "claude-statusline.py")
 CODEX_DIR = _CODEX
 CODEX_CONFIG = os.path.join(CODEX_DIR, "config.toml")     # 改 Codex 配置，留 agent 目录
 CODEX_STATUSLINE_HOOK_PATH = os.path.join(_TT, "codex-statusline.py")
-STATUS_FILE = os.path.join(_TT, "tt-status.json")         # CC statusline 缓存（脚本写、tt status 读）
+STATUS_FILE = config.STATUS_FILE                          # CC statusline 缓存（单一权威定义在 config）
 HOOK_VERSION = "1.8"
 STATUSLINE_HOOK_VERSION = "1.1"
 
@@ -48,618 +49,15 @@ _LEGACY_PATHS = [
     os.path.join(_CODEX, "tt-statusline.py"), os.path.join(_CODEX, "tt-backup.json"),
 ]
 
-# HOOK_VERSION 是唯一版本来源；__HOOK_VERSION__ 占位符在 _render_hook_script() 里注入。
-# 不要用 f-string：HOOK_SCRIPT 是含 \033 与正则的 r-string，f-string 会破坏花括号。
-HOOK_SCRIPT = r'''#!/usr/bin/env python3
-"""Claude Code statusLine — 状态栏显示 + 数据持久化到 tt-status.json"""
-__version__ = "__HOOK_VERSION__"
-import json, os, re, subprocess, sys, tempfile
-from datetime import datetime, timezone
+# 状态栏脚本模板在 templates/ 包数据（claude_statusline.py / codex_statusline.py）——
+# 独立成文件让 ruff / mypy / 人都能直接读查（600 行脚本藏在 r-string 里 lint 完全失明）。
+# 占位符（__HOOK_VERSION__ / __STATUSLINE_TRUECOLOR__ 等）在 _render_* 烘焙时注入；
+# HOOK_VERSION / STATUSLINE_HOOK_VERSION 是唯一版本来源。
 
-STATUS_FILE = os.path.join(os.path.expanduser("~/.config/token-tracker"), "tt-status.json")
-ANSI_RE = re.compile(r'\033\[[0-9;]*m')
-# 配色在 tt setup / update_hook 烘焙时由 themes.theme_to_statusline_ansi(当前主题) 注入：
-# THEME_COLORS 为当前主题 truecolor，THEME_COLORS_256 为同主题的 256 色近似（兜底不支持
-# truecolor 的终端，如 macOS Terminal.app）。只认 COLORTERM=truecolor/24bit 走真彩，否则降 256。
-THEME_COLORS = __STATUSLINE_TRUECOLOR__
-THEME_COLORS_256 = __STATUSLINE_COLOR256__
-def _supports_truecolor():
-    return os.environ.get("COLORTERM", "") in ("truecolor", "24bit")
 
-C = THEME_COLORS if _supports_truecolor() else THEME_COLORS_256
+def _load_template(name: str) -> str:
+    return (resources.files("token_tracker.templates") / name).read_text(encoding="utf-8")
 
-if sys.platform == "win32":
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-
-
-def vlen(s):
-    return len(ANSI_RE.sub("", s))
-
-
-def get_width():
-    try:
-        return max(1, os.get_terminal_size(2).columns - 4)
-    except Exception:
-        pass
-    if os.name != "nt":
-        try:
-            import fcntl, struct, termios
-            with open('/dev/tty', 'r') as tty:
-                res = fcntl.ioctl(tty, termios.TIOCGWINSZ, b'\x00' * 8)
-                return max(1, struct.unpack('hh', res[:4])[1] - 4)
-        except Exception:
-            pass
-    return 116
-
-
-def color_by_pct(pct):
-    return C["bar_ok"] if pct < 50 else C["bar_warn"] if pct < 80 else C["bar_danger"]
-
-
-def fmt_tokens(n):
-    if n >= 1_000_000: return f"{n/1_000_000:.1f}M"
-    if n >= 1_000: return f"{n/1_000:.0f}k"
-    return str(n)
-
-
-def progress_bar(value, bar_width=8):
-    filled_char, empty_char = "█", "░"
-    if value is None:
-        return empty_char * bar_width + " n/a"
-    pct = max(0.0, min(100.0, float(value)))
-    filled = round(pct / 100 * bar_width)
-    empty = bar_width - filled
-    color = color_by_pct(pct)
-    # 未填充网格也染当前档位色（░ 字形天然更淡 → 同色暗格）；pct=0 时不动、保持灰
-    empty_str = f"{color}{empty_char * empty}{C['reset']}" if pct > 0 and empty else empty_char * empty
-    return f"{color}{filled_char * filled}{C['reset']}{empty_str} {C['label']}{pct:.0f}%{C['reset']}"
-
-
-def fmt_duration(seconds):
-    if seconds >= 86400:
-        d, rem = int(seconds // 86400), int(seconds % 86400)
-        return f"{d}d{rem // 3600}h"
-    if seconds >= 3600:
-        h, m = int(seconds // 3600), int((seconds % 3600) // 60)
-        return f"{h}h{m}m"
-    if seconds >= 60:
-        return f"{int(seconds // 60)}min"
-    return f"{int(seconds)}s"
-
-
-def git_branch(cwd):
-    try:
-        branch = subprocess.check_output(
-            ["git", "branch", "--show-current"], cwd=cwd,
-            stderr=subprocess.DEVNULL, text=True, timeout=2,
-        ).strip()
-    except Exception:
-        return ""
-    if not branch:
-        return ""
-    try:
-        dirty = subprocess.check_output(
-            ["git", "status", "--porcelain", "--untracked-files=no"], cwd=cwd,
-            stderr=subprocess.DEVNULL, text=True, timeout=2,
-        ).strip()
-        if dirty:
-            branch += "*"
-    except Exception:
-        pass
-    return branch
-
-
-def git_diff_stat(cwd):
-    """相对 HEAD 的未提交增删行数 + 未跟踪文件数（已跟踪改动按行、未跟踪按文件计数）。
-    失败/无 commit 返回 (0, 0, 0)。"""
-    added = deleted = 0
-    try:
-        out = subprocess.check_output(
-            ["git", "diff", "HEAD", "--numstat"], cwd=cwd,
-            stderr=subprocess.DEVNULL, text=True, timeout=2,
-        )
-        for line in out.splitlines():
-            parts = line.split("\t")
-            if len(parts) < 2:
-                continue
-            a, d = parts[0], parts[1]
-            if a.isdigit():
-                added += int(a)
-            if d.isdigit():
-                deleted += int(d)
-    except Exception:
-        pass
-    untracked = 0
-    try:
-        out = subprocess.check_output(
-            ["git", "ls-files", "--others", "--exclude-standard"], cwd=cwd,
-            stderr=subprocess.DEVNULL, text=True, timeout=2,
-        )
-        untracked = sum(1 for ln in out.splitlines() if ln.strip())
-    except Exception:
-        pass
-    return added, deleted, untracked
-
-
-def save_data(data, now):
-    data["_received_at"] = now.isoformat()
-    tmp = None
-    try:
-        os.makedirs(os.path.dirname(STATUS_FILE), exist_ok=True)
-        fd, tmp = tempfile.mkstemp(dir=os.path.dirname(STATUS_FILE), suffix=".tmp")
-        with os.fdopen(fd, "w") as f:
-            json.dump(data, f)
-        os.replace(tmp, STATUS_FILE)
-    except OSError:
-        if tmp:
-            try:
-                os.unlink(tmp)
-            except OSError:
-                pass
-
-
-def _read_prev(session_id):
-    """读旧 tt-status.json：本会话 (api_duration_ms, last_tps) + 全量 _tps_state（供合并写回）。
-
-    tt-status.json 是多会话共享单文件、会被其它会话覆盖；TPS 差分按 session_id 存进
-    _tps_state dict、各会话互不干扰。返回 state 让本帧把自己的状态并回去、不丢别的会话。
-    """
-    try:
-        with open(STATUS_FILE, encoding="utf-8") as f:
-            old = json.load(f)
-    except Exception:
-        return None, None, {}
-    state = old.get("_tps_state")
-    if not isinstance(state, dict):
-        state = {}
-    if session_id and session_id in state:
-        s = state.get(session_id) or {}
-        return s.get("api"), s.get("tps"), state
-    if session_id and old.get("session_id") == session_id:  # 兼容升级前的旧单会话帧
-        return (old.get("cost") or {}).get("total_api_duration_ms"), old.get("_last_tps"), state
-    return None, None, state
-
-
-def _compute_tps(data, prev_api_ms, prev_tps):
-    """本轮 TPS = 本轮 output / Δapi_duration；数据缺失/中间帧/算出会显示为 0 时都沿用上次值、不刷新。"""
-    cur_api_ms = (data.get("cost") or {}).get("total_api_duration_ms")
-    out = ((data.get("context_window") or {}).get("current_usage") or {}).get("output_tokens", 0)
-    if prev_api_ms is not None and cur_api_ms is not None:
-        delta_ms = cur_api_ms - prev_api_ms
-        if delta_ms >= 500 and out >= 20:
-            tps = out / (delta_ms / 1000)
-            if round(tps) > 0:  # 算出会显示成 0 的（output 小 / Δ 很大），不刷新、保持上次值
-                return tps
-    return prev_tps
-
-
-def _read_transcript_totals(path):
-    """解析会话 transcript 的累计 (input, output, cache) token，按 message_id:requestId 去重。
-
-    数据来自 CC 源文件（stdin 的 transcript_path），约 1.8MB / 800 行长会话解析约 6ms；失败返回 (0,0,0)。
-    """
-    inp = out = cache = 0
-    seen = set()
-    try:
-        with open(path, encoding="utf-8") as f:
-            for line in f:
-                try:
-                    x = json.loads(line)
-                except Exception:
-                    continue
-                if x.get("type") != "assistant":
-                    continue
-                k = f"{x.get('message', {}).get('id')}:{x.get('requestId')}"
-                if k in seen:
-                    continue
-                seen.add(k)
-                u = x.get("message", {}).get("usage", {})
-                inp += u.get("input_tokens", 0)
-                out += u.get("output_tokens", 0)
-                cache += u.get("cache_creation_input_tokens", 0) + u.get("cache_read_input_tokens", 0)
-    except Exception:
-        return 0, 0, 0
-    return inp, out, cache
-
-
-def render(data, now, tps=None):
-    W = get_width()
-    ctx = data.get("context_window") or {}
-    cost = data.get("cost") or {}
-    bar_w = 8 if W >= 100 else 6 if W >= 60 else 4
-
-    # --- Line 1: Project | Total | Cost | Code（项目名原色，消耗/产出指标统一青色）---
-    line1 = []
-
-    project = (data.get("workspace") or {}).get("project_dir", "")
-    if project:
-        name = os.path.basename(project)
-        branch = git_branch(project)
-        if branch:
-            inner = f"{C['branch']}{branch}{C['reset']}"
-            added, deleted, untracked = git_diff_stat(project)
-            if added:
-                inner += f" {C['added']}+{added}{C['reset']}"
-            if deleted:
-                inner += f" {C['deleted']}-{deleted}{C['reset']}"
-            if untracked:
-                inner += f" {C['untracked']}?{untracked}{C['reset']}"
-            line1.append(f"\033[1m{C['project']}[{name}]{C['reset']}({inner})")
-        else:
-            line1.append(f"\033[1m{C['project']}[{name}]{C['reset']}")
-
-    # Total：会话累计（解析 transcript，CC 源数据，长会话约 6ms）；Total = in+out+cache
-    tpath = data.get("transcript_path")
-    if tpath:
-        tin, tout, tcache = _read_transcript_totals(tpath)
-        if tin or tout or tcache:
-            line1.append(f"{C['total']}Total: {fmt_tokens(tin + tout + tcache)}{C['reset']}")
-
-    # Cost（CC 自带累计，准确）
-    usd = cost.get("total_cost_usd")
-    if usd is not None:
-        line1.append(f"{C['total']}Cost: ${usd:.2f}{C['reset']}")
-
-    # Code：本会话 Claude 写/删的代码行数（标签青色，+/- 与 L1 git 变动同样的绿/红）
-    lines_added = cost.get("total_lines_added", 0)
-    lines_removed = cost.get("total_lines_removed", 0)
-    if lines_added or lines_removed:
-        line1.append(
-            f"{C['total']}Code:{C['reset']} "
-            f"{C['added']}+{lines_added}{C['reset']} {C['deleted']}-{lines_removed}{C['reset']}"
-        )
-
-    # 窄终端：宽度不够从尾部逐段去（保留项目名）
-    while len(line1) > 1 and vlen(" | ".join(line1)) > W:
-        line1.pop()
-
-    # --- Line 2: Limit: 5h | 7d | Ctx ---
-    rl = data.get("rate_limits") or {}
-    rl_parts = []
-    for key, label in [("five_hour", "5h"), ("seven_day", "7d")]:
-        entry = rl.get(key) or {}
-        pct = entry.get("used_percentage")
-        if pct is not None:
-            reset_str = ""
-            resets_at = entry.get("resets_at")
-            if resets_at:
-                remain = int(resets_at) - int(now.timestamp())
-                if remain > 0:
-                    reset_str = f" \033[2m{C['label']}({fmt_duration(remain)}){C['reset']}"
-            rl_parts.append((
-                f"{C['label']}{label}:{C['reset']}{progress_bar(pct, bar_w)}{reset_str}",
-                f"{C['label']}{label}:{C['reset']}{progress_bar(pct, bar_w)}",
-                f"{C['label']}{label}:{pct:.0f}%{C['reset']}",
-            ))
-    ctx_parts = []
-    if ctx.get("used_percentage") is not None:
-        size = ctx.get("context_window_size", 0)
-        ctx_parts = [
-            f"{C['label']}{fmt_tokens(size)} Ctx:{C['reset']}{progress_bar(ctx['used_percentage'], bar_w)}",
-            f"{C['label']}{fmt_tokens(size)} Ctx:{ctx['used_percentage']:.0f}%{C['reset']}",
-        ]
-    line2 = []
-    if rl_parts or ctx_parts:
-        for idx in (0, 1, 2):
-            rl_seg = [p[idx] for p in rl_parts]
-            ctx_seg = (ctx_parts[:1] if idx < 2 else ctx_parts[1:2]) if ctx_parts else []
-            segs = rl_seg + ctx_seg
-            if rl_seg:
-                segs[0] = f"{C['label']}Limit:{C['reset']} {segs[0]}"
-            if idx == 2 or vlen(" | ".join(segs)) <= W:
-                line2 = segs
-                break
-
-    # --- Line 3: Tokens（上下文窗口 in/out/cache 构成，非会话累计）| TPS ---
-    line3 = []
-    total_in = ctx.get("total_input_tokens", 0)
-    total_out = ctx.get("total_output_tokens", 0)
-    cache_read = (ctx.get("current_usage") or {}).get("cache_read_input_tokens", 0)
-    if total_in or total_out:
-        tok = f"{C['tokens']}Tokens: in {fmt_tokens(total_in)}, out {fmt_tokens(total_out)}"
-        if cache_read:
-            tok += f", cache {fmt_tokens(cache_read)}"
-        line3.append(tok + C['reset'])
-    # 本轮 TPS（main 里算好传入）；无数据则不追加这一项，L3 整行空了由末尾 if line 隐藏整行
-    if tps:
-        line3.append(f"{C['tokens']}Out TPS: {tps:.0f} tokens/s{C['reset']}")
-    while len(line3) > 1 and vlen(" | ".join(line3)) > W:
-        line3.pop()
-
-    # --- Line 4: Model | Duration | Remote ---
-    line4 = []
-
-    model_name = (data.get("model") or {}).get("display_name", "")
-    if model_name:
-        model_name = re.sub(r'\s*\(.*?\)', '', model_name)
-        effort = (data.get("effort") or {}).get("level", "")
-        if effort:
-            model_name += f"/{effort}"
-        model_name += f"/{'fast' if data.get('fast_mode') else 'nofast'}"
-        line4.append(f"{C['model']}Model: {model_name}{C['reset']}")
-
-    duration_ms = cost.get("total_duration_ms")
-    if duration_ms and duration_ms > 0:
-        line4.append(f"{C['duration']}Duration: {fmt_duration(duration_ms / 1000)}{C['reset']}")
-
-    repo_host = ((data.get("workspace") or {}).get("repo") or {}).get("host", "")
-    if repo_host:
-        line4.append(f"{C['model']}Remote: {repo_host.rsplit('.', 1)[0]}{C['reset']}")
-
-    while len(line4) > 1 and vlen(" | ".join(line4)) > W:
-        line4.pop()
-
-    output = [" | ".join(line) for line in (line1, line2, line3, line4) if line]
-    if output:
-        print("\n".join(output))
-        sys.stdout.flush()
-
-
-def main():
-    try:
-        raw = sys.stdin.read()
-        if not raw.strip():
-            return
-        data = json.loads(raw)
-    except Exception:
-        return
-
-    now = datetime.now(timezone.utc)
-    session_id = data.get("session_id") or ""
-    prev_api_ms, prev_tps, state = _read_prev(session_id)  # 覆盖前读旧帧（按会话）
-    tps = _compute_tps(data, prev_api_ms, prev_tps)
-    if session_id:  # 本会话 TPS 状态并回 _tps_state（多会话共享文件互不清零；LRU 限 20 防膨胀）
-        state.pop(session_id, None)
-        state[session_id] = {"api": (data.get("cost") or {}).get("total_api_duration_ms"), "tps": tps}
-        for k in list(state)[:-20]:
-            del state[k]
-        data["_tps_state"] = state
-    save_data(data, now)
-    render(data, now, tps)
-
-
-if __name__ == "__main__":
-    main()
-'''
-
-
-# Codex 伪 statusline（Stop hook + systemMessage）；每次回答后追加一行彩色 status。
-# 实测：Stop 的 systemMessage 渲染 24-bit 真彩色 + 不进模型上下文（2026-06-19）。
-# 配色暂 mocha 硬编码（CC statusline 烘焙值），未接主题系统——TUI 渲染区与 CC statusline 解耦。
-CODEX_STATUSLINE_HOOK_SCRIPT = r'''#!/usr/bin/env python3
-"""token-tracker Codex 伪 statusline（Stop hook）：每次回答后追加两行彩色 status，仿 CC statusline。
-L1：[项目](分支 +A -D) | Total: <会话累计 token> | Model: <模型>
-L2：Limit: 5h <bar> <%> (reset) | 7d <bar> <%> (reset) | <window> Ctx <bar> <%>
-数据：Total = 当前会话 total_token_usage（in+out+reasoning）；5h/7d = codex.load_rate_limits()（账号级准）；
-Ctx = last_input ÷ window；Model = Stop payload.model；会话按 transcript_path 精确定位、回退最近文件。
-由 `tt setup` 生成，勿手改。"""
-__version__ = "__STATUSLINE_HOOK_VERSION__"
-import json
-import os
-import subprocess
-import sys
-from datetime import datetime, timezone
-from pathlib import Path
-
-# 配色由 tt setup / update_hook / tt theme set 烘焙时注入（跟随当前主题，与 CC statusline / CLI 报表同源）。
-# Codex TUI 实测支持 24-bit truecolor，故只注入 truecolor 一套（不像 CC statusline 还需 256 兜底）。
-C = __STATUSLINE_TRUECOLOR__
-RST = C["reset"]
-FAINT, BOLD = "\033[2m", "\033[1m"
-
-
-def _color(pct):
-    return C["bar_ok"] if pct < 50 else C["bar_warn"] if pct < 80 else C["bar_danger"]
-
-
-def _fmt_duration(s):
-    s = int(s)
-    if s >= 86400:
-        return f"{s // 86400}d{s % 86400 // 3600}h"
-    if s >= 3600:
-        return f"{s // 3600}h{s % 3600 // 60}m"
-    return f"{s // 60}m"
-
-
-def fmt_tokens(n):
-    if n >= 1_000_000:
-        return f"{n / 1_000_000:.1f}M"
-    if n >= 1_000:
-        return f"{n / 1_000:.0f}k"
-    return str(n)
-
-
-def _bar(pct, width=8):
-    """进度条（仿 CC statusline）：█ 填充档位色 + ░ 空槽（>0 也染档位色），尾接 % 档位色。"""
-    pct = max(0.0, min(100.0, float(pct)))
-    filled = round(pct / 100 * width)
-    empty = width - filled
-    color = _color(pct)
-    empty_s = f"{color}{'░' * empty}{RST}" if pct > 0 and empty else "░" * empty
-    return f"{color}{'█' * filled}{RST}{empty_s} {color}{pct:.0f}%{RST}"
-
-
-def _total_tokens(info):
-    """会话累计 token = total_token_usage 的 input(含 cached) + output + reasoning。"""
-    try:
-        u = info.get("total_token_usage") or {}
-        return u.get("input_tokens", 0) + u.get("output_tokens", 0) + u.get("reasoning_output_tokens", 0)
-    except Exception:
-        return 0
-
-
-def _parse_session(path):
-    """解析 session jsonl → (cwd, 最后一个 token_count 的 info, model, effort)。
-    model/effort 取最后一个 turn_context（跟随中途换模型/调 effort）。"""
-    from token_tracker.adapters.util import iter_jsonl_dicts
-    cwd = ""
-    info = None
-    model = effort = ""
-    for d in iter_jsonl_dicts(path):
-        p = d.get("payload", {})
-        t = d.get("type")
-        if t == "session_meta":
-            cwd = p.get("cwd", "")
-        elif t == "turn_context":  # 含 model（gpt-5.5）+ effort（high）
-            model = p.get("model") or model
-            effort = p.get("effort") or effort
-        elif p.get("type") == "token_count" and p.get("info"):
-            info = p["info"]
-    return cwd, info, model, effort
-
-
-def _current_session(payload):
-    """优先按 Stop payload 的 transcript_path 精确定位当前会话；拿不到再回退最近改动文件。"""
-    try:
-        tp = payload.get("transcript_path")
-        if tp and os.path.exists(tp):
-            r = _parse_session(Path(tp))
-            if r[1]:
-                return r
-        from token_tracker.adapters import codex
-        for f in sorted(Path(codex.SESSIONS_DIR).rglob("*.jsonl"),
-                        key=lambda p: p.stat().st_mtime, reverse=True)[:3]:
-            r = _parse_session(f)
-            if r[1]:
-                return r
-    except Exception:
-        pass
-    return "", None, "", ""
-
-
-def _ctx_pct(info):
-    """当前 context 占用 % = 最后一次请求的 input ÷ 模型上下文窗口。"""
-    try:
-        win = info.get("model_context_window")
-        last = info.get("last_token_usage") or {}
-        if win and last.get("input_tokens"):
-            return last["input_tokens"] / win * 100
-    except Exception:
-        pass
-    return None
-
-
-def _git_status(cwd):
-    """(branch, +A, -D, ?U)；已跟踪改动按行、未跟踪按文件计数。
-    失败/非 git/无 commit 返回 ("", 0, 0, 0)。"""
-    if not cwd:
-        return "", 0, 0, 0
-
-    def run(args):
-        return subprocess.check_output(
-            ["git", *args], cwd=cwd, stderr=subprocess.DEVNULL, text=True, timeout=2,
-        ).strip()
-
-    try:
-        branch = run(["branch", "--show-current"])
-    except Exception:
-        return "", 0, 0, 0
-    if not branch:
-        return "", 0, 0, 0
-    try:
-        if run(["status", "--porcelain", "--untracked-files=no"]):
-            branch += "*"
-    except Exception:
-        pass
-    a = d = 0
-    try:
-        for ln in run(["diff", "HEAD", "--numstat"]).splitlines():
-            parts = ln.split("\t")
-            if len(parts) >= 2:
-                if parts[0].isdigit():
-                    a += int(parts[0])
-                if parts[1].isdigit():
-                    d += int(parts[1])
-    except Exception:
-        pass
-    u = 0
-    try:
-        u = sum(1 for ln in run(["ls-files", "--others", "--exclude-standard"]).splitlines() if ln.strip())
-    except Exception:
-        pass
-    return branch, a, d, u
-
-
-def _render_project(cwd):
-    if not cwd:
-        return ""
-    name = os.path.basename(cwd.rstrip("/"))
-    branch, a, d, u = _git_status(cwd)
-    if not branch:
-        return f"{BOLD}{C['project']}[{name}]{RST}"
-    inner = f"{C['branch']}{branch}{RST}"
-    if a:
-        inner += f" {C['added']}+{a}{RST}"
-    if d:
-        inner += f" {C['deleted']}-{d}{RST}"
-    if u:
-        inner += f" {C['untracked']}?{u}{RST}"
-    return f"{BOLD}{C['project']}[{name}]{RST}({inner})"
-
-
-def _render_limit(label, pct, resets_at, now_ts):
-    s = f"{C['label']}{label} {RST}{_bar(pct)}"
-    if resets_at:
-        remain = int(resets_at) - now_ts
-        if remain > 0:
-            s += f" {FAINT}{C['label']}(reset {_fmt_duration(remain)}){RST}"
-    return s
-
-
-def main():
-    try:
-        payload = json.load(sys.stdin)
-    except Exception:
-        payload = {}
-
-    rl = None
-    try:
-        from token_tracker.adapters import codex
-        rl = codex.load_rate_limits()
-    except Exception:
-        pass
-
-    cwd, info, model, effort = _current_session(payload)
-    cwd = payload.get("cwd") or cwd
-    ctx = _ctx_pct(info) if info else None
-    now_ts = int(datetime.now(timezone.utc).timestamp())
-
-    # L1: 项目(git) | Total | Model
-    line1 = []
-    proj = _render_project(cwd)
-    if proj:
-        line1.append(proj)
-    total = _total_tokens(info) if info else 0
-    if total:
-        line1.append(f"{C['tokens']}Total: {fmt_tokens(total)}{RST}")  # 整体取 tokens 槽（mocha=peach/橙）
-    model = model or payload.get("model") or ""  # session turn_context 的 model（gpt-5.5）优先
-    if model:
-        # effort 缺失时显示 default（Codex 默认 reasoning level），与 TUI 的 Current reasoning level 对齐
-        label = f"{model} {effort or 'default'}"
-        line1.append(f"{C['total']}Model: {label}{RST}")  # 整体取 total 槽（mocha=red/红）
-
-    # L2: Limit: 5h | 7d | <window> Ctx（仿 CC statusline，带进度条 + reset）
-    line2 = []
-    if rl and rl.five_hour_pct is not None:
-        line2.append(_render_limit("5h", rl.five_hour_pct, rl.five_hour_resets_at, now_ts))
-    if rl and rl.seven_day_pct is not None:
-        line2.append(_render_limit("7d", rl.seven_day_pct, rl.seven_day_resets_at, now_ts))
-    if ctx is not None:
-        size = (info or {}).get("model_context_window") or 0
-        prefix = f"{fmt_tokens(size)} " if size else ""
-        line2.append(f"{C['label']}{prefix}Ctx {RST}{_bar(ctx)}")
-    if line2:
-        line2[0] = f"{C['label']}Limit:{RST} " + line2[0]
-
-    lines = [" | ".join(x) for x in (line1, line2) if x]
-    if lines:
-        # 开头加 \n：Codex 把 systemMessage 包成 "warning:" 开头，让 status 内容另起一行、与之分开
-        print(json.dumps({"systemMessage": "\n" + "\n".join(lines)}))
-
-
-if __name__ == "__main__":
-    main()
-'''
 
 
 # --- helpers ---
@@ -668,7 +66,7 @@ def _render_hook_script() -> str:
     """把 HOOK_VERSION + 当前主题 truecolor / 256 两套配色注入占位符，得到要落盘的状态栏脚本。"""
     name = config.resolve_theme()
     return (
-        HOOK_SCRIPT
+        _load_template("claude_statusline.py")
         .replace("__HOOK_VERSION__", HOOK_VERSION)
         .replace("__STATUSLINE_TRUECOLOR__", repr(themes.theme_to_statusline_ansi(name)))
         .replace("__STATUSLINE_COLOR256__", repr(themes.theme_to_statusline_ansi(name, "256")))
@@ -680,7 +78,7 @@ def _render_codex_statusline_hook() -> str:
     跟随主题：tt theme set 经 update_hook 重烘焙；不需 __TT_PYTHON__（脚本无 subprocess 调 tt）。"""
     name = config.resolve_theme()
     return (
-        CODEX_STATUSLINE_HOOK_SCRIPT
+        _load_template("codex_statusline.py")
         .replace("__STATUSLINE_HOOK_VERSION__", STATUSLINE_HOOK_VERSION)
         .replace("__STATUSLINE_TRUECOLOR__", repr(themes.theme_to_statusline_ansi(name)))
     )
@@ -706,14 +104,22 @@ def _installed_codex_statusline_version() -> str | None:
     return None
 
 
-# 卸载时定位 tt 追加的整段 [[hooks.Stop]]——同时认新（codex-statusline）/ 旧（tt-statusline）两种特征码
+# 卸载时定位 tt 追加的整段 [[hooks.Stop]]——同时认新（codex-statusline）/ 旧（tt-statusline）两种特征码。
+# command 值兼容三代形态：双引号 basic string（最老）、单引号 literal 裸拼接（0.4.x）、
+# 单引号 literal 内含双引号包裹（现行，防路径空格断词，与 CC 侧 #13/#14 同一治法）
 _CODEX_STATUSLINE_REGEX = re.compile(
     r'\n*\[\[hooks\.Stop\]\]\s*'
     r'\[\[hooks\.Stop\.hooks\]\]\s*'
     r'type = "command"\s*'
-    # command 兼容双引号 basic string（老用户已装）和单引号 literal string（修了 Windows 路径转义后的新装）
-    r'command = ["\'][^"\']*(?:codex-statusline|tt-statusline)[^"\']*["\']\s*'
+    r'command = ("[^"\n]*(?:codex-statusline|tt-statusline)[^"\n]*"'
+    r"|'[^'\n]*(?:codex-statusline|tt-statusline)[^'\n]*')\s*"
     r'timeout = \d+\s*'
+)
+
+# tt Stop hook 的 command 值（去掉外层 TOML 引号）；与删除正则同一套三代形态
+_CODEX_COMMAND_REGEX = re.compile(
+    r'command = ("[^"\n]*(?:codex-statusline|tt-statusline)[^"\n]*"'
+    r"|'[^'\n]*(?:codex-statusline|tt-statusline)[^'\n]*')"
 )
 
 
@@ -721,29 +127,31 @@ def _has_tt_codex_statusline(content: str) -> bool:
     return "codex-statusline" in content or "tt-statusline" in content
 
 
+def _codex_hook_command(content: str) -> str | None:
+    """从 config.toml 内容提取 tt Stop hook 的 command 值（含内层引号、不含外层 TOML 引号）。"""
+    m = _CODEX_COMMAND_REGEX.search(content)
+    return m.group(1)[1:-1] if m else None
+
+
 def _install_codex_statusline(content: str, python: str) -> str:
     """落盘 Codex statusline 脚本 + 在 config.toml 末尾追加 Stop hook 段。
-    - 新名 codex-statusline 段已存在 + python 路径一致 → 幂等返回；
-    - 已存在但 python 路径不一致（用户升级 Python / 切换 conda/venv / 卸载某环境后跑 tt setup）→ 删旧装新，
-      避免 command 指向已死 python（症状：脚本 import token_tracker 失败被 try/except 吞掉，状态栏只剩项目名）；
-    - 只存在旧名 tt-statusline → 清掉后追加新路径段（老用户迁移）。"""
+    command 与 CC 侧同一拼法（_build_cc_command：双引号包路径 + Windows 正斜杠，#13/#14 同治）。
+    - 已有段的 command 与本次要写的完全一致 → 幂等返回；
+    - 不一致（python 升级/换环境、老名 tt-statusline、旧裸拼接格式）→ 删旧段装新段，
+      避免 command 指向已死 python 或在含空格路径上断词（症状：状态栏静默半残）。"""
     _write_codex_statusline_script()
-    cmd = f"{python} {CODEX_STATUSLINE_HOOK_PATH}"
-    if "codex-statusline" in content or "tt-statusline" in content:
-        # 从已有的 command 行提取 python 路径（兼容 basic / literal string 包裹）
-        m = re.search(
-            r"command = [\"']([^ ]+) [^\"']*(?:codex-statusline|tt-statusline)[^\"']*[\"']",
-            content,
-        )
-        if m and m.group(1) == python and "codex-statusline" in content:
-            return content  # python 一致 + 已是新名 → 幂等
-        content = _CODEX_STATUSLINE_REGEX.sub("\n", content)  # 路径不一致或老名残留 → 删旧段
+    cmd = _build_cc_command(python, CODEX_STATUSLINE_HOOK_PATH)
+    if _has_tt_codex_statusline(content):
+        if _codex_hook_command(content) == cmd:
+            return content  # 新格式 + python/脚本路径一致 → 幂等
+        content = _CODEX_STATUSLINE_REGEX.sub("\n", content)  # 其余一律删旧装新
     return content.rstrip() + (
         "\n\n[[hooks.Stop]]\n\n"
         "[[hooks.Stop.hooks]]\n"
         'type = "command"\n'
         # 用 TOML literal string（单引号）包裹 command，避免 Windows 反斜杠路径被当转义符
-        # 解析失败（如 `C:\Users\...` 里的 `\U` 被识别为 unicode 转义起始）
+        # 解析失败（如 `C:\Users\...` 里的 `\U` 被识别为 unicode 转义起始）；
+        # 值内的双引号来自 _build_cc_command 的路径包裹，literal string 内原样合法
         f"command = '{cmd}'\n"
         "timeout = 10\n"
     )
@@ -895,12 +303,36 @@ def _sync_cc_command() -> None:
         json.dump(settings, f, indent=2, ensure_ascii=False)
 
 
+def _codex_command_needs_sync() -> bool:
+    """config.toml 里 tt Stop hook 的 command 是否还是旧格式（裸拼接 / 反斜杠）——
+    与 CC 侧 #13/#14 同类问题，格式规则复用 _cc_command_outdated。没装 / 没段 → False。"""
+    result = _read_codex_config()
+    if not result:
+        return False
+    cmd = _codex_hook_command(result[0])
+    return cmd is not None and _cc_command_outdated(cmd)
+
+
+def _sync_codex_command() -> None:
+    """把 config.toml 里 tt Stop hook 的 command 重写为新格式（删旧段装新段，其余内容不动）。"""
+    result = _read_codex_config()
+    if not result:
+        return
+    content = result[0]
+    new_content = _install_codex_statusline(content, sys.executable or "python3")
+    if new_content != content:
+        with open(CODEX_CONFIG, "w", encoding="utf-8") as f:
+            f.write(new_content)
+
+
 def needs_update() -> bool:
     # 只在已安装（新位置脚本文件存在）时纳入版本判断，未装不主动装
     if os.path.exists(HOOK_SCRIPT_PATH) and _installed_hook_version() != HOOK_VERSION:
         return True
     sv = _installed_codex_statusline_version()
     if sv is not None and sv != STATUSLINE_HOOK_VERSION:
+        return True
+    if _codex_command_needs_sync():  # config.toml 里 Stop hook command 旧格式（同 #13/#14）
         return True
     return _cc_command_needs_sync()  # settings.json 里 command 格式过时也算待更新（issue #13/#14）
 
@@ -912,6 +344,8 @@ def update_hook() -> None:
         _write_codex_statusline_script()
     if _cc_command_needs_sync():
         _sync_cc_command()
+    if _codex_command_needs_sync():
+        _sync_codex_command()
 
 
 # --- setup ---
@@ -965,12 +399,19 @@ def _migrate_cc_legacy_backup(settings: dict) -> None:
 
 def _setup_claude(quiet: bool = False) -> None:
     p = (lambda *a, **k: None) if quiet else get_console().print
-    _write_cc_statusline_script()
 
     settings: dict = {}
     if os.path.exists(CLAUDE_SETTINGS):
-        with open(CLAUDE_SETTINGS, encoding="utf-8") as f:
-            settings = json.load(f)
+        try:
+            with open(CLAUDE_SETTINGS, encoding="utf-8") as f:
+                settings = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            # settings.json 损坏时不能静默覆盖（里面可能是用户手改打错的配置）——
+            # 报错跳过 CC 端；错误不受 quiet 抑制（wizard 场景也必须让用户看到）
+            get_console().print(f"[red]{t('cc_settings_corrupt', path=CLAUDE_SETTINGS)}[/red]")
+            return
+
+    _write_cc_statusline_script()
 
     _migrate_cc_legacy_backup(settings)  # 老用户：把藏在 settings 里的备份挪到 cc-backup.json
 
@@ -1044,16 +485,26 @@ def _unsetup_claude() -> None:
     if not os.path.exists(CLAUDE_SETTINGS):
         return
 
-    with open(CLAUDE_SETTINGS, encoding="utf-8") as f:
-        settings = json.load(f)
+    try:
+        with open(CLAUDE_SETTINGS, encoding="utf-8") as f:
+            settings = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        # 损坏就不动 settings.json（无法定位 tt 的 statusLine 段），提示手动处理
+        get_console().print(f"[red]{t('cc_settings_corrupt_unsetup', path=CLAUDE_SETTINGS)}[/red]")
+        return
 
     sl = settings.get("statusLine")
     if isinstance(sl, dict) and _is_tt_cc_command(sl.get("command") or ""):
         previous = None
         if os.path.exists(CC_BACKUP_PATH):  # 新位置（独立文件）
-            with open(CC_BACKUP_PATH, encoding="utf-8") as f:
-                previous = json.load(f).get("statusLine")
-            os.remove(CC_BACKUP_PATH)
+            try:
+                with open(CC_BACKUP_PATH, encoding="utf-8") as f:
+                    previous = json.load(f).get("statusLine")
+            except (OSError, json.JSONDecodeError):
+                # 备份读不出来 → 保留文件供手动抢救，statusLine 走移除分支
+                get_console().print(f"[yellow]{t('cc_backup_corrupt', path=CC_BACKUP_PATH)}[/yellow]")
+            else:
+                os.remove(CC_BACKUP_PATH)
         if isinstance(previous, dict):
             settings["statusLine"] = previous
             get_console().print(f"[green]✓[/green] {t('cc_restored')}")

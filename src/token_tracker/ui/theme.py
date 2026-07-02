@@ -4,7 +4,7 @@
 - `_S`：语义化样式代理，属性按**当前激活主题**动态解析（支持预览/切换，60+ 处 `_S.token` 调用零改）；
 - `get_active_theme*` / `set_active_theme` / `preview_theme`：激活主题的读取、切换与临时预览；
 - `heat_greens()`：当前主题的贡献图 5 档热力配色；
-- `_token_heat_style` / `_pct_style` / `_heat_thresholds` / `_heat_level`：派生样式与分档工具。
+- `_pct_style` / `_heat_thresholds` / `_heat_level`：派生样式与分档工具。
 """
 
 from contextlib import contextmanager
@@ -70,14 +70,6 @@ class _SProxy:
 
 
 _S = _SProxy()
-
-
-def _token_heat_style(ratio: float) -> str:
-    if ratio > 0.8:
-        return f"bold {_S.bad}"
-    if ratio > 0.5:
-        return f"bold {_S.warn}"
-    return "bold"
 
 
 def _pct_style(pct: float) -> str:

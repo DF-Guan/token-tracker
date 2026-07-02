@@ -356,7 +356,7 @@ requires-dist = [
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=8.0" },
-    { name = "questionary", specifier = ">=2.0" },
+    { name = "questionary", specifier = ">=2.0,<3" },
     { name = "rich", specifier = ">=13.7" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6" },
 ]

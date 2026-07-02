@@ -7,7 +7,36 @@ import sys
 
 import pytest
 
-from token_tracker import hooks
+from token_tracker import config, hooks
+
+
+@pytest.fixture(autouse=True)
+def _isolate_real_home(tmp_path, monkeypatch):
+    """hooks/config 全部路径常量默认指向 tmp——任何用例都不许碰真实 ~/.claude、~/.codex、~/.config。
+
+    教训（2026-07-02）：update_hook 的 codex command sync 因单个用例漏 patch CODEX_CONFIG，
+    把 monkeypatch 的假 python 写进了真实 ~/.codex/config.toml；setup() 组件用例也曾把
+    codex_faux_statusline=false 写进真实 config.json。默认全隔离后，
+    单个用例只需再 patch 自己关心的路径（后设的 monkeypatch 覆盖这里的默认值）。
+    """
+    tt = tmp_path / "_tt"
+    home = tmp_path / "_home"
+    monkeypatch.setattr(hooks, "_TT", str(tt))
+    monkeypatch.setattr(hooks, "CLAUDE_SETTINGS", str(home / ".claude" / "settings.json"))
+    monkeypatch.setattr(hooks, "HOOK_SCRIPT_PATH", str(tt / "claude-statusline.py"))
+    monkeypatch.setattr(hooks, "CODEX_DIR", str(home / ".codex"))
+    monkeypatch.setattr(hooks, "CODEX_CONFIG", str(home / ".codex" / "config.toml"))
+    monkeypatch.setattr(hooks, "CODEX_STATUSLINE_HOOK_PATH", str(tt / "codex-statusline.py"))
+    monkeypatch.setattr(hooks, "STATUS_FILE", str(tt / "tt-status.json"))
+    monkeypatch.setattr(hooks, "CC_BACKUP_PATH", str(tt / "cc-backup.json"))
+    monkeypatch.setattr(hooks, "CODEX_BACKUP_LEGACY", str(tt / "codex-backup.json"))
+    monkeypatch.setattr(hooks, "_LEGACY_PATHS", [])
+    cfg = tmp_path / "_cfg"
+    monkeypatch.setattr(config, "CONFIG_DIR", str(cfg))
+    monkeypatch.setattr(config, "CONFIG_PATH", str(cfg / "config.json"))
+    monkeypatch.setattr(config, "STATUS_FILE", str(cfg / "tt-status.json"))
+    monkeypatch.setattr(config, "_LEGACY_THEME_PATH", str(cfg / "theme.json"))
+    monkeypatch.setattr(config, "_LEGACY_LANG_PATH", str(cfg / "lang.json"))
 
 
 def _git(repo, *args):
@@ -96,17 +125,64 @@ def test_codex_statusline_install_updates_stale_python(tmp_path, monkeypatch):
 
 
 def test_codex_statusline_windows_path_toml_parses(tmp_path, monkeypatch):
-    # 回归：Windows 路径含 \U \A \P 等被 TOML basic string 当 unicode 转义起始符（issue 用户反馈）
-    # —— 写入的 command 必须用 literal string（单引号）包裹，写出来后能被 tomllib 原样解析回来。
+    # 回归 ×2：① Windows 路径含 \U \A \P 等被 TOML basic string 当 unicode 转义起始符（issue 用户反馈）
+    # —— 写入的 command 必须用 literal string（单引号）包裹；② command 与 CC 侧同治（#13/#14）：
+    # 反斜杠转正斜杠 + 双引号包路径（防 `C:\Program Files\...` 空格断词），tomllib 能原样解析回来。
     import tomllib
     monkeypatch.setattr(hooks, "CODEX_STATUSLINE_HOOK_PATH",
                         r"C:\Users\test\.config\token-tracker\codex-statusline.py")
     monkeypatch.setattr(hooks, "_write_codex_statusline_script", lambda: None)  # 别在 macOS 上真写 Windows 路径
-    py = r"C:\Users\test\AppData\Local\Programs\Python\Python313\python.exe"
+    monkeypatch.setattr(hooks.os, "name", "nt")
+    py = r"C:\Program Files\Python313\python.exe"  # 含空格：旧裸拼接会在这里断词
     content = hooks._install_codex_statusline("", py)
-    parsed = tomllib.loads(content)  # 旧 bug：basic string 下 \U 等触发 TOML 解析错误
+    parsed = tomllib.loads(content)
     assert parsed["hooks"]["Stop"][0]["hooks"][0]["command"] == \
-        rf"{py} C:\Users\test\.config\token-tracker\codex-statusline.py"
+        '"C:/Program Files/Python313/python.exe" "C:/Users/test/.config/token-tracker/codex-statusline.py"'
+
+
+def test_codex_statusline_migrates_legacy_bare_command(tmp_path, monkeypatch):
+    # 老用户 config.toml 里是旧裸拼接 command → 再跑 install 必须替换成新引号格式、只留一段。
+    monkeypatch.setattr(hooks, "CODEX_STATUSLINE_HOOK_PATH", str(tmp_path / "codex-statusline.py"))
+    legacy = (
+        '[tui]\nstatus_line = ["project"]\n\n'
+        '[[hooks.Stop]]\n\n'
+        "[[hooks.Stop.hooks]]\n"
+        'type = "command"\n'
+        f"command = 'python3 {tmp_path / 'codex-statusline.py'}'\n"
+        "timeout = 10\n"
+    )
+    migrated = hooks._install_codex_statusline(legacy, "python3")
+    assert f'command = \'"python3" "{tmp_path / "codex-statusline.py"}"\'' in migrated
+    assert migrated.count("[[hooks.Stop]]") == 1  # 旧段删净、无重复
+    assert hooks._install_codex_statusline(migrated, "python3") == migrated  # 新格式幂等
+
+
+def test_codex_command_needs_sync_and_update_hook(tmp_path, monkeypatch):
+    # 老用户升级后跑任意 tt 命令：needs_update 检出旧格式 → update_hook 自动重写 config.toml。
+    codex_config = tmp_path / "config.toml"
+    script = tmp_path / "codex-statusline.py"
+    codex_config.write_text(
+        '[[hooks.Stop]]\n\n'
+        "[[hooks.Stop.hooks]]\n"
+        'type = "command"\n'
+        f"command = 'python3 {script}'\n"
+        "timeout = 10\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(hooks, "CODEX_CONFIG", str(codex_config))
+    monkeypatch.setattr(hooks, "CODEX_STATUSLINE_HOOK_PATH", str(script))
+    monkeypatch.setattr(hooks, "HOOK_SCRIPT_PATH", str(tmp_path / "claude-statusline.py"))  # CC 未装
+    monkeypatch.setattr(hooks, "CLAUDE_SETTINGS", str(tmp_path / "settings.json"))
+    monkeypatch.setattr(hooks.sys, "executable", "/new/python3")
+    monkeypatch.setattr(hooks.os, "name", "posix")
+
+    assert hooks._codex_command_needs_sync()
+    assert hooks.needs_update()
+    hooks.update_hook()
+    content = codex_config.read_text(encoding="utf-8")
+    assert f'command = \'"/new/python3" "{script}"\'' in content
+    assert not hooks._codex_command_needs_sync()  # 重写后不再触发
+    assert content.count("[[hooks.Stop]]") == 1
 
 
 def test_codex_statusline_version_roundtrip(tmp_path, monkeypatch):
@@ -150,6 +226,55 @@ def test_setup_components_off_skips_install(tmp_path, monkeypatch):
     codex_content = codex_config.read_text()
     assert "status_line = []" in codex_content  # 用户原 status_line 没被动
     assert "tt-statusline" not in codex_content   # Codex 伪 statusline hook 段未追加
+
+
+def test_setup_claude_corrupt_settings_no_crash_no_clobber(tmp_path, monkeypatch, capsys):
+    # 回归：settings.json 损坏时 is_setup()=False → 任意命令进 setup 流程 → 旧代码裸 json.load 直接崩栈。
+    # 新行为：报错跳过 CC 端、原文件一字不动（可能是用户手改打错，不能静默覆盖）。
+    settings_path = tmp_path / "settings.json"
+    settings_path.write_text('{"statusLine": broken', encoding="utf-8")
+    monkeypatch.setattr(hooks, "CLAUDE_SETTINGS", str(settings_path))
+    monkeypatch.setattr(hooks, "HOOK_SCRIPT_PATH", str(tmp_path / "claude-statusline.py"))
+
+    hooks._setup_claude(quiet=True)  # 不抛异常
+    assert settings_path.read_text(encoding="utf-8") == '{"statusLine": broken'  # 原样保留
+    assert not (tmp_path / "claude-statusline.py").exists()  # 早退，未落任何文件
+    assert "settings.json" in capsys.readouterr().out  # quiet 也要出声（错误不可静默）
+
+
+def test_unsetup_claude_corrupt_settings_no_crash(tmp_path, monkeypatch, capsys):
+    # unsetup 遇损坏 settings.json：不崩、不动文件、提示手动检查。
+    settings_path = tmp_path / "settings.json"
+    settings_path.write_text("not json at all", encoding="utf-8")
+    monkeypatch.setattr(hooks, "CLAUDE_SETTINGS", str(settings_path))
+    monkeypatch.setattr(hooks, "HOOK_SCRIPT_PATH", str(tmp_path / "claude-statusline.py"))
+    monkeypatch.setattr(hooks, "_migrate_legacy", lambda: None)
+
+    hooks._unsetup_claude()  # 不抛异常
+    assert settings_path.read_text(encoding="utf-8") == "not json at all"
+    assert "settings.json" in capsys.readouterr().out
+
+
+def test_unsetup_claude_corrupt_backup_removes_statusline(tmp_path, monkeypatch):
+    # 备份文件损坏：不崩，statusLine 走移除分支，损坏备份保留在磁盘供手动抢救。
+    settings_path = tmp_path / "settings.json"
+    settings_path.write_text(json.dumps({
+        "statusLine": {"type": "command", "command": '"/py" "/x/claude-statusline.py"'},
+        "keep": 1,
+    }), encoding="utf-8")
+    backup_path = tmp_path / "cc-backup.json"
+    backup_path.write_text("{corrupt", encoding="utf-8")
+    monkeypatch.setattr(hooks, "CLAUDE_SETTINGS", str(settings_path))
+    monkeypatch.setattr(hooks, "CC_BACKUP_PATH", str(backup_path))
+    monkeypatch.setattr(hooks, "HOOK_SCRIPT_PATH", str(tmp_path / "claude-statusline.py"))
+    monkeypatch.setattr(hooks, "STATUS_FILE", str(tmp_path / "tt-status.json"))
+    monkeypatch.setattr(hooks, "_migrate_legacy", lambda: None)
+
+    hooks._unsetup_claude()
+    settings = json.loads(settings_path.read_text(encoding="utf-8"))
+    assert "statusLine" not in settings  # 恢复不了 → 移除
+    assert settings["keep"] == 1
+    assert backup_path.exists()  # 损坏备份保留
 
 
 def test_cli_setup_wizard_or_auto(monkeypatch):

@@ -1,6 +1,9 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
+
+import pytest
 
 from token_tracker.adapters.types import UsageEntry
+from token_tracker.analyzer import aggregator
 from token_tracker.analyzer.aggregator import (
     aggregate_daily,
     aggregate_monthly,
@@ -9,8 +12,15 @@ from token_tracker.analyzer.aggregator import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _pin_utc_bucketing(monkeypatch):
+    # 分桶按 system_tz()（系统时区）——测试固定 UTC，跨机器/CI 时区稳定；
+    # 时区相关行为由 test_aggregate_daily_buckets_by_system_tz 单独覆盖。
+    monkeypatch.setattr(aggregator, "system_tz", lambda: UTC)
+
+
 def entry(ts, session_id, *, tokens=100, out=0, cache_read=0, cost=0.5, msgs=1,
-          model="claude-opus-4-6", project="proj"):
+          model="claude-opus-4-6", project="proj", session_end=None):
     # cost_usd is set explicitly so calculate_cost() short-circuits and never
     # touches the pricing network/cache — keeps these tests hermetic.
     return UsageEntry(
@@ -27,6 +37,7 @@ def entry(ts, session_id, *, tokens=100, out=0, cache_read=0, cost=0.5, msgs=1,
         project=project,
         agent_id="claude",
         message_count=msgs,
+        session_end=session_end,
     )
 
 
@@ -47,6 +58,19 @@ def test_aggregate_daily_groups_by_date_and_counts_unique_sessions():
     assert jan1.session_count == 2  # s1 + s2 on the same day
     assert jan1.message_count == 2
     assert daily[1].session_count == 1
+
+
+def test_aggregate_daily_buckets_by_system_tz(monkeypatch):
+    # UTC+8（北京）：UTC 1/1 20:00 = 本地 1/2 04:00，凌晨用量必须归到本地 1/2，
+    # 与 tt status 的「今天」（系统时区）同口径；weekly 的周一边界同理跟随本地日期。
+    monkeypatch.setattr(aggregator, "system_tz", lambda: timezone(timedelta(hours=8)))
+    late_utc = datetime(2026, 1, 1, 20, tzinfo=UTC)   # 本地 2026-01-02 04:00
+    noon_utc = datetime(2026, 1, 1, 4, tzinfo=UTC)    # 本地 2026-01-01 12:00
+    daily = aggregate_daily([entry(noon_utc, "s1"), entry(late_utc, "s2")])
+    assert [d.date for d in daily] == ["2026-01-01", "2026-01-02"]
+    # 2026-01-04 是周日：UTC 周日 20:00 = 本地周一 04:00 → 归下一周
+    weekly = aggregate_weekly([entry(datetime(2026, 1, 4, 20, tzinfo=UTC), "s1")])
+    assert weekly[0].week == "2026-01-05"
 
 
 def test_aggregate_monthly_groups_by_month():
@@ -117,6 +141,21 @@ def test_aggregate_sessions_active_minutes_drops_large_gaps():
     assert s.active_minutes == 50.0
     # 跨度 = 首尾 3 天 10 分钟
     assert s.duration_minutes == round((3 * 24 * 60) + 10, 1)
+
+
+def test_aggregate_sessions_codex_single_entry_active_equals_span():
+    # codex 会话 = 单条 entry + session_end：活跃时长退化为整段跨度，
+    # 否则恒 0 会被 status 的 active>=5 过滤，codex 会话永远进不了当天列表（回归）。
+    t0 = datetime(2026, 1, 1, 10, 0, tzinfo=UTC)
+    sessions = aggregate_sessions([
+        entry(t0, "s1", session_end=t0 + timedelta(minutes=42), model="gpt-5.5"),
+    ])
+    s = sessions[0]
+    assert s.duration_minutes == 42.0
+    assert s.active_minutes == 42.0
+    # claude 单条 entry（无 session_end）不受影响：活跃仍是 0（无跨度信息）
+    single = aggregate_sessions([entry(t0, "s2")])[0]
+    assert single.active_minutes == 0.0
 
 
 def test_aggregate_fills_projects_by_token():
