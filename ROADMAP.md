@@ -82,6 +82,10 @@
 
 ## 待办 / 计划
 
+- **GitHub open issues / PRs 处理（2026-07-04 检查，主人后续单独处理，暂不动代码）**：现有 3 个 open issue + 2 个 open PR，两个 PR 均与 main **CONFLICTING**（大概率撞 0.4.6 的 hooks.py 改动）。
+  - **主线：statusLine 强制接管问题（#16 + #17 + PR #18，优先级最高）**。#16（@SuDeeParke）与 #17（@liang04）两天内独立报同一痛点：用户有自定义 CC statusLine 时，`is_setup()` 判定要求 statusLine.command 指向 tt 脚本 → 永远 False → 每跑一次报表命令就重新触发 setup 抢占一次 statusLine，「自定义 statusLine + tt 报表」无法共存。#17 分析准确（引用的 cli.py/hooks.py 逻辑均属实），提了 4 个方案：报表解耦 `is_setup()` 门禁 / CC statusLine 加 opt-out（像 Codex 的 `codex_faux_statusline_intent` 那样落 intent）/ 加 `--no-statusline` / 报表命令不自动触发 setup。**方向应采纳**：CC statusLine 应与 Codex 伪 statusline 同等待遇（向导 Y/N + intent 持久化），报表只读命令不应依赖 statusLine 接管。PR #18（@zhaomin6666，+274 −119，动 11 个文件）即按此思路做的：CC/Codex statusline 都改显式 opt-in、非交互 setup 默认不接管、升级尊重已有配置——但有冲突待解，且碰到最敏感的几处约定（`is_setup()` 双因素判断、`SETUP_VERSION` 收口、`_auto_setup` 默认行为反转=老用户升级语义变化），需仔细 review 后决定「让作者 rebase」还是「采纳思路自己实现」；无论哪条路，落地时要 bump `SETUP_VERSION` 让老用户重走引导选一次。
+  - **#19（@imicer）：多 agent 环境想只看单个 agent 的用量**。目前会话内 daily/weekly 已跟随当前 agent，但独立终端合并显示、无过滤参数。合理需求、成本低：加 `--agent` 参数（或配置项）即可。
+  - **PR #12（@MVP2142）：第三方 Coding Plan 配额对接（OpenCode 等）**，+890 −5。Provider 架构：外部脚本经 subprocess 执行、stdout JSON 注入 5h/7d/月配额，新增 `tt quota` 诊断命令 + 19 测试。场景真实（API Key 走第三方平台时 CC 不注入配额），但保留意见：① 引入「执行用户配置的任意命令」机制，安全面与支持成本上升；② statusline 脚本内嵌 provider fallback 会让独立轻量的状态栏脚本变重；③ 890 行增量偏大；④ 新增 `~/.cache/token-tracker/` 与 `~/.claude/tt-config.json`，违背「产物收口 `~/.config/token-tracker`」约定。**建议先在 PR 里回复讨论收敛范围（如 provider 只进 CLI 报表、不进 statusline 脚本），不急合**；同样有冲突。
 - **push `0.4.2`（待主人确认）**：本地已 commit（`2ec41d5`）+ tag `v0.4.2` + PyPI 已上传，待 `git push origin main` + push tag（`v0.4.1` / `v0.4.2` 两个历史 tag 一起）
 - 桌面版（Tauri）规划：图表可视化、数据钻取、实时监控、多 Agent 多模型监控（仅规划，未启动）
 - **会话内彩色报表 hook — 桌面多形态适配**（终端部分已落地，见「进行中」）：桌面 app / web GUI 不吃 ANSI（实测乱码），需按形态输出 HTML/markdown（`tt` 加 `--format`、hook 检测形态）。详见本地 `docs/cc-hook-tt-真彩色.md`。
