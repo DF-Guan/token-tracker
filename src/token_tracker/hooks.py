@@ -18,12 +18,13 @@ _CODEX = codex_home()    # CODEX_HOME 覆盖 / ~/.codex
 
 @dataclass
 class SetupComponents:
-    """组件开关。状态栏总装（不可关，是 setup 的核心目的）；可选项为 Codex 伪 statusline（Stop hook）。"""
+    """组件开关。CC statusLine 接管与 Codex 伪 statusline（Stop hook）均为可选组件，意图持久化到 config.json。"""
+    cc_statusline: bool = True
     codex_faux_statusline: bool = True
 
     @classmethod
     def all_on(cls) -> "SetupComponents":
-        return cls(codex_faux_statusline=True)
+        return cls(cc_statusline=True, codex_faux_statusline=True)
 
 # tt 自己的产物（statusline 脚本 + 缓存 + 备份）集中放 ~/.config/token-tracker（XDG，跟 theme/lang 同处）；
 # settings.json / config.toml 是「改 agent 自己的配置」、必须留 agent 目录。statusLine/hook 的 command
@@ -778,21 +779,60 @@ def codex_statusline_active() -> bool:
         return False
 
 
+def cc_statusline_active() -> bool:
+    """双因素：用户意图（config）AND 实际装好（脚本文件 + settings.json 的 statusLine 指我们脚本）。"""
+    if config.cc_statusline_intent() is not True:
+        return False
+    if not os.path.exists(HOOK_SCRIPT_PATH):
+        return False
+    try:
+        with open(CLAUDE_SETTINGS, encoding="utf-8") as f:
+            settings = json.load(f)
+        sl = settings.get("statusLine")
+        return isinstance(sl, dict) and _is_tt_cc_command(sl.get("command") or "")
+    except (OSError, json.JSONDecodeError):
+        return False
+
+
+def recommended_components() -> SetupComponents:
+    """setup(components=None) 与 wizard 问题默认值的唯一权威来源。
+    CC 端探测优先（do-no-harm）：settings.json 里有非 tt 的自定义 statusLine（或 JSON 损坏）→ False，
+    绝不静默替换用户自定义；否则已记录意图非 None → 用意图；否则 → True（全新 / 已是 tt 的 → 接管）。
+    Codex 端无从探测「用户自己的 statusline」：已记录意图非 None → 用意图，否则 → True。"""
+    cc = True
+    if os.path.exists(CLAUDE_SETTINGS):
+        try:
+            with open(CLAUDE_SETTINGS, encoding="utf-8") as f:
+                settings = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            settings = None  # 损坏 → 不可安全触碰
+        if not isinstance(settings, dict):
+            cc = False
+        else:
+            sl = settings.get("statusLine")
+            cmd = sl.get("command") if isinstance(sl, dict) else None
+            if cmd and not (isinstance(cmd, str) and _is_tt_cc_command(cmd)):
+                cc = False  # 非 tt 的自定义 statusLine（含非法类型）→ 不接管
+    if cc:
+        cc_intent = config.cc_statusline_intent()
+        cc = cc_intent if cc_intent is not None else True
+    codex_intent = config.codex_faux_statusline_intent()
+    codex = codex_intent if codex_intent is not None else True
+    return SetupComponents(cc_statusline=cc, codex_faux_statusline=codex)
+
+
 def is_setup() -> bool:
-    """已配置 = CC 端 statusLine 指我们脚本（如装了 CC）AND Codex 端意图明确（如装了 Codex）。
-    Codex 端意图为 True 时还要文件实装好；意图 False 则用户明确不要、不强求文件存在。"""
+    """已配置 = 每个已装 agent 的组件意图都明确、且意图为 True 的组件实装好（双因素）。
+    意图 False 则用户明确不要、不强求文件存在（自定义 statusLine 用户跑报表不再被抢占）。"""
     has_cc = os.path.isdir(os.path.dirname(CLAUDE_SETTINGS))
     has_codex = os.path.isdir(CODEX_DIR)
     if not has_cc and not has_codex:
         return False
     if has_cc:
-        try:
-            with open(CLAUDE_SETTINGS, encoding="utf-8") as f:
-                settings = json.load(f)
-            sl = settings.get("statusLine")
-            if not isinstance(sl, dict) or not _is_tt_cc_command(sl.get("command") or ""):
-                return False
-        except (OSError, json.JSONDecodeError):
+        intent = config.cc_statusline_intent()
+        if intent is None:  # 没跑过 wizard、没表达意图 → 视为未配
+            return False
+        if intent and not cc_statusline_active():
             return False
     if has_codex:
         intent = config.codex_faux_statusline_intent()
@@ -917,10 +957,11 @@ def update_hook() -> None:
 # --- setup ---
 
 def setup(auto: bool = False, components: SetupComponents | None = None, quiet: bool = False) -> None:
-    """安装状态栏 + 可选组件。components=None 表示全装（向后兼容）。
+    """安装状态栏 + 可选组件。components=None 表示推荐默认（recommended_components：
+    已有意图优先、CC 端探测 settings.json、绝不静默替换用户自定义 statusLine）。
     quiet=True 时不打任何提示（wizard 场景：由 wizard 末尾给一次综合总结）。"""
     if components is None:
-        components = SetupComponents.all_on()
+        components = recommended_components()
     p = (lambda *a, **k: None) if quiet else get_console().print
 
     has_cc = os.path.isdir(os.path.dirname(CLAUDE_SETTINGS))
@@ -937,7 +978,7 @@ def setup(auto: bool = False, components: SetupComponents | None = None, quiet: 
     _migrate_legacy()                # 删旧位置（agent 根目录）残留，迁到 ~/.config/token-tracker
 
     if has_cc:
-        _setup_claude(quiet)
+        _setup_claude(components, quiet)
     else:
         if not auto:
             p(f"[dim]{t('cc_not_found')}[/dim]")
@@ -963,8 +1004,58 @@ def _migrate_cc_legacy_backup(settings: dict) -> None:
             json.dump({"statusLine": legacy["previousStatusLine"]}, f, indent=2)
 
 
-def _setup_claude(quiet: bool = False) -> None:
+def _restore_cc_statusline(settings: dict, p) -> None:
+    """statusLine 是 tt 的才动：从 cc-backup.json 还原（或直接移除）+ 清 tokenTracker 残留 + 删缓存。
+    opt-out（_optout_claude）与卸载（_unsetup_claude）共用；打印走传入的 p（quiet 感知）。"""
+    sl = settings.get("statusLine")
+    if not (isinstance(sl, dict) and _is_tt_cc_command(sl.get("command") or "")):
+        return
+    previous = None
+    if os.path.exists(CC_BACKUP_PATH):  # 新位置（独立文件）
+        with open(CC_BACKUP_PATH, encoding="utf-8") as f:
+            previous = json.load(f).get("statusLine")
+        os.remove(CC_BACKUP_PATH)
+    if isinstance(previous, dict):
+        settings["statusLine"] = previous
+        p(f"[green]✓[/green] {t('cc_restored')}")
+    else:
+        settings.pop("statusLine", None)
+        p(f"[green]✓[/green] {t('cc_removed')}")
+    settings.pop("tokenTracker", None)  # 顺手清掉老用户在 settings 里的子字段残留
+    if os.path.exists(STATUS_FILE):
+        os.remove(STATUS_FILE)
+        p(f"[green]✓[/green] {t('deleted_cache', path=STATUS_FILE)}")
+
+
+def _optout_claude(p) -> None:
+    """CC opt-out：删 tt 脚本 + 只还原「本来是 tt 的」statusLine，用户自定义的完全不碰。
+    settings.json 损坏时不碰 settings（只删脚本），避免安装路径 json.load 抛异常的崩溃循环。"""
+    if os.path.exists(HOOK_SCRIPT_PATH):
+        os.remove(HOOK_SCRIPT_PATH)
+    if os.path.exists(CLAUDE_SETTINGS):
+        try:
+            with open(CLAUDE_SETTINGS, encoding="utf-8") as f:
+                settings = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            settings = None
+        if isinstance(settings, dict):
+            before = json.dumps(settings, sort_keys=True)
+            _restore_cc_statusline(settings, p)
+            if json.dumps(settings, sort_keys=True) != before:  # 有实际改动才写回
+                with open(CLAUDE_SETTINGS, "w", encoding="utf-8") as f:
+                    json.dump(settings, f, indent=2, ensure_ascii=False)
+    p(f"[dim]{t('cc_statusline_skipped')}[/dim]")
+
+
+def _setup_claude(components: SetupComponents, quiet: bool = False) -> None:
+    """CC 端装/卸 statusLine 接管。用户意图（components.cc_statusline）先写入 config.json（镜像 _setup_codex）。"""
     p = (lambda *a, **k: None) if quiet else get_console().print
+    config.save_cc_statusline(components.cc_statusline)  # 写入意图（任何文件操作之前）
+
+    if not components.cc_statusline:
+        _optout_claude(p)
+        return
+
     _write_cc_statusline_script()
 
     settings: dict = {}
@@ -1047,23 +1138,7 @@ def _unsetup_claude() -> None:
     with open(CLAUDE_SETTINGS, encoding="utf-8") as f:
         settings = json.load(f)
 
-    sl = settings.get("statusLine")
-    if isinstance(sl, dict) and _is_tt_cc_command(sl.get("command") or ""):
-        previous = None
-        if os.path.exists(CC_BACKUP_PATH):  # 新位置（独立文件）
-            with open(CC_BACKUP_PATH, encoding="utf-8") as f:
-                previous = json.load(f).get("statusLine")
-            os.remove(CC_BACKUP_PATH)
-        if isinstance(previous, dict):
-            settings["statusLine"] = previous
-            get_console().print(f"[green]✓[/green] {t('cc_restored')}")
-        else:
-            settings.pop("statusLine", None)
-            get_console().print(f"[green]✓[/green] {t('cc_removed')}")
-        settings.pop("tokenTracker", None)  # 顺手清掉老用户在 settings 里的子字段残留
-        if os.path.exists(STATUS_FILE):
-            os.remove(STATUS_FILE)
-            get_console().print(f"[green]✓[/green] {t('deleted_cache', path=STATUS_FILE)}")
+    _restore_cc_statusline(settings, get_console().print)
 
     with open(CLAUDE_SETTINGS, "w", encoding="utf-8") as f:
         json.dump(settings, f, indent=2, ensure_ascii=False)

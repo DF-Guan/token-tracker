@@ -120,8 +120,9 @@ def test_codex_statusline_version_roundtrip(tmp_path, monkeypatch):
 
 
 def test_setup_components_defaults_all_on():
-    # 不传 components 时 setup() 应等价于全装；SetupComponents 默认值也是全开。
+    # SetupComponents 默认值全开（setup(components=None) 走 recommended_components 智能默认，另测）。
     c = hooks.SetupComponents()
+    assert c.cc_statusline is True
     assert c.codex_faux_statusline is True
     assert hooks.SetupComponents.all_on() == c
 
@@ -141,6 +142,7 @@ def test_setup_components_off_skips_install(tmp_path, monkeypatch):
     monkeypatch.setattr(hooks, "CODEX_DIR", str(home / ".codex"))
     monkeypatch.setattr(hooks, "CODEX_CONFIG", str(codex_config))
     monkeypatch.setattr(hooks, "CODEX_STATUSLINE_HOOK_PATH", str(home / ".codex" / "tt-statusline.py"))
+    _isolate_config(monkeypatch, tmp_path / "cfg")  # setup 现在写 intent + setup_version，必须隔离
 
     hooks.setup(components=hooks.SetupComponents(codex_faux_statusline=False))
 
@@ -150,6 +152,10 @@ def test_setup_components_off_skips_install(tmp_path, monkeypatch):
     codex_content = codex_config.read_text()
     assert "status_line = []" in codex_content  # 用户原 status_line 没被动
     assert "tt-statusline" not in codex_content   # Codex 伪 statusline hook 段未追加
+    # 意图落盘：CC True / Codex False
+    from token_tracker import config
+    assert config.cc_statusline_intent() is True
+    assert config.codex_faux_statusline_intent() is False
 
 
 def test_cli_setup_wizard_or_auto(monkeypatch):
@@ -560,3 +566,197 @@ def test_cc_command_sync_skips_non_tt_command(tmp_path, monkeypatch):
     assert not hooks._cc_command_needs_sync()
     hooks._sync_cc_command()  # no-op
     assert json.loads(settings_file.read_text(encoding="utf-8"))["statusLine"]["command"] == user_cmd
+
+
+# --- CC statusLine 可选组件（issue #16/#17：自定义 statusLine 与 tt 报表共存） ---
+
+
+def _cc_only_home(tmp_path, monkeypatch, settings_text=None):
+    """CC-only 隔离环境：settings / 脚本 / 备份 / 缓存全指向 tmp，Codex 目录不存在，config 隔离。"""
+    cc_dir = tmp_path / "home" / ".claude"
+    cc_dir.mkdir(parents=True)
+    settings_path = cc_dir / "settings.json"
+    if settings_text is not None:
+        settings_path.write_text(settings_text, encoding="utf-8")
+    monkeypatch.setattr(hooks, "CLAUDE_SETTINGS", str(settings_path))
+    monkeypatch.setattr(hooks, "HOOK_SCRIPT_PATH", str(cc_dir / "claude-statusline.py"))
+    monkeypatch.setattr(hooks, "CC_BACKUP_PATH", str(cc_dir / "cc-backup.json"))
+    monkeypatch.setattr(hooks, "STATUS_FILE", str(cc_dir / "tt-status.json"))
+    monkeypatch.setattr(hooks, "CODEX_DIR", str(tmp_path / "no-codex"))
+    monkeypatch.setattr(hooks, "_LEGACY_PATHS", [])
+    _isolate_config(monkeypatch, tmp_path / "cfg")
+    return settings_path
+
+
+_TT_SL = {"statusLine": {"type": "command", "command": '"/usr/bin/python3" "/x/claude-statusline.py"'}}
+_CUSTOM_SL = {"statusLine": {"type": "command", "command": "/usr/bin/my-own-statusline --foo"}}
+
+
+def test_config_cc_statusline_intent_roundtrip(tmp_path, monkeypatch):
+    # intent 严格 bool：True/False 读回一致；缺字段 / 被手改成非 bool → None（视为没表达）。
+    from token_tracker import config
+    _isolate_config(monkeypatch, tmp_path)
+    assert config.cc_statusline_intent() is None
+    config.save_cc_statusline(True)
+    assert config.cc_statusline_intent() is True
+    config.save_cc_statusline(False)
+    assert config.cc_statusline_intent() is False
+    config._save_field("cc_statusline", "yes")
+    assert config.cc_statusline_intent() is None
+
+
+def test_cc_statusline_active_double_factor(tmp_path, monkeypatch):
+    # 双因素：intent True AND 脚本存在 AND settings 的 command 是 tt 的；任一不满足 → False。
+    from token_tracker import config
+    settings_path = _cc_only_home(tmp_path, monkeypatch, json.dumps(_TT_SL))
+    script = tmp_path / "home" / ".claude" / "claude-statusline.py"
+    script.write_text("x", encoding="utf-8")
+
+    assert hooks.cc_statusline_active() is False  # intent None
+    config.save_cc_statusline(False)
+    assert hooks.cc_statusline_active() is False  # intent False
+    config.save_cc_statusline(True)
+    assert hooks.cc_statusline_active() is True   # intent True + 实装好
+
+    settings_path.write_text(json.dumps(_CUSTOM_SL), encoding="utf-8")
+    assert hooks.cc_statusline_active() is False  # command 被改走
+    settings_path.write_text("not json{{{", encoding="utf-8")
+    assert hooks.cc_statusline_active() is False  # settings 损坏
+    settings_path.write_text(json.dumps(_TT_SL), encoding="utf-8")
+    script.unlink()
+    assert hooks.cc_statusline_active() is False  # 脚本缺失
+
+
+def test_is_setup_cc_intent_three_states(tmp_path, monkeypatch):
+    # is_setup CC 分支三态：intent None → 未配；False → 放行（不强求文件）；True → 要求实装。
+    from token_tracker import config
+    settings_path = _cc_only_home(tmp_path, monkeypatch, json.dumps(_CUSTOM_SL))
+
+    assert hooks.is_setup() is False  # intent None → 触发引导
+    config.save_cc_statusline(False)
+    assert hooks.is_setup() is True   # 自定义 statusLine 用户 opt-out 后放行
+    config.save_cc_statusline(True)
+    assert hooks.is_setup() is False  # intent True 但没实装（command 非 tt）
+    (tmp_path / "home" / ".claude" / "claude-statusline.py").write_text("x", encoding="utf-8")
+    settings_path.write_text(json.dumps(_TT_SL), encoding="utf-8")
+    assert hooks.is_setup() is True   # intent True + 实装好
+
+
+def test_recommended_components_cc_probe(tmp_path, monkeypatch):
+    # 推荐默认三层：探测自定义 statusLine（do-no-harm，优先于 intent）> 已记录 intent > True。
+    from token_tracker import config
+    settings_path = _cc_only_home(tmp_path, monkeypatch)  # settings.json 不存在
+
+    assert hooks.recommended_components().cc_statusline is True   # 全新用户 → 接管
+    settings_path.write_text(json.dumps(_TT_SL), encoding="utf-8")
+    assert hooks.recommended_components().cc_statusline is True   # 已是 tt 的 → 保持
+    settings_path.write_text(json.dumps(_CUSTOM_SL), encoding="utf-8")
+    assert hooks.recommended_components().cc_statusline is False  # 自定义 → 不接管
+    config.save_cc_statusline(True)
+    assert hooks.recommended_components().cc_statusline is False  # 探测优先于 intent（防静默再劫持）
+    settings_path.write_text("not json{{{", encoding="utf-8")
+    assert hooks.recommended_components().cc_statusline is False  # 损坏 → 不可安全触碰
+    settings_path.write_text("{}", encoding="utf-8")
+    config.save_cc_statusline(False)
+    assert hooks.recommended_components().cc_statusline is False  # 无自定义时 intent False 生效
+
+
+def test_recommended_components_codex_keeps_intent(tmp_path, monkeypatch):
+    # SETUP_VERSION bump 后 auto 重配不得把用户的 Codex opt-out 翻回 True。
+    from token_tracker import config
+    _isolate_config(monkeypatch, tmp_path)
+    monkeypatch.setattr(hooks, "CLAUDE_SETTINGS", str(tmp_path / "no-cc" / "settings.json"))
+    assert hooks.recommended_components().codex_faux_statusline is True  # 没表达 → 默认开
+    config.save_codex_faux_statusline(False)
+    assert hooks.recommended_components().codex_faux_statusline is False  # 已 opt-out → 保留
+
+
+def test_setup_cc_optout_keeps_custom_statusline(tmp_path, monkeypatch):
+    # opt-out 时用户自定义 statusLine 完全不碰；意图 + 引导版本照常落盘。
+    from token_tracker import config
+    settings_path = _cc_only_home(tmp_path, monkeypatch, json.dumps(_CUSTOM_SL))
+    before = settings_path.read_text()
+
+    hooks.setup(components=hooks.SetupComponents(cc_statusline=False), quiet=True)
+
+    assert settings_path.read_text() == before  # settings 一字不动
+    assert not os.path.exists(hooks.HOOK_SCRIPT_PATH)
+    assert config.cc_statusline_intent() is False
+    assert config.setup_version() == config.SETUP_VERSION
+
+
+def test_setup_cc_optout_restores_backup(tmp_path, monkeypatch):
+    # 之前被 tt 接管的用户改选 No → 从 cc-backup.json 还原原 statusLine + 清 tt 产物（脚本/备份/缓存）。
+    settings_path = _cc_only_home(tmp_path, monkeypatch, json.dumps(_TT_SL))
+    cc_dir = tmp_path / "home" / ".claude"
+    (cc_dir / "claude-statusline.py").write_text("x", encoding="utf-8")
+    (cc_dir / "tt-status.json").write_text("{}", encoding="utf-8")
+    (cc_dir / "cc-backup.json").write_text(json.dumps(_CUSTOM_SL), encoding="utf-8")
+
+    hooks.setup(components=hooks.SetupComponents(cc_statusline=False), quiet=True)
+
+    assert json.loads(settings_path.read_text())["statusLine"] == _CUSTOM_SL["statusLine"]  # 原配置还原
+    assert not os.path.exists(hooks.HOOK_SCRIPT_PATH)
+    assert not os.path.exists(hooks.CC_BACKUP_PATH)
+    assert not os.path.exists(hooks.STATUS_FILE)
+
+
+def test_setup_cc_optout_tolerates_corrupt_settings(tmp_path, monkeypatch):
+    # settings.json 损坏：推荐默认 → False、opt-out 容错不碰 settings——
+    # 修掉旧版安装路径 json.load 直接抛异常、每次运行都崩的循环。
+    from token_tracker import config
+    settings_path = _cc_only_home(tmp_path, monkeypatch, "not json{{{")
+
+    hooks.setup(quiet=True)  # components=None → recommended_components
+
+    assert settings_path.read_text() == "not json{{{"  # 损坏文件原样保留
+    assert config.cc_statusline_intent() is False
+    assert config.setup_version() == config.SETUP_VERSION
+    assert hooks.is_setup() is True  # 止血：之后不再反复触发 setup
+
+
+def test_setup_default_components_no_hijack(tmp_path, monkeypatch):
+    # issue #16/#17 回归主测试：自定义 statusLine + 从没表达过意图 →
+    # 默认 setup 绝不抢占 statusLine，且此后 is_setup=True、报表命令不再反复触发 setup。
+    settings_path = _cc_only_home(tmp_path, monkeypatch, json.dumps(_CUSTOM_SL))
+    before = settings_path.read_text()
+
+    hooks.setup(quiet=True)  # components=None → 探测到自定义 → opt-out
+
+    assert settings_path.read_text() == before
+    assert hooks.is_setup() is True
+    assert hooks.needs_update() is False
+
+
+def test_ask_components_asks_cc_then_codex(monkeypatch):
+    # 向导：CC 题在前、Codex 题在后；默认值透传自 recommended_components；返回字段映射正确。
+    from token_tracker import wizard
+    asked: list = []
+
+    monkeypatch.setattr(wizard, "_has_cc", lambda: True)
+    monkeypatch.setattr(wizard, "_has_codex", lambda: True)
+    monkeypatch.setattr(wizard, "recommended_components",
+                        lambda: hooks.SetupComponents(cc_statusline=False, codex_faux_statusline=True))
+
+    def fake_ask(message, default):
+        asked.append((message, default))
+        return default
+
+    monkeypatch.setattr(wizard, "_ask_yes_no", fake_ask)
+    c = wizard.ask_components(step_prefix_fn=lambda i: f"[{i}] ")
+    assert [d for _, d in asked] == [False, True]  # 默认值来自 recommended（intent 感知）
+    assert asked[0][0].startswith("[1] ") and asked[1][0].startswith("[2] ")
+    assert c == hooks.SetupComponents(cc_statusline=False, codex_faux_statusline=True)
+
+
+def test_ask_components_cc_only(monkeypatch):
+    # 只有 CC：只问 1 题；codex 字段用推荐默认原样带回（setup 里 has_codex=False 也不会落盘）。
+    from token_tracker import wizard
+    calls: list = []
+    monkeypatch.setattr(wizard, "_has_cc", lambda: True)
+    monkeypatch.setattr(wizard, "_has_codex", lambda: False)
+    monkeypatch.setattr(wizard, "recommended_components", lambda: hooks.SetupComponents())
+    monkeypatch.setattr(wizard, "_ask_yes_no", lambda message, default: calls.append(message) or True)
+    c = wizard.ask_components()
+    assert len(calls) == 1
+    assert c.cc_statusline is True and c.codex_faux_statusline is True

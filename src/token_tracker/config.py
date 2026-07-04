@@ -22,7 +22,8 @@ SCHEMA_VERSION = 1
 # 老用户 config 里没这字段 / 旧版本号 < 当前 → 触发重新引导（真终端弹 wizard、非 tty 静默 _auto_setup）。
 # 跟 SCHEMA_VERSION 解耦：那是数据格式版本，这是用户引导版本，bump 节奏完全不同。
 # 2（0.4.2）：强制所有现存用户（0.3.8/0.4.0=无字段=0、0.4.1=1，全 < 2）升级后重走一遍 setup。
-SETUP_VERSION = 2
+# 3（下一版）：CC statusLine 变可选组件（issue #16/#17），老用户重选一次。
+SETUP_VERSION = 3
 
 # 旧位置（独立 theme.json / lang.json），老用户首次读 config.json 不存在时自动合并迁移
 _LEGACY_THEME_PATH = os.path.join(CONFIG_DIR, "theme.json")
@@ -154,6 +155,17 @@ def save_codex_faux_statusline(enabled: bool) -> None:
 def codex_faux_statusline_intent() -> bool | None:
     """读用户对 Codex 伪 statusline 的意图。严格 bool；非 bool / 缺字段 → None（视为没表达）。"""
     val = load_config().get("codex_faux_statusline")
+    return val if isinstance(val, bool) else None
+
+
+def save_cc_statusline(enabled: bool) -> None:
+    """wizard 选完后写入意图（CC statusLine 是否由 tt 接管）。"""
+    _save_field("cc_statusline", bool(enabled))
+
+
+def cc_statusline_intent() -> bool | None:
+    """读用户对 CC statusLine 接管的意图。严格 bool；非 bool / 缺字段 → None（视为没表达）。"""
+    val = load_config().get("cc_statusline")
     return val if isinstance(val, bool) else None
 
 

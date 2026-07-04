@@ -241,8 +241,9 @@ def _run_setup_flow() -> None:
 
 
 def _auto_setup() -> None:
-    """非交互环境（非 tty / CI / 会话内）：默认全装——语言跟随**系统设置**（绕过 CLI LANG）、
-    主题 mocha、组件全开。仅当用户从未配置过语言/主题时落默认（不覆盖已有选择）。
+    """非交互环境（非 tty / CI / 会话内）：语言跟随**系统设置**（绕过 CLI LANG）、主题 mocha、
+    组件按推荐默认（hooks.recommended_components：已有意图优先、不替换已有自定义 statusLine）。
+    仅当用户从未配置过语言/主题时落默认（不覆盖已有选择）。
     agent 守卫在 _run_setup_flow 已做，这里假设至少有一个 agent。"""
     if config.resolve_lang() is None:
         sys_lang = i18n._detect_system_lang()
@@ -250,7 +251,7 @@ def _auto_setup() -> None:
         i18n.set_lang(sys_lang)
     if not config.load_config().get("theme"):
         config.save_theme("mocha")
-    setup(auto=True)  # 组件默认全开
+    setup(auto=True)  # 组件走推荐默认（setup 内部 components=None → recommended_components）
     get_console().print(f"[dim]{t('auto_setup_hint')}[/dim]")
 
 

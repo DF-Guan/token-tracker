@@ -30,6 +30,8 @@ Custom StatusLine integration + CLI Dashboard — see token usage, cost, and rat
 
 Built on the Claude Code official custom StatusLine API — **all data comes directly from local Claude, zero guesswork**.
 
+> The status line takeover is **optional**: if you already have a custom statusLine, it is kept by default (you can also pick No in the wizard anytime), and report commands work regardless. Note: without the takeover, the CC subscription rate-limit section in `tt status` has no data source (CC quota is only persisted via the status line script).
+
 ![Claude Code StatusLine](assets/screenshot-statusline-cc.png)
 
 <details>
@@ -106,7 +108,7 @@ curl -sSL https://raw.githubusercontent.com/stormzhang/token-tracker/main/instal
 ## Usage
 
 ```bash
-tt setup          # interactive setup wizard (terminal: language / theme / components); auto full-install on non-tty
+tt setup          # interactive setup wizard (terminal: language / theme / components); recommended defaults on non-tty
 tt                # last-12-months heatmap + top tri-section overview (= tt daily)
 tt daily          # same (tt with no args enters daily)
 tt status         # last-5h real-time panel
@@ -151,9 +153,10 @@ The first time you run `tt` (or run `tt setup` in a standalone terminal), an **i
 
 1. **Pick a language** — 中文 / English (saved to `~/.config/token-tracker/config.json`)
 2. **Pick a color theme** — 6 themes with an inline color swatch on each option
-3. **Enable Codex faux statusline** — Yes/No (only when Codex is detected)
+3. **Take over Claude Code status line** — Yes/No (only when Claude Code is detected; an existing custom statusLine is backed up first, and picking No leaves it untouched)
+4. **Enable Codex faux statusline** — Yes/No (only when Codex is detected)
 
-CI / non-tty environments (Docker / scripts / `curl|bash`) auto-install with defaults: **language follows the system setting**, theme mocha, all components on. To change anything later, just run `tt setup` again.
+CI / non-tty environments (Docker / scripts / `curl|bash`) auto-install with **recommended defaults**: language follows the system setting, theme mocha, components on by default but **an existing custom statusLine is never replaced**. To change anything later, just run `tt setup` again.
 
 ### Report Sorting
 
