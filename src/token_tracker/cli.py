@@ -66,6 +66,24 @@ def _parse_limit(args: list[str], default: int) -> int:
     return default
 
 
+def _extract_agent_arg(args: list[str]) -> tuple[list[str], str | None]:
+    """提取 `--claude` / `--codex`，返回 (剩余 args, agent_id | None)。互斥（同时给报错退出）；
+    未给返回 None（走默认合并 + 会话自动识别）。用于多 agent 环境按需只看一个 agent（issue #19）。"""
+    remaining: list[str] = []
+    agent_id: str | None = None
+    _FLAG_TO_ID = {"--claude": "claude-code", "--codex": "codex"}
+    for a in args:
+        target = _FLAG_TO_ID.get(a)
+        if target is None:
+            remaining.append(a)
+            continue
+        if agent_id is not None and agent_id != target:
+            get_console().print(f"[red]{t('agent_filter_conflict')}[/red]")
+            sys.exit(1)
+        agent_id = target
+    return remaining, agent_id
+
+
 def _extract_theme_arg(args: list[str]) -> tuple[list[str], str | None]:
     """提取 --theme NAME，返回 (剩余 args, theme_name)；未给则 name=None。用于报表临时切主题、不落配置。"""
     remaining: list[str] = []
@@ -361,6 +379,8 @@ def main():
         _load_local_mock()
 
     args = sys.argv[1:]
+    # --claude / --codex：多 agent 环境按需只看一个 agent 的报表（issue #19），互斥；不给则走默认
+    args, filter_agent = _extract_agent_arg(args)
     # --theme NAME：临时覆盖主题（仅本次进程、不落配置/不重烘焙状态栏），对所有报表 + status 生效
     args, theme_override = _extract_theme_arg(args)
     if theme_override is not None:
@@ -412,6 +432,14 @@ def main():
             sys.exit(1)
 
     agents = detect_agents()
+    if filter_agent is not None:
+        # 显式指定 agent：收窄 agents 列表，所有报表命令自动跟随；未装 / 未检测到 → 报错退出
+        matched = [a for a in agents if a.id == filter_agent]
+        if not matched:
+            flag = "--claude" if filter_agent == "claude-code" else "--codex"
+            get_console().print(f"[red]{t('agent_not_detected', flag=flag)}[/red]")
+            sys.exit(1)
+        agents = matched
     agent_ids = {a.id for a in agents}
 
     if command in ("status", "dashboard"):
@@ -430,9 +458,9 @@ def main():
         sys.exit(1)
 
     # daily / weekly 跟随当前会话：CC 会话只看 CC、Codex 会话只看 Codex；
-    # 独立终端（识别不到会话）保持合并所有 agent。
+    # 独立终端（识别不到会话）保持合并所有 agent。显式 --claude / --codex 已在上面收窄 agents、优先级最高。
     report_agents = agents
-    if command in ("daily", "weekly"):
+    if filter_agent is None and command in ("daily", "weekly"):
         session_agent = _current_session_agent()
         if session_agent and session_agent in agent_ids:
             report_agents = [a for a in agents if a.id == session_agent]

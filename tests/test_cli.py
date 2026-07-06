@@ -36,3 +36,65 @@ def test_extract_theme_arg():
     assert cli._extract_theme_arg(["--theme", "nord", "weekly"]) == (["weekly"], "nord")
     assert cli._extract_theme_arg(["monthly"]) == (["monthly"], None)
     assert cli._extract_theme_arg(["--theme"]) == (["--theme"], None)  # 缺值：原样留，不消耗
+
+
+def test_extract_agent_arg_maps_flags_to_ids():
+    # --claude / --codex 从任意位置提取并移除；映射到 adapter id；未给 → None
+    assert cli._extract_agent_arg(["daily", "--claude"]) == (["daily"], "claude-code")
+    assert cli._extract_agent_arg(["--codex", "weekly"]) == (["weekly"], "codex")
+    assert cli._extract_agent_arg(["monthly"]) == (["monthly"], None)
+    # 重复相同 flag 幂等；不同 flag 混用退出（下一用例覆盖）
+    assert cli._extract_agent_arg(["--claude", "--claude", "status"]) == (["status"], "claude-code")
+
+
+def test_extract_agent_arg_conflict_exits(monkeypatch, capsys):
+    # --claude 与 --codex 同时给 → 直接 sys.exit(1) + 中文/英文提示
+    import pytest
+    with pytest.raises(SystemExit) as e:
+        cli._extract_agent_arg(["--claude", "--codex", "daily"])
+    assert e.value.code == 1
+
+
+def test_cli_agent_flag_filters_agents(monkeypatch):
+    # `tt daily --codex` 显式指定 → agents 收窄到 codex，会话内自动识别不再生效
+    from types import SimpleNamespace
+
+    from token_tracker import config
+    captured: dict = {}
+
+    def fake_aggregate(agents_arg, agg_fn):
+        captured["agents"] = [a.id for a in agents_arg]
+        return []
+
+    monkeypatch.setattr(cli, "is_setup", lambda: True)
+    monkeypatch.setattr(cli, "needs_update", lambda: False)
+    monkeypatch.setattr(config, "setup_version", lambda: config.SETUP_VERSION)
+    monkeypatch.setattr(cli, "detect_agents", lambda: [
+        SimpleNamespace(id="claude-code", name="Claude Code"),
+        SimpleNamespace(id="codex", name="Codex"),
+    ])
+    monkeypatch.setattr(cli, "_aggregate_per_agent", fake_aggregate)
+    monkeypatch.setattr(cli, "render_daily_heatmap", lambda *a, **kw: None)
+    monkeypatch.setattr(cli, "_current_session_agent", lambda: "claude-code")  # 假装在 CC 会话里
+    monkeypatch.setattr("sys.argv", ["tt", "daily", "--codex"])
+    cli.main()
+    # 显式 --codex 覆盖了会话自动识别 → 只加载 codex（不是 CC）
+    assert captured["agents"] == ["codex"]
+
+
+def test_cli_agent_flag_missing_agent_exits(monkeypatch):
+    # 显式 --codex 但环境里没装 Codex（只检测到 CC）→ sys.exit(1) + 友好错误
+    from types import SimpleNamespace
+
+    import pytest
+
+    from token_tracker import config
+    monkeypatch.setattr(cli, "is_setup", lambda: True)
+    monkeypatch.setattr(cli, "needs_update", lambda: False)
+    monkeypatch.setattr(config, "setup_version", lambda: config.SETUP_VERSION)
+    monkeypatch.setattr(cli, "detect_agents",
+                        lambda: [SimpleNamespace(id="claude-code", name="Claude Code")])
+    monkeypatch.setattr("sys.argv", ["tt", "daily", "--codex"])
+    with pytest.raises(SystemExit) as e:
+        cli.main()
+    assert e.value.code == 1
