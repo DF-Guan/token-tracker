@@ -86,7 +86,7 @@ _STRINGS = {
         # --- wizard (wizard.py) ---
         "wizard_pick_theme": "选择配色主题",
         "wizard_theme_prompt": "选择主题",
-        "wizard_q_cc_statusline": "接管 Claude Code 状态栏（已有自定义时选 Yes 会备份替换）",
+        "wizard_q_cc_statusline": "接管 Claude Code 状态栏",
         "wizard_q_codex_statusline": "启用 Codex 伪 statusline",
         "theme_recommended": "（推荐）",
         "wizard_done": "配置完成",
@@ -204,7 +204,7 @@ _STRINGS = {
         # --- wizard (wizard.py) ---
         "wizard_pick_theme": "Pick a theme",
         "wizard_theme_prompt": "Pick a theme",
-        "wizard_q_cc_statusline": "Take over Claude Code status line (existing one is backed up if Yes)",
+        "wizard_q_cc_statusline": "Take over Claude Code status line",
         "wizard_q_codex_statusline": "Enable Codex faux statusline",
         "theme_recommended": "(recommended)",
         "wizard_done": "Setup complete",
