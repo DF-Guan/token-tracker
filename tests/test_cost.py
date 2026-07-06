@@ -154,6 +154,31 @@ def test_fable_dated_variant_resolves_via_prefix(monkeypatch):
     assert cost.calculate_cost(entry) == pytest.approx(10.0)
 
 
+def test_fallback_pricing_includes_sonnet_5_introductory():
+    # Sonnet 5 当前处于导入价阶段（截止 2026-08-31），$2 / $10 是 Sonnet 4.6（$3/$15）的 2/3；
+    # 官方页明示 2026-09-01 起改为标准价 $3/$15，到期须同步（也可能靠 litellm 在线表自动接管）。
+    info = cost._fallback_pricing()["claude-sonnet-5"]
+    assert info["input_cost_per_token"] == pytest.approx(2e-6)
+    assert info["output_cost_per_token"] == pytest.approx(10e-6)
+    assert info["cache_creation_input_token_cost"] == pytest.approx(2.5e-6)
+    assert info["cache_read_input_token_cost"] == pytest.approx(0.2e-6)
+
+
+def test_sonnet_5_cost_uses_introductory_price(monkeypatch):
+    # 1M input + 1M output → 2 + 10 = 12 USD（导入价，非 Sonnet 4.6 的 3+15=18）
+    monkeypatch.setattr(cost, "_pricing", cost._fallback_pricing())
+    entry = make_entry(model="claude-sonnet-5", input_tokens=1_000_000, output_tokens=1_000_000)
+    assert cost.calculate_cost(entry) == pytest.approx(12.0)
+
+
+def test_sonnet_family_fallback_points_to_sonnet_5(monkeypatch):
+    # 未来 sonnet 变体（如假想 claude-sonnet-5-1、claude-sonnet-6）系列兜底应指向 sonnet-5，
+    # 不再是过时的 sonnet-4-6；1M input → $2（导入价），而非 sonnet-4-6 的 $3
+    monkeypatch.setattr(cost, "_pricing", cost._fallback_pricing())
+    entry = make_entry(model="claude-sonnet-6-20270101", input_tokens=1_000_000)
+    assert cost.calculate_cost(entry) == pytest.approx(2.0)
+
+
 def test_unknown_fable_variant_falls_back_to_family(monkeypatch):
     # 未来的 fable-6 即便 litellm 未收录，也按系列退回 fable-5，不归零
     monkeypatch.setattr(cost, "_pricing", cost._fallback_pricing())

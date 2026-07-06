@@ -24,7 +24,7 @@ _warned_insecure = False
 # codex- 兜底覆盖 Codex 内部虚拟 model（如 codex-auto-review，stop-time auto-review gate 用）
 _FAMILY_FALLBACK = (
     ("claude-opus", "claude-opus-4-8"),
-    ("claude-sonnet", "claude-sonnet-4-6"),
+    ("claude-sonnet", "claude-sonnet-5"),
     ("claude-haiku", "claude-haiku-4-5-20251001"),
     ("claude-fable", "claude-fable-5"),
     ("codex-", "gpt-5.5"),
@@ -243,6 +243,14 @@ def _fallback_pricing() -> dict:
         "claude-opus-4-7": _OPUS_PRICING,
         "claude-opus-4-6": _OPUS_PRICING,
         "claude-opus-4-5": _OPUS_PRICING,
+        # Sonnet 5 当前为导入价（$2 / $10 / $2.50 cache-write / $0.20 cache-read），截止 2026-08-31；
+        # 9-1 起标准价 $3 / $15（与 Sonnet 4.6 一致）。到期后需切价（注意：litellm 若已收录、以在线价为准）。
+        "claude-sonnet-5": {
+            "input_cost_per_token": 2e-6,
+            "output_cost_per_token": 10e-6,
+            "cache_creation_input_token_cost": 2.5e-6,
+            "cache_read_input_token_cost": 0.2e-6,
+        },
         "claude-sonnet-4-6": {
             "input_cost_per_token": 3e-6,
             "output_cost_per_token": 15e-6,
