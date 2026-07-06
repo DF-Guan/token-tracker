@@ -1,8 +1,5 @@
 """纯格式化与分组工具：宽度模式、token/成本/时长格式、agent/模型短名、卡片文本片段（品牌行 / 指标）。"""
 
-import os
-from zoneinfo import ZoneInfo
-
 from rich.text import Text
 
 from .console import get_console
@@ -67,22 +64,6 @@ MODEL_SHORT = {
 }
 
 
-def system_tz():
-    """系统真实时区（读 /etc/localtime 软链接，绕过 CLI 的 TZ 环境变量；macOS / Linux 通用）。
-
-    凡显示给用户的绝对时间都该用它（主人 CLI 设了 TZ，但要按系统设置的时区显示）。
-    Linux `/usr/share/zoneinfo/X`、macOS `/var/db/timezone/zoneinfo/X` 都能 split 出时区名；
-    失败（如 Windows 无 /etc/localtime、或非软链接）回退 None → 调用方按进程时区显示。
-    """
-    try:
-        link = os.readlink("/etc/localtime")
-        if "zoneinfo/" in link:
-            return ZoneInfo(link.split("zoneinfo/", 1)[1])
-    except Exception:  # 无文件 / 非软链接 / 无效时区名（ZoneInfoNotFoundError）等一律回退
-        pass
-    return None
-
-
 def _width_mode() -> str:
     w = get_console().width
     if w < 100:
@@ -90,10 +71,6 @@ def _width_mode() -> str:
     if w < 120:
         return "medium"
     return "wide"
-
-
-def _is_multi_agent(stats) -> bool:
-    return len({s.agent_id for s in stats if s.agent_id}) > 1
 
 
 def _model_short(model: str) -> str:

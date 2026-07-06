@@ -48,6 +48,10 @@ _FAMILY_FALLBACK = (
 # 解析不到定价的模型只提示一次，避免聚合时每条 entry 刷屏
 _warned_unknown_models: set[str] = set()
 
+# model → 解析出的定价 key。非精确命中要线性扫全表（litellm 数千 key），逐 entry 调用必须记忆化。
+# 命中后还校验 key 仍在当前 pricing 里（测试会整表替换 _pricing），失效则重算。
+_model_key_cache: dict[str, str | None] = {}
+
 
 def get_pricing() -> dict:
     global _pricing
@@ -85,6 +89,16 @@ def calculate_cost(entry: UsageEntry) -> float:
 def _resolve_model_key(model: str, pricing: dict) -> str | None:
     if not model:
         return None
+    if model in _model_key_cache:
+        cached = _model_key_cache[model]
+        if cached is None or cached in pricing:
+            return cached
+    key = _resolve_model_key_uncached(model, pricing)
+    _model_key_cache[model] = key
+    return key
+
+
+def _resolve_model_key_uncached(model: str, pricing: dict) -> str | None:
     if model in pricing:
         return model
 

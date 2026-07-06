@@ -1,5 +1,6 @@
 import os
 import sys
+from collections.abc import Callable
 from datetime import datetime
 
 from rich.text import Text
@@ -19,9 +20,9 @@ from .analyzer.aggregator import (
 from .analyzer.cost import calculate_cost
 from .hooks import is_setup, needs_update, setup, unsetup, update_hook
 from .i18n import t
+from .tz import system_tz
 from .ui import theme, themes
 from .ui.console import forced_color_console, get_console
-from .ui.format import system_tz
 from .ui.heatmap import render_daily_heatmap
 from .ui.status import render_sessions_view, render_status
 from .ui.tables import (
@@ -47,13 +48,13 @@ VALID_SORT_KEYS = (*SORT_ATTRS.keys(), "time")
 
 # 数据报表命令分发表：命令 → (聚合函数, 渲染函数, time 排序的属性, 无 --sort 时的默认属性, 默认降序)
 # time_attr 与 no_sort_attr 仅 daily 不同（默认按 token 排，--sort time 才按日期）
-_REPORT_COMMANDS = {
+_REPORT_COMMANDS: dict[str, tuple[Callable, Callable | None, str, str, bool]] = {
     "daily": (aggregate_daily, render_daily_heatmap, "date", "total_tokens", True),
     "weekly": (aggregate_weekly, render_weekly, "week", "week", True),
     "monthly": (aggregate_monthly, render_monthly, "month", "month", False),
-    # sessions 走专门分支调 render_sessions_view（顶部+底部仿 status、无额度段）；render_fn 槽
-    # 用 render_monthly 占位（仅为保持表项 callable、不经通用 render_fn 调用）；默认按 cost 倒序
-    "sessions": (aggregate_sessions, render_monthly, "start_time", "cost_usd", True),
+    # sessions 走专门分支调 render_sessions_view（顶部+底部仿 status、无额度段），
+    # 不经通用 render_fn（None 占位）；默认按 cost 倒序
+    "sessions": (aggregate_sessions, None, "start_time", "cost_usd", True),
 }
 
 
@@ -99,11 +100,12 @@ def _extract_theme_arg(args: list[str]) -> tuple[list[str], str | None]:
     return remaining, name
 
 
-def _parse_sort_args(args: list[str]) -> tuple[list[str], str | None, bool]:
-    """Extract --sort KEY and --asc from args, return (remaining, sort_key, descending)."""
+def _parse_sort_args(args: list[str]) -> tuple[list[str], str | None, bool | None]:
+    """Extract --sort KEY and --asc/--desc from args, return (remaining, sort_key, descending).
+    descending=None 表示用户没显式给方向（让 _apply_sort 落各命令默认方向）。"""
     remaining = []
     sort_key = None
-    descending = True
+    descending: bool | None = None
     i = 0
     while i < len(args):
         if args[i] == "--sort" and i + 1 < len(args):
@@ -121,9 +123,13 @@ def _parse_sort_args(args: list[str]) -> tuple[list[str], str | None, bool]:
     return remaining, sort_key, descending
 
 
-def _apply_sort(stats, sort_key: str | None, descending: bool, default_attr: str, default_reverse: bool):
+def _apply_sort(stats, sort_key: str | None, descending: bool | None,
+                default_attr: str, default_reverse: bool):
+    # 用户显式给了 --asc/--desc 就尊重（即便没配 --sort，如 `tt sessions --asc`）；
+    # 没给方向时：带 --sort 默认降序、无 --sort 落各命令默认方向
     if sort_key is None:
-        stats.sort(key=lambda s: getattr(s, default_attr), reverse=default_reverse)
+        reverse = default_reverse if descending is None else descending
+        stats.sort(key=lambda s: getattr(s, default_attr), reverse=reverse)
         return
     if sort_key not in VALID_SORT_KEYS:
         valid = ", ".join(VALID_SORT_KEYS)
@@ -132,7 +138,7 @@ def _apply_sort(stats, sort_key: str | None, descending: bool, default_attr: str
         return
     # "time" 不在 SORT_ATTRS → 退回 default_attr（各命令的时间字段）
     attr = SORT_ATTRS.get(sort_key, default_attr)
-    stats.sort(key=lambda s: getattr(s, attr), reverse=descending)
+    stats.sort(key=lambda s: getattr(s, attr), reverse=True if descending is None else descending)
 
 
 def _load_entries(agent_id: str, hours_back: int = 0):
@@ -140,10 +146,15 @@ def _load_entries(agent_id: str, hours_back: int = 0):
     return loader.load_entries(hours_back=hours_back) if loader else []
 
 
-def _aggregate_per_agent(agents, agg_fn):
+def _load_per_agent(agents) -> list[tuple]:
+    """(agent, 全量 entries) 列表：每个 agent 只从磁盘解析一次 JSONL（全量扫描很重），
+    daily/weekly/monthly 多种聚合复用同一份——避免 tt daily 这类命令重复扫 2~3 遍。"""
+    return [(a, _load_entries(a.id)) for a in agents]
+
+
+def _aggregate_per_agent(loaded, agg_fn):
     stats = []
-    for a in agents:
-        entries = _load_entries(a.id)
+    for a, entries in loaded:
         for s in agg_fn(entries):
             s.agent_id = a.id
             stats.append(s)
@@ -206,10 +217,12 @@ def _summary_from_sessions(sessions) -> StatusSummary:
 
 
 def _current_session_agent() -> str | None:
-    """识别当前所在的 agent 会话（靠环境变量）：Codex / Claude Code；独立终端返回 None。"""
+    """识别当前所在的 agent 会话（靠**会话内才有**的环境变量）：Codex / Claude Code；独立终端返回 None。
+    不能用 CLAUDE_CONFIG_DIR 判断——那是用户级配置变量（可长期 export 在 shell profile 里挪配置目录，
+    tt 自己也支持它），拿它当会话信号会让独立终端被误判成会话内（报表被过滤、首次运行进不了 wizard）。"""
     if os.environ.get("CODEX_THREAD_ID") or os.environ.get("CODEX_SANDBOX"):
         return "codex"
-    if os.environ.get("CLAUDE_CONFIG_DIR") or os.environ.get("CLAUDECODE"):
+    if os.environ.get("CLAUDECODE"):
         return "claude-code"
     return None
 
@@ -467,32 +480,35 @@ def main():
     agent_names = [a.name for a in report_agents]
 
     agg_fn, render_fn, time_attr, no_sort_attr, default_reverse = _REPORT_COMMANDS[command]
-    stats = _aggregate_per_agent(report_agents, agg_fn)
+    loaded = _load_per_agent(report_agents)
+    stats = _aggregate_per_agent(loaded, agg_fn)
     default_attr = time_attr if sort_key == "time" else no_sort_attr
 
     if command == "sessions":
-        # sessions 看「最近的会话」：先过滤掉跨度 <5min 的碎片会话，再按时间取最近 N 条
-        #（否则史上高 cost 会话恒久霸榜、新会话和低成本 agent 永远进不了榜），这 N 条再按 cost（或 --sort）展示
-        kept = [s for s in stats if s.duration_minutes >= 5]
+        # sessions 看「最近的会话」：先过滤掉活跃 <5min 的碎片会话（与 tt status 同口径，
+        # 见 types.SessionStats.active_minutes），再按时间取最近 N 条（否则史上高 cost 会话
+        # 恒久霸榜、新会话和低成本 agent 永远进不了榜），这 N 条再按 cost（或 --sort）展示
+        kept = [s for s in stats if s.active_minutes >= 5]
         kept.sort(key=lambda s: s.start_time, reverse=True)
         shown = kept[:_parse_limit(rest_args, default=20)]
         _apply_sort(shown, sort_key, sort_desc, default_attr, default_reverse)
         render_sessions_view(_summary_from_sessions(shown), shown, agent_names)
         return
 
+    assert render_fn is not None  # sessions（render_fn=None）已在上面 return，其余命令都有渲染函数
     _apply_sort(stats, sort_key, sort_desc, default_attr, default_reverse)
     if command == "daily":
         # daily 顶部三卡片：Last 12 months + This Month + This Week，跟 weekly/monthly 同款样式、
-        # 复用 _render_month_summary / _render_week_summary。多算两份 weekly/monthly 聚合传进去。
-        render_fn(stats, agents=agent_names,  # type: ignore[operator]
-                  weekly=_aggregate_per_agent(report_agents, aggregate_weekly),
-                  monthly=_aggregate_per_agent(report_agents, aggregate_monthly))
+        # 复用 _render_month_summary / _render_week_summary。weekly/monthly 聚合复用同一份 entries。
+        render_fn(stats, agents=agent_names,
+                  weekly=_aggregate_per_agent(loaded, aggregate_weekly),
+                  monthly=_aggregate_per_agent(loaded, aggregate_monthly))
     elif command == "weekly":
-        render_weekly(stats, agents=agent_names, daily=_aggregate_per_agent(report_agents, aggregate_daily))
+        render_weekly(stats, agents=agent_names, daily=_aggregate_per_agent(loaded, aggregate_daily))
     elif command == "monthly":
         render_monthly(stats, agents=agent_names,
-                       daily=_aggregate_per_agent(report_agents, aggregate_daily),
-                       weekly=_aggregate_per_agent(report_agents, aggregate_weekly))
+                       daily=_aggregate_per_agent(loaded, aggregate_daily),
+                       weekly=_aggregate_per_agent(loaded, aggregate_weekly))
     else:
         render_fn(stats, agents=agent_names)
 

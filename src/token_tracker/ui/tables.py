@@ -1,12 +1,12 @@
-"""表格渲染（daily/weekly/monthly/sessions/模型分布）与 dashboard 编排。
+"""表格渲染（weekly/monthly 卡片、Trend 柱状/进度条、Project/Model 分布）。
 
-格式化/主题/小部件/面板已拆到 format.py / theme.py / widgets.py / panels.py；
-本模块聚焦各类表格与把它们组装成 dashboard。
+格式化/主题已拆到 format.py / theme.py；daily 走 heatmap.py（贡献图），
+本模块聚焦 weekly/monthly 两类报表的组装。
 """
 
 import calendar
 from collections.abc import Callable
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 
 from rich import box
 from rich.console import Group
@@ -18,85 +18,22 @@ from rich.text import Text
 
 from ..adapters.types import DailyStats, MonthlyStats, WeeklyStats
 from ..i18n import t
+from ..tz import system_tz
 from .console import forced_color_console, get_console
 from .format import (
-    AGENT_LABEL,
-    AGENT_SHORT,
     _fmt_cost,
     _fmt_tokens,
-    _is_multi_agent,
     _model_short,
     _project_short,
-    _width_mode,
     append_metric,
     brand_line,
 )
-from .panels import (
-    _render_agent_summaries,
-    _render_header,
-)
-from .theme import _S, _token_heat_style
+from .theme import _S
 
-# AGENT_LABEL 在子模块定义，这里 re-export 以保持 ui.tables 的公开入口集中
 __all__ = [
-    "AGENT_LABEL",
-    "render_daily",
     "render_monthly",
     "render_weekly",
 ]
-
-
-def render_daily(stats: list[DailyStats], agents: list[str] | None = None) -> None:
-    if not stats:
-        get_console().print(f"[{_S.warn}]{t('no_data')}[/{_S.warn}]")
-        return
-
-    multi_agent = _is_multi_agent(stats)
-    dates = {s.date for s in stats}
-    total_tokens = sum(s.total_tokens for s in stats)
-    total_cost = sum(s.cost_usd for s in stats)
-    total_msgs = sum(s.message_count for s in stats)
-    total_sessions = sum(s.session_count for s in stats)
-
-    _render_header(agents or ["Claude Code"], total_tokens, total_cost, total_sessions, total_msgs, len(dates))
-    _render_agent_summaries(stats, multi_agent)
-
-    mode = _width_mode()
-    table = Table(box=box.SIMPLE_HEAVY, header_style="bold", padding=(0, 1), expand=True)
-    table.add_column(t("col_date"), style=_S.token, no_wrap=True)
-    if multi_agent:
-        table.add_column(t("col_source"), no_wrap=True)
-    if mode != "compact":
-        table.add_column("Input", justify="right")
-        table.add_column("Output", justify="right")
-    if mode == "wide":
-        table.add_column("Cache", justify="right")
-    table.add_column(t("col_total_tokens"), justify="right", style="bold")
-    table.add_column(t("col_cost"), justify="right", style=_S.good)
-    table.add_column(t("col_sessions"), justify="right", style=_S.dim)
-    table.add_column(t("col_messages"), justify="right", style=_S.dim)
-
-    max_tokens = max(s.total_tokens for s in stats) if stats else 1
-
-    for s in stats:
-        cache_total = s.cache_creation_tokens + s.cache_read_tokens
-        row: list = [s.date]
-        if multi_agent:
-            row.append(AGENT_SHORT.get(s.agent_id, s.agent_id))
-        if mode != "compact":
-            row += [_fmt_tokens(s.input_tokens), _fmt_tokens(s.output_tokens)]
-        if mode == "wide":
-            row.append(_fmt_tokens(cache_total))
-        row += [
-            Text(_fmt_tokens(s.total_tokens), style=_token_heat_style(s.total_tokens / max_tokens)),
-            _fmt_cost(s.cost_usd),
-            str(s.session_count),
-            str(s.message_count),
-        ]
-        table.add_row(*row)
-
-    get_console().print(table)
-    get_console().print()
 
 
 def render_weekly(stats: list[WeeklyStats], agents: list[str] | None = None,
@@ -128,7 +65,7 @@ def _render_daily_barchart(by_date: dict[str, int], days_back: int = 30, height:
     峰值柱上方标日期、底部两端标起止日期。无可见高度的天（空白天、或量极小不足一格）
     在最底行画一格基线，基线色比真实矮柱更暗、一眼可辨；时间轴连续、空白天一目了然；
     不再做前导裁剪或中段空段压缩，整段窗口如实全显示。"""
-    today = datetime.now(UTC).date()
+    today = datetime.now(system_tz()).date()  # 与聚合分桶同口径（系统时区）
     dates = [today - timedelta(days=i) for i in range(days_back - 1, -1, -1)]
     vals = [by_date.get(d.isoformat(), 0) for d in dates]
     max_v = max(vals) or 1
@@ -179,7 +116,7 @@ def _render_weekly_barchart(weeks: list[WeeklyStats], weeks_back: int = 30, heig
     # 固定最近 weeks_back 个日历周窗口（对齐 daily 的固定 30 天）：没用过 / 缺失的周补 0。
     # week 是 monday 的 ISO 日期，从本周一往前逐周对齐
     by_week = {w.week: w for w in weeks}
-    today = datetime.now(UTC).date()
+    today = datetime.now(system_tz()).date()
     this_monday = today - timedelta(days=today.weekday())
     recent: list[WeeklyStats] = []
     for i in range(weeks_back - 1, -1, -1):
@@ -280,7 +217,7 @@ def _render_week_summary(cur: WeeklyStats, prev: WeeklyStats | None, agents: lis
     body.append(f"  {cur.week_start} ~ {cur.week_end}", style=f"dim {_S.good}")
     body.append("\n")
     this_monday = datetime.fromisoformat(cur.week).date()
-    days = max(1, min(7, (datetime.now(UTC).date() - this_monday).days + 1))
+    days = max(1, min(7, (datetime.now(system_tz()).date() - this_monday).days + 1))
     cur_avg = cur.cost_usd / days
     prev_avg = prev.cost_usd / 7 if prev else None
     # 第二行（橙）：Tokens / Cost / Avg/Cost（日均花费）
@@ -373,7 +310,7 @@ def _month_span(month: str) -> tuple[int, int]:
     """返回 (本月总天数, 已过天数)：当前月按今天、历史月按整月。month 形如 '2026-06'。"""
     year, mon = int(month[:4]), int(month[5:7])
     total = calendar.monthrange(year, mon)[1]
-    today = datetime.now(UTC).date()
+    today = datetime.now(system_tz()).date()
     elapsed = today.day if (year, mon) == (today.year, today.month) else total
     return total, elapsed
 

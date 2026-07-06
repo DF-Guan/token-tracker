@@ -149,12 +149,12 @@ def test_render_status_no_limits_shows_agent_stats(monkeypatch):
 
 def test_system_tz_falls_back_on_errors(monkeypatch):
     # 容错：读不到 /etc/localtime（Windows）/ 软链接指向无效时区名 → 返回 None（回退进程时区，不崩）。
-    from token_tracker.ui import format as fmt
+    from token_tracker import tz as tzmod
 
     def _raise(*a):
         raise OSError("no such file")
 
-    monkeypatch.setattr(fmt.os, "readlink", _raise)
-    assert fmt.system_tz() is None                                       # readlink 失败
-    monkeypatch.setattr(fmt.os, "readlink", lambda p: "/usr/share/zoneinfo/Not/A/Real/Zone")
-    assert fmt.system_tz() is None                                       # 无效时区名 → ZoneInfoNotFoundError
+    monkeypatch.setattr(tzmod.os, "readlink", _raise)
+    assert tzmod.system_tz() is None                                     # readlink 失败
+    monkeypatch.setattr(tzmod.os, "readlink", lambda p: "/usr/share/zoneinfo/Not/A/Real/Zone")
+    assert tzmod.system_tz() is None                                     # 无效时区名 → ZoneInfoNotFoundError

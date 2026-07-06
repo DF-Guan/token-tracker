@@ -6,7 +6,7 @@
 总览自己渲染（不复用 dashboard 的宽 header），紧凑单行、半屏不折。
 """
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from rich.cells import cell_len
 from rich.console import Group
@@ -17,6 +17,7 @@ from rich.text import Text
 
 from ..adapters.types import DailyStats, MonthlyStats, WeeklyStats
 from ..i18n import t
+from ..tz import system_tz
 from .console import forced_color_console, get_console
 from .format import _fmt_cost, _fmt_tokens, append_metric, brand_line, emit_metrics
 from .tables import _merge_months, _merge_weeks, _month_span
@@ -52,7 +53,7 @@ def render_daily_heatmap(stats: list[DailyStats], agents: list[str] | None = Non
 def _render_summary(stats: list[DailyStats], agents: list[str] | None,
                     weekly: list[WeeklyStats] | None,
                     monthly: list[MonthlyStats] | None) -> None:
-    today = datetime.now(UTC).date()
+    today = datetime.now(system_tz()).date()  # 与聚合分桶同口径（系统时区）
     year_ago = (today - timedelta(days=365)).isoformat()
     rows = [s for s in stats if s.date >= year_ago]  # 过去一年（与热力图范围一致）
 
@@ -76,8 +77,9 @@ def _render_summary(stats: list[DailyStats], agents: list[str] | None,
         (t("active_days"), str(days)),
     ], _S.peach, avail)
     body_year.append("\n")
-    # 第二行（蓝）：单日峰值 token / 当前·最长连续活跃天数
-    peak = max(rows, key=lambda s: s.total_tokens)
+    # 第二行（蓝）：单日峰值 token / 当前·最长连续活跃天数。
+    # rows 可能为空（全部数据老于 12 个月）：峰值显示 "--"，不能对空列表 max()
+    peak = max(rows, key=lambda s: s.total_tokens) if rows else None
     dts = sorted(date.fromisoformat(d) for d in {s.date for s in rows})
     cur_streak = longest_streak = 1 if dts else 0
     for i in range(1, len(dts)):
@@ -86,7 +88,7 @@ def _render_summary(stats: list[DailyStats], agents: list[str] | None,
     if dts and (today - dts[-1]).days > 1:  # 最近活跃日距今 > 1 天，当前连续已断
         cur_streak = 0
     emit_metrics(body_year, [
-        (t("daily_peak"), f"{peak.date[5:]} ({_fmt_tokens(peak.total_tokens)})"),
+        (t("daily_peak"), f"{peak.date[5:]} ({_fmt_tokens(peak.total_tokens)})" if peak else "--"),
         (t("daily_streak"), f"{cur_streak}/{longest_streak}{t('unit_day')}"),
     ], _S.blue, avail)
 
@@ -155,7 +157,7 @@ def _display_weeks() -> int:
 
 
 def _render_grid(tokens_by_date: dict[str, int]) -> None:
-    today = datetime.now(UTC).date()
+    today = datetime.now(system_tz()).date()
     days_since_sunday = (today.weekday() + 1) % 7  # Mon=0→1 … Sun=6→0
     this_sunday = today - timedelta(days=days_since_sunday)
 

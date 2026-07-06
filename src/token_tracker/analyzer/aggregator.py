@@ -1,14 +1,15 @@
 from collections import defaultdict
 from collections.abc import Callable
-from datetime import timedelta
+from datetime import date, timedelta
 from typing import Any
 
 from ..adapters.types import DailyStats, MonthlyStats, SessionStats, UsageEntry, WeeklyStats
+from ..tz import system_tz
 from .cost import calculate_cost
 
 
 def add_token_fields(target: Any, e: UsageEntry, cost: float) -> None:
-    """把一条 UsageEntry 的 6 个通用 token/成本字段累加到任意 *Stats / SessionBlock 上。"""
+    """把一条 UsageEntry 的 6 个通用 token/成本字段累加到任意 *Stats / StatusSummary 上。"""
     target.input_tokens += e.input_tokens
     target.output_tokens += e.output_tokens
     target.cache_creation_tokens += e.cache_creation_tokens
@@ -47,31 +48,39 @@ def _aggregate_by_key(
     return sorted(by_key.values(), key=lambda s: getattr(s, sort_key))
 
 
+# daily/weekly/monthly 一律按**系统时区**的日历日分桶（entries 时间戳是 UTC；
+# 不转换会把北京时间 00:00-08:00 的用量记到前一天，且与 tt status 的「今天」口径打架）。
+# tz 在函数入口取一次（system_tz 每次调用要 readlink），闭包复用。
+
 def aggregate_daily(entries: list[UsageEntry]) -> list[DailyStats]:
+    tz = system_tz()
     return _aggregate_by_key(
         entries,
-        lambda e: e.timestamp.strftime("%Y-%m-%d"),
+        lambda e: e.timestamp.astimezone(tz).strftime("%Y-%m-%d"),
         lambda k, e: DailyStats(date=k),
         "date",
     )
 
 
 def aggregate_monthly(entries: list[UsageEntry]) -> list[MonthlyStats]:
+    tz = system_tz()
     return _aggregate_by_key(
         entries,
-        lambda e: e.timestamp.strftime("%Y-%m"),
+        lambda e: e.timestamp.astimezone(tz).strftime("%Y-%m"),
         lambda k, e: MonthlyStats(month=k),
         "month",
     )
 
 
 def aggregate_weekly(entries: list[UsageEntry]) -> list[WeeklyStats]:
+    tz = system_tz()
+
     def _week_key(e: UsageEntry) -> str:
-        monday = e.timestamp.date() - timedelta(days=e.timestamp.weekday())
-        return monday.isoformat()
+        d = e.timestamp.astimezone(tz).date()
+        return (d - timedelta(days=d.weekday())).isoformat()
 
     def _factory(k: str, e: UsageEntry) -> WeeklyStats:
-        monday = e.timestamp.date() - timedelta(days=e.timestamp.weekday())
+        monday = date.fromisoformat(k)
         sunday = monday + timedelta(days=6)
         return WeeklyStats(week=k, week_start=monday.strftime("%m-%d"), week_end=sunday.strftime("%m-%d"))
 
@@ -102,6 +111,10 @@ def aggregate_sessions(entries: list[UsageEntry]) -> list[SessionStats]:
             gap = (b.timestamp - a.timestamp).total_seconds() / 60
             if gap <= ACTIVE_GAP_CAP_MIN:
                 active += gap
+        # codex 会话是单条 entry（段内无相邻间隔可累计），活跃时长退化为整段跨度——
+        # 否则恒为 0，被 status 的 active_minutes>=5 过滤，codex 会话永远进不了当天列表
+        if len(session_entries) == 1 and first.session_end:
+            active = duration
 
         # 代表模型按 output_tokens（真实生成量）选，output 持平时用 total 兜底；
         # 不用 total 直接选，避免后台小模型（如 Haiku）读了大量上下文、cache_read 撑高 total 被误判为主力。

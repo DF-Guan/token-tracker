@@ -14,6 +14,7 @@ from rich.table import Table
 from rich.text import Text
 
 from ..i18n import t
+from ..tz import system_tz
 from .console import forced_color_console, get_console
 from .format import (
     AGENT_LABEL,
@@ -25,7 +26,6 @@ from .format import (
     _width_mode,
     brand_line,
     emit_metrics,
-    system_tz,
 )
 from .tables import _bar_text
 from .theme import _S, _pct_style
