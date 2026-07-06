@@ -779,12 +779,8 @@ def codex_statusline_active() -> bool:
         return False
 
 
-def cc_statusline_active() -> bool:
-    """双因素：用户意图（config）AND 实际装好（脚本文件 + settings.json 的 statusLine 指我们脚本）。"""
-    if config.cc_statusline_intent() is not True:
-        return False
-    if not os.path.exists(HOOK_SCRIPT_PATH):
-        return False
+def _settings_has_tt_statusline() -> bool:
+    """settings.json 的 statusLine 是否指向 tt 脚本（读失败 / 损坏 → False）。"""
     try:
         with open(CLAUDE_SETTINGS, encoding="utf-8") as f:
             settings = json.load(f)
@@ -792,6 +788,15 @@ def cc_statusline_active() -> bool:
         return isinstance(sl, dict) and _is_tt_cc_command(sl.get("command") or "")
     except (OSError, json.JSONDecodeError):
         return False
+
+
+def cc_statusline_active() -> bool:
+    """双因素：用户意图（config）AND 实际装好（脚本文件 + settings.json 的 statusLine 指我们脚本）。"""
+    if config.cc_statusline_intent() is not True:
+        return False
+    if not os.path.exists(HOOK_SCRIPT_PATH):
+        return False
+    return _settings_has_tt_statusline()
 
 
 def recommended_components() -> SetupComponents:
@@ -823,16 +828,20 @@ def recommended_components() -> SetupComponents:
 
 def is_setup() -> bool:
     """已配置 = 每个已装 agent 的组件意图都明确、且意图为 True 的组件实装好（双因素）。
-    意图 False 则用户明确不要、不强求文件存在（自定义 statusLine 用户跑报表不再被抢占）。"""
+    意图 False 则用户明确不要、不强求文件存在（自定义 statusLine 用户跑报表不再被抢占）。
+    CC 端例外：意图缺失（None）但 statusLine 已是 tt 的 → 按存量用户推断为已配（不打扰）。"""
     has_cc = os.path.isdir(os.path.dirname(CLAUDE_SETTINGS))
     has_codex = os.path.isdir(CODEX_DIR)
     if not has_cc and not has_codex:
         return False
     if has_cc:
         intent = config.cc_statusline_intent()
-        if intent is None:  # 没跑过 wizard、没表达意图 → 视为未配
-            return False
-        if intent and not cc_statusline_active():
+        if intent is None:
+            # 迁移推断（不 bump SETUP_VERSION 的配套）：存量用户没表达过意图，statusLine 已是 tt 的
+            # 视为已配、不打扰；其余（全新 / 自定义 / 损坏）视为未配，走一次 setup（推荐默认绝不抢占）。
+            if not _settings_has_tt_statusline():
+                return False
+        elif intent and not cc_statusline_active():
             return False
     if has_codex:
         intent = config.codex_faux_statusline_intent()

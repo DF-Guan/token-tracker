@@ -628,11 +628,11 @@ def test_cc_statusline_active_double_factor(tmp_path, monkeypatch):
 
 
 def test_is_setup_cc_intent_three_states(tmp_path, monkeypatch):
-    # is_setup CC 分支三态：intent None → 未配；False → 放行（不强求文件）；True → 要求实装。
+    # is_setup CC 分支三态：intent None（非存量 tt）→ 未配；False → 放行（不强求文件）；True → 要求实装。
     from token_tracker import config
     settings_path = _cc_only_home(tmp_path, monkeypatch, json.dumps(_CUSTOM_SL))
 
-    assert hooks.is_setup() is False  # intent None → 触发引导
+    assert hooks.is_setup() is False  # intent None + 自定义 statusLine → 触发引导（推荐默认会 opt-out）
     config.save_cc_statusline(False)
     assert hooks.is_setup() is True   # 自定义 statusLine 用户 opt-out 后放行
     config.save_cc_statusline(True)
@@ -640,6 +640,16 @@ def test_is_setup_cc_intent_three_states(tmp_path, monkeypatch):
     (tmp_path / "home" / ".claude" / "claude-statusline.py").write_text("x", encoding="utf-8")
     settings_path.write_text(json.dumps(_TT_SL), encoding="utf-8")
     assert hooks.is_setup() is True   # intent True + 实装好
+
+
+def test_is_setup_legacy_tt_user_without_intent(tmp_path, monkeypatch):
+    # 不 bump SETUP_VERSION 的配套推断：存量用户（statusLine 已是 tt 的、config 无 cc_statusline 字段）
+    # 升级后视为已配——不弹向导、不触发 setup、不被打扰；想改的手动 tt setup。
+    from token_tracker import config
+    _cc_only_home(tmp_path, monkeypatch, json.dumps(_TT_SL))
+
+    assert config.cc_statusline_intent() is None  # 存量用户没有 intent 字段
+    assert hooks.is_setup() is True               # 但 statusLine 已是 tt 的 → 推断已配
 
 
 def test_recommended_components_cc_probe(tmp_path, monkeypatch):
