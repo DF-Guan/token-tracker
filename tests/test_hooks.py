@@ -72,6 +72,48 @@ def test_installed_version_parser_roundtrips(tmp_path, monkeypatch):
     assert hooks._installed_hook_version() == hooks.HOOK_VERSION
 
 
+def test_statusline_get_width_reads_columns(tmp_path, monkeypatch):
+    # PR #20：Claude Code 把 statusLine 子进程的 stdin/stderr 都设成管道 → get_terminal_size(2) 与
+    # /dev/tty 都探测不到，只能回落 116。修复：先读 COLUMNS（同 ui/console._forced_width 规则），
+    # 有效正整数即用（减 4 边距）；"0"（CC `!` 子进程占位）/ 非数字 / 未设 → 落回原探测链、无回归。
+    # 用一个独立命名空间跑模板，避免污染 hooks 模块的执行栈。
+    import importlib.util
+    script = tmp_path / "cc-sl.py"
+    script.write_text(hooks._render_hook_script(), encoding="utf-8")
+    spec = importlib.util.spec_from_file_location("_tt_pr20_cc_sl", script)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    monkeypatch.setenv("COLUMNS", "60")
+    assert mod.get_width() == 56  # 60 - 4 边距
+    monkeypatch.setenv("COLUMNS", "200")
+    assert mod.get_width() == 196
+    monkeypatch.setenv("COLUMNS", "0")  # CC `!` 子进程占位 → 落回原链
+    w0 = mod.get_width()
+    assert w0 != 0 and w0 != -4  # 落回 get_terminal_size/dev-tty/116，不会是 0-4=-4
+    monkeypatch.setenv("COLUMNS", "abc")  # 非数字 → 落回原链
+    assert mod.get_width() == w0
+    monkeypatch.delenv("COLUMNS", raising=False)  # 未设 → 落回原链
+    assert mod.get_width() == w0
+
+
+def test_statusline_vlen_counts_cjk_as_two_columns(tmp_path):
+    # PR #20：vlen 用 east_asian_width 判 W/F 计 2 列（与 wizard.py:141 同规则）。项目名 / 分支 /
+    # 模型名含 CJK 时按字符数少算会让窄面板收窄失准、行折行溢出。
+    import importlib.util
+    script = tmp_path / "cc-sl.py"
+    script.write_text(hooks._render_hook_script(), encoding="utf-8")
+    spec = importlib.util.spec_from_file_location("_tt_pr20_cc_sl_vlen", script)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    assert mod.vlen("abc") == 3                    # ASCII 半角 1 列
+    assert mod.vlen("测试项目") == 8                # 4 全角 × 2 列
+    assert mod.vlen("测试项目-令牌追踪") == 17      # 8 CJK × 2 = 16 + 1 半角连字符 = 17
+    assert mod.vlen("\x1b[31mred\x1b[0m") == 3     # ANSI 序列被剥除
+    assert mod.vlen("A你B我") == 6                  # ASCII 1 + CJK 2 + ASCII 1 + CJK 2
+
+
 def test_statusline_script_bakes_theme_colors(monkeypatch):
     # statusline 脚本在烘焙时注入当前主题 truecolor + default 3-bit 兜底；占位符不残留、语法正确。
     monkeypatch.setenv("TT_THEME", "dracula")
